@@ -9,15 +9,14 @@ from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.entity_widget import (
-    ENEMY_H,
     ENEMY_W,
-    PLAYER_H,
     PLAYER_W,
     draw_enemy,
     draw_player,
 )
 from src.presentation.ui.hud_widget import (
     RELIC_SZ,
+    _RELIC_GAP,
     draw_end_turn_button,
     draw_mana,
     draw_pile_widget,
@@ -25,9 +24,19 @@ from src.presentation.ui.hud_widget import (
     draw_turn_counter,
 )
 from src.presentation.ui.pile_viewer import PileViewer
+from src.presentation.ui.tooltip import (
+    TooltipContent,
+    card_tooltip,
+    draw_tooltip,
+    enemy_tooltip,
+    mana_tooltip,
+    pile_tooltip,
+    player_tooltip,
+    relic_tooltip,
+)
 
 # ---------------------------------------------------------------------------
-# Layout
+# Layout constants (virtual canvas 1280×720)
 # ---------------------------------------------------------------------------
 
 _TOP_BAR_H: int    = 68
@@ -43,6 +52,8 @@ _PLAYER_Y: int = 90
 
 _MANA_CX: int   = 68
 _MANA_CY: int   = 595
+_MANA_R: int    = 42          # orb radius (for hover detection)
+
 _DRAW_X: int    = 1145
 _DRAW_Y: int    = 565
 _DISCARD_X: int = 1210
@@ -77,26 +88,36 @@ class CombatScene:
     """Renders the full battle screen and drives all player interactions.
 
     Follows the Scene protocol: handle_event / update / draw.
-    Delegates game-rule mutations to use-case functions in src/application/.
+    Game-rule mutations are delegated to use-case functions in application/.
     """
 
     def __init__(self, state: CombatState, fonts: FontRegistry) -> None:
-        self._state  = state
-        self._fonts  = fonts
+        self._state = state
+        self._fonts = fonts
 
-        # Hit-test rectangles (rebuilt every draw call)
+        # Mouse
+        self._mouse: tuple[int, int] = (0, 0)
+
+        # Hit-test rects (rebuilt each draw call)
         self._card_rects:     list[pygame.Rect]  = []
         self._enemy_rects:    list[pygame.Rect]  = []
+        self._relic_rects:    list[pygame.Rect]  = []
+        self._player_rect:    pygame.Rect | None = None
         self._end_turn_rect:  pygame.Rect | None = None
         self._draw_pile_rect: pygame.Rect | None = None
         self._disc_pile_rect: pygame.Rect | None = None
 
-        # Hover state
+        # Hover state (which element index / flag is under cursor)
         self._hovered_card:      int | None = None
         self._hovered_enemy:     int | None = None
+        self._hovered_relic:     int | None = None
         self._end_turn_hovered:  bool = False
+        self._hovered_player:    bool = False
+        self._hovered_mana:      bool = False
+        self._hovered_draw_pile: bool = False
+        self._hovered_disc_pile: bool = False
 
-        # Overlay (pile viewer)
+        # Overlay
         self._overlay: PileViewer | None = None
 
     # ------------------------------------------------------------------
@@ -104,12 +125,12 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Overlay consumes all events while open
         if self._overlay is not None:
             self._overlay.handle_event(event)
             return
 
         if event.type == pygame.MOUSEMOTION:
+            self._mouse = event.pos
             self._update_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_click(event.pos)
@@ -125,10 +146,16 @@ class CombatScene:
         self._draw_top_bar(surface)
         self._draw_battlefield(surface)
         self._draw_hand_area(surface)
+
         if self._in_targeting_mode:
             self._draw_targeting_hint(surface)
+
         if self._overlay is not None:
             self._overlay.draw(surface)
+        else:
+            tooltip = self._get_tooltip()
+            if tooltip is not None:
+                draw_tooltip(surface, tooltip, self._mouse, self._fonts)
 
     # ------------------------------------------------------------------
     # Derived state
@@ -142,7 +169,7 @@ class CombatScene:
         return self._state.hand.cards[idx].total_damage() > 0
 
     # ------------------------------------------------------------------
-    # Draw sections
+    # Drawing sections
     # ------------------------------------------------------------------
 
     def _draw_top_bar(self, surface: pygame.Surface) -> None:
@@ -151,7 +178,10 @@ class CombatScene:
         pygame.draw.line(surface, colors.PANEL_BORDER,
                          (0, _TOP_BAR_H - 1), (surface.get_width(), _TOP_BAR_H - 1))
 
-        draw_relics(surface, self._state.relics, 10, 10, self._fonts)
+        self._relic_rects = draw_relics(
+            surface, self._state.relics, 10, 10, self._fonts,
+            hovered_index=self._hovered_relic,
+        )
         draw_turn_counter(surface, self._state.turn, surface.get_width() // 2, 34, self._fonts)
 
         self._end_turn_rect = draw_end_turn_button(
@@ -164,8 +194,8 @@ class CombatScene:
                          (0, _HAND_AREA_Y), (surface.get_width(), _HAND_AREA_Y))
 
         targeting = self._in_targeting_mode
-
         self._enemy_rects = []
+
         for i, enemy in enumerate(self._state.enemies):
             if i >= len(_ENEMY_SLOTS):
                 break
@@ -177,19 +207,18 @@ class CombatScene:
             )
             self._enemy_rects.append(rect)
 
-        draw_player(surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts)
+        self._player_rect = draw_player(
+            surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts
+        )
 
-        # Active powers strip (bottom of battlefield, above hand area)
         if self._state.active_powers:
             self._draw_active_powers(surface)
 
     def _draw_active_powers(self, surface: pygame.Surface) -> None:
-        label_font = self._fonts.get(10)
-        label_surf = label_font.render("PODERES ACTIVOS", True, colors.TEXT_SECONDARY)
+        label_surf = self._fonts.get(10).render("PODERES ACTIVOS", True, colors.TEXT_SECONDARY)
         surface.blit(label_surf, (560, _HAND_AREA_Y - 80))
         for i, card in enumerate(self._state.active_powers):
-            cx = 560 + i * (CARD_W + 6)
-            draw_card(surface, card, cx, _HAND_AREA_Y - 78, self._fonts)
+            draw_card(surface, card, 560 + i * (CARD_W + 6), _HAND_AREA_Y - 78, self._fonts)
 
     def _draw_hand_area(self, surface: pygame.Surface) -> None:
         hand_bg = pygame.Rect(0, _HAND_AREA_Y, 1280, 720 - _HAND_AREA_Y)
@@ -197,21 +226,18 @@ class CombatScene:
 
         draw_mana(surface, self._state.mana, _MANA_CX, _MANA_CY, self._fonts)
 
-        # Hand cards
         cards     = self._state.hand.cards
         positions = _card_positions(len(cards))
         self._card_rects = []
         for i, (card, (cx, cy)) in enumerate(zip(cards, positions)):
-            affordable = self._state.mana.can_afford(card.cost)
             rect = draw_card(
                 surface, card, cx, cy, self._fonts,
                 selected   = self._state.selected_card_index == i,
                 hovered    = self._hovered_card == i,
-                affordable = affordable,
+                affordable = self._state.mana.can_afford(card.cost),
             )
             self._card_rects.append(rect)
 
-        # Piles
         self._draw_pile_rect = draw_pile_widget(
             surface, "ROBO", self._state.draw_pile.count,
             _DRAW_X, _DRAW_Y, self._fonts,
@@ -221,7 +247,6 @@ class CombatScene:
             _DISCARD_X, _DISCARD_Y, self._fonts,
         )
 
-        # Hand count
         hc_surf = self._fonts.get(11).render(
             f"MANO  {self._state.hand.count}/{self._state.hand.max_size}",
             True, colors.TEXT_SECONDARY,
@@ -229,37 +254,95 @@ class CombatScene:
         surface.blit(hc_surf, (_MANA_CX + 52, _MANA_CY + 26))
 
     def _draw_targeting_hint(self, surface: pygame.Surface) -> None:
-        msg = self._fonts.get(15).render(
+        msg_surf = self._fonts.get(15).render(
             "Selecciona un enemigo objetivo  ·  ESC para cancelar",
             True, _TARGETING_COLOR,
         )
-        surface.blit(msg, msg.get_rect(centerx=640, centery=_HAND_AREA_Y - 16))
+        surface.blit(msg_surf, msg_surf.get_rect(centerx=640, centery=_HAND_AREA_Y - 16))
 
     # ------------------------------------------------------------------
-    # Interaction
+    # Tooltip
+    # ------------------------------------------------------------------
+
+    def _get_tooltip(self) -> TooltipContent | None:
+        if self._hovered_card is not None and self._hovered_card < self._state.hand.count:
+            return card_tooltip(self._state.hand.cards[self._hovered_card])
+
+        if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
+            return enemy_tooltip(self._state.enemies[self._hovered_enemy])
+
+        if self._hovered_relic is not None and self._hovered_relic < len(self._state.relics):
+            return relic_tooltip(self._state.relics[self._hovered_relic])
+
+        if self._hovered_player:
+            return player_tooltip(self._state.player)
+
+        if self._hovered_mana:
+            return mana_tooltip(self._state.mana)
+
+        if self._hovered_draw_pile:
+            return pile_tooltip("ROBO", self._state.draw_pile.count, is_draw=True)
+
+        if self._hovered_disc_pile:
+            return pile_tooltip("DESCARTE", self._state.discard_pile.count, is_draw=False)
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Hover detection
     # ------------------------------------------------------------------
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
         self._hovered_card     = None
         self._hovered_enemy    = None
+        self._hovered_relic    = None
+        self._hovered_player   = False
+        self._hovered_mana     = False
+        self._hovered_draw_pile = False
+        self._hovered_disc_pile = False
         self._end_turn_hovered = False
 
         for i, rect in enumerate(self._card_rects):
             if _card_hover_rect(rect).collidepoint(pos):
                 self._hovered_card = i
-                break
+                return
 
-        if self._in_targeting_mode:
-            for i, rect in enumerate(self._enemy_rects):
-                if rect.collidepoint(pos):
-                    self._hovered_enemy = i
-                    break
+        for i, rect in enumerate(self._enemy_rects):
+            if rect.collidepoint(pos):
+                self._hovered_enemy = i
+                return
+
+        for i, rect in enumerate(self._relic_rects):
+            if rect.collidepoint(pos):
+                self._hovered_relic = i
+                return
+
+        if self._player_rect and self._player_rect.collidepoint(pos):
+            self._hovered_player = True
+            return
+
+        mx, my = pos
+        if (mx - _MANA_CX) ** 2 + (my - _MANA_CY) ** 2 <= _MANA_R ** 2:
+            self._hovered_mana = True
+            return
+
+        if self._draw_pile_rect and self._draw_pile_rect.collidepoint(pos):
+            self._hovered_draw_pile = True
+            return
+
+        if self._disc_pile_rect and self._disc_pile_rect.collidepoint(pos):
+            self._hovered_disc_pile = True
+            return
 
         if self._end_turn_rect and self._end_turn_rect.collidepoint(pos):
             self._end_turn_hovered = True
 
+    # ------------------------------------------------------------------
+    # Click handling
+    # ------------------------------------------------------------------
+
     def _handle_click(self, pos: tuple[int, int]) -> None:
-        # Priority 1: pile viewers
+        # Pile viewers
         if self._draw_pile_rect and self._draw_pile_rect.collidepoint(pos):
             self._overlay = PileViewer(
                 "Pila de Robo", list(self._state.draw_pile.cards), self._fonts
@@ -272,44 +355,41 @@ class CombatScene:
             )
             return
 
-        # Priority 2: end turn
+        # End turn
         if self._end_turn_rect and self._end_turn_rect.collidepoint(pos):
             end_player_turn(self._state)
             return
 
-        # Priority 3: targeting mode — click on enemy plays the selected card
+        # Targeting mode: click enemy → play card; click card → switch; click blank → cancel
         if self._in_targeting_mode:
             for i, rect in enumerate(self._enemy_rects):
                 if rect.collidepoint(pos):
                     if i < len(self._state.enemies) and self._state.enemies[i].is_alive:
                         play_card(self._state, self._state.selected_card_index, i)  # type: ignore[arg-type]
                     return
-            # Click on a different card switches selection
             for i, rect in enumerate(self._card_rects):
                 if _card_hover_rect(rect).collidepoint(pos):
                     card = self._state.hand.cards[i]
-                    self._state.selected_card_index = i if card.total_damage() > 0 else None
-                    if card.total_damage() == 0 and self._state.mana.can_afford(card.cost):
+                    if card.total_damage() > 0:
+                        self._state.selected_card_index = i
+                    elif self._state.mana.can_afford(card.cost):
                         play_card(self._state, i, None)
                     return
-            # Click on empty space cancels targeting
             self._state.selected_card_index = None
             return
 
-        # Priority 4: normal card click
+        # Normal card click
         for i, rect in enumerate(self._card_rects):
             if _card_hover_rect(rect).collidepoint(pos):
-                card = self._state.hand.cards[i]
+                card       = self._state.hand.cards[i]
                 needs_target = card.total_damage() > 0
                 can_afford   = self._state.mana.can_afford(card.cost)
 
                 if needs_target:
-                    # Enter targeting mode (even if no mana — visual feedback)
                     self._state.selected_card_index = (
                         None if self._state.selected_card_index == i else i
                     )
                 elif can_afford:
-                    # Self-targeted cards play immediately
                     play_card(self._state, i, None)
                 return
 
@@ -322,5 +402,4 @@ class CombatScene:
 # ---------------------------------------------------------------------------
 
 def _card_hover_rect(rect: pygame.Rect) -> pygame.Rect:
-    """Expand card rect upward to catch the lifted hover/selected state."""
     return pygame.Rect(rect.x, rect.y - 22, rect.width, rect.height + 22)

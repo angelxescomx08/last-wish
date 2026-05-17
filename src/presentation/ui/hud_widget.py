@@ -24,22 +24,33 @@ def draw_relics(
     x: int,
     y: int,
     fonts: FontRegistry,
-) -> None:
-    for relic in relics:
+    *,
+    hovered_index: int | None = None,
+) -> list[pygame.Rect]:
+    """Draw the relic bar and return each relic's bounding Rect."""
+    rects: list[pygame.Rect] = []
+    for i, relic in enumerate(relics):
         rect = pygame.Rect(x, y, RELIC_SZ, RELIC_SZ)
-        pygame.draw.rect(surface, colors.RELIC_BG, rect, border_radius=6)
-        pygame.draw.rect(surface, colors.RELIC_BORDER, rect, 1, border_radius=6)
+        rects.append(rect)
+
+        bg     = colors.TEXT_ACCENT if i == hovered_index else colors.RELIC_BG
+        border = colors.TEXT_PRIMARY if i == hovered_index else colors.RELIC_BORDER
+        pygame.draw.rect(surface, bg, rect, border_radius=6)
+        pygame.draw.rect(surface, border, rect, 1 if i != hovered_index else 2, border_radius=6)
 
         abbr_font = fonts.get(10)
-        abbr = relic.name[:5]
-        abbr_surf = abbr_font.render(abbr, True, colors.TEXT_ACCENT)
+        abbr_col  = colors.BG_DARK if i == hovered_index else colors.TEXT_ACCENT
+        abbr_surf = abbr_font.render(relic.name[:5], True, abbr_col)
         surface.blit(abbr_surf, abbr_surf.get_rect(centerx=rect.centerx, centery=rect.centery - 4))
 
         sub_font = fonts.get(7)
-        sub_surf = sub_font.render(relic.name[5:10], True, colors.TEXT_SECONDARY)
+        sub_col  = colors.BG_DARK if i == hovered_index else colors.TEXT_SECONDARY
+        sub_surf = sub_font.render(relic.name[5:10], True, sub_col)
         surface.blit(sub_surf, sub_surf.get_rect(centerx=rect.centerx, centery=rect.centery + 9))
 
         x += RELIC_SZ + _RELIC_GAP
+
+    return rects
 
 
 # ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ import pygame
 from src.application.combat_manager import create_sample_combat
 from src.infrastructure.colors import BG_DARK, TEXT_ACCENT, TEXT_PRIMARY
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.viewport import Viewport
 from src.presentation.scenes.combat_scene import CombatScene
 
 
@@ -19,6 +20,10 @@ WINDOW_TITLE: str  = "Last Wish"
 WINDOW_WIDTH: int  = 1280
 WINDOW_HEIGHT: int = 720
 TARGET_FPS: int    = 60
+
+# Minimum window size — keeps the UI usable when resizing manually
+MIN_W: int = 480
+MIN_H: int = 270
 
 
 # ---------------------------------------------------------------------------
@@ -54,9 +59,9 @@ class MainMenu:
     _PROMPT:   str = "Presiona cualquier tecla para comenzar"
 
     def __init__(self, fonts: FontRegistry) -> None:
-        self._fonts         = fonts
-        self._blink_timer   = 0.0
-        self._show_prompt   = True
+        self._fonts          = fonts
+        self._blink_timer    = 0.0
+        self._show_prompt    = True
         self.start_requested = False
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -109,8 +114,7 @@ class SceneManager:
         top = self._top()
         top.update(dt)
         if isinstance(top, MainMenu) and top.start_requested:
-            combat_state = create_sample_combat()
-            self.push(CombatScene(combat_state, fonts))
+            self.push(CombatScene(create_sample_combat(), fonts))
 
     def draw(self, surface: pygame.Surface) -> None:
         self._top().draw(surface)
@@ -120,27 +124,61 @@ class SceneManager:
 # Bootstrap
 # ---------------------------------------------------------------------------
 
+def _transform_mouse(event: pygame.event.Event, viewport: Viewport) -> pygame.event.Event:
+    """Re-map a mouse event's .pos from actual screen to virtual canvas coords."""
+    _MOUSE = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP)
+    if event.type not in _MOUSE:
+        return event
+    attrs = dict(event.__dict__)
+    attrs["pos"] = viewport.to_virtual(event.pos)
+    if "rel" in attrs and viewport._scale > 0:
+        rx, ry = event.rel
+        attrs["rel"] = (rx / viewport._scale, ry / viewport._scale)
+    return pygame.event.Event(event.type, attrs)
+
+
 def run(settings: GameSettings) -> None:
     pygame.init()
-    screen = pygame.display.set_mode((settings.width, settings.height))
+
+    # Resizable window — adapts to phone landscape, tablet, or desktop
+    screen = pygame.display.set_mode(
+        (settings.width, settings.height),
+        pygame.RESIZABLE,
+    )
     pygame.display.set_caption(settings.title)
 
-    fonts        = FontRegistry()
+    viewport      = Viewport(settings.width, settings.height)
+    fonts         = FontRegistry()
     scene_manager = SceneManager(MainMenu(fonts))
-    clock        = pygame.time.Clock()
+    clock         = pygame.time.Clock()
 
     running = True
     while running:
         dt: float = clock.tick(settings.fps) / 1000.0
 
+        # Sync viewport if window was resized (pygame 2 updates surface size automatically)
+        actual_w, actual_h = screen.get_size()
+        if (actual_w, actual_h) != (viewport._dest_w + viewport._off_x * 2,
+                                    viewport._dest_h + viewport._off_y * 2):
+            viewport.resize(
+                max(actual_w, MIN_W),
+                max(actual_h, MIN_H),
+            )
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.WINDOWRESIZED:
+                viewport.resize(
+                    max(event.x, MIN_W),
+                    max(event.y, MIN_H),
+                )
             else:
-                scene_manager.handle_event(event)
+                scene_manager.handle_event(_transform_mouse(event, viewport))
 
         scene_manager.update(dt, fonts)
-        scene_manager.draw(screen)
+        scene_manager.draw(viewport.surface)
+        viewport.present(screen)
         pygame.display.flip()
 
     pygame.quit()
