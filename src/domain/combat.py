@@ -18,6 +18,7 @@ class CombatState:
     discard_pile: DiscardPile
     mana: Mana
     relics: list[Relic] = field(default_factory=list)
+    active_powers: list[Card] = field(default_factory=list)
     turn: int = 1
     selected_card_index: int | None = None
     targeted_enemy_index: int | None = None

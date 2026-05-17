@@ -43,6 +43,7 @@ def draw_card(
     *,
     selected: bool = False,
     hovered: bool = False,
+    affordable: bool = True,
 ) -> pygame.Rect:
     """Draw a card rectangle and return its bounding Rect."""
     lift = -20 if (selected or hovered) else 0
@@ -51,6 +52,13 @@ def draw_card(
     body_col, dark_col = _type_palette(card.card_type)
     if card.is_broken:
         body_col, dark_col = colors.CARD_BROKEN, colors.CARD_BROKEN_DARK
+
+    # Dim unaffordable cards
+    if not affordable:
+        r, g, b = dark_col.r // 2, dark_col.g // 2, dark_col.b // 2
+        dark_col = pygame.Color(r, g, b)
+        r2, g2, b2 = body_col.r // 2, body_col.g // 2, body_col.b // 2
+        body_col = pygame.Color(r2, g2, b2)
 
     border_col   = colors.CARD_SELECTED if selected else (colors.CARD_HOVER if hovered else colors.CARD_BORDER)
     border_width = 2 if (selected or card.is_broken) else 1
@@ -105,10 +113,12 @@ def draw_card(
         pygame.draw.line(surface, colors.CARD_BROKEN,
                          (rect.x + 4, rect.y + 26), (rect.right - 4, rect.bottom - 14), 1)
 
-    # Cost orb (top-left, over header)
+    # Cost orb (top-left, over header) — red when unaffordable
     orb = (rect.x + _COST_R, rect.y + _COST_R)
-    pygame.draw.circle(surface, colors.MANA_FILL, orb, _COST_R)
-    pygame.draw.circle(surface, colors.MANA_ORB_RING, orb, _COST_R, 1)
+    orb_fill = colors.MANA_FILL if affordable else pygame.Color(160, 30, 30)
+    orb_ring = colors.MANA_ORB_RING if affordable else pygame.Color(220, 60, 60)
+    pygame.draw.circle(surface, orb_fill, orb, _COST_R)
+    pygame.draw.circle(surface, orb_ring, orb, _COST_R, 1)
     cost_font = fonts.get(13)
     cost_surf = cost_font.render(str(card.cost), True, colors.TEXT_PRIMARY)
     surface.blit(cost_surf, cost_surf.get_rect(center=orb))

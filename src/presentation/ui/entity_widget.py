@@ -134,23 +134,55 @@ def draw_enemy(
     fonts: FontRegistry,
     *,
     targeted: bool = False,
+    highlighted: bool = False,
 ) -> pygame.Rect:
     rect = pygame.Rect(x, y, ENEMY_W, ENEMY_H)
+
+    # Defeated state — draw greyed-out silhouette and return
+    if not enemy.is_alive:
+        pygame.draw.rect(surface, pygame.Color(30, 25, 25), rect, border_radius=_CORNER)
+        pygame.draw.rect(surface, pygame.Color(60, 50, 50), rect, 1, border_radius=_CORNER)
+        dead_font = fonts.get(13)
+        dead_surf = dead_font.render("DERROTADO", True, pygame.Color(100, 80, 80))
+        surface.blit(dead_surf, dead_surf.get_rect(center=rect.center))
+        return rect
 
     # Intent bubble above
     _draw_intent(surface, enemy.intent, rect.centerx, y - 30, fonts)
 
     # Name label
-    nf = fonts.get(11)
-    ns = nf.render(enemy.name, True, colors.TEXT_ACCENT)
-    surface.blit(ns, ns.get_rect(centerx=rect.centerx, bottom=y - 4))
+    name_font = fonts.get(11)
+    name_surf = name_font.render(enemy.name, True, colors.TEXT_ACCENT)
+    surface.blit(name_surf, name_surf.get_rect(centerx=rect.centerx, bottom=y - 4))
 
     # Body
-    body_col = colors.ENEMY_ACCENT if targeted else colors.ENEMY_BODY
-    border   = pygame.Color(255, 200, 60) if targeted else colors.ENEMY_ACCENT
-    bw       = 2 if targeted else 1
+    if highlighted:
+        body_col = pygame.Color(160, 70, 40)
+        border   = pygame.Color(255, 160, 50)
+        bw       = 2
+    elif targeted:
+        body_col = colors.ENEMY_ACCENT
+        border   = pygame.Color(255, 220, 60)
+        bw       = 2
+    else:
+        body_col = colors.ENEMY_BODY
+        border   = colors.ENEMY_ACCENT
+        bw       = 1
+
     pygame.draw.rect(surface, body_col, rect, border_radius=_CORNER)
     pygame.draw.rect(surface, border, rect, bw, border_radius=_CORNER)
+
+    # Targeting crosshair corners when highlighted
+    if highlighted:
+        sz = 8
+        for cx, cy, dx, dy in [
+            (rect.x, rect.y, 1, 1),
+            (rect.right, rect.y, -1, 1),
+            (rect.x, rect.bottom, 1, -1),
+            (rect.right, rect.bottom, -1, -1),
+        ]:
+            pygame.draw.line(surface, border, (cx, cy), (cx + dx * sz, cy), 2)
+            pygame.draw.line(surface, border, (cx, cy), (cx, cy + dy * sz), 2)
 
     # HP bar
     hp_rect = pygame.Rect(x, rect.bottom + 4, ENEMY_W, _HP_H)
