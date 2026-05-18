@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pygame
 
+from src.application import relic_effects
 from src.application.end_turn import end_player_turn
 from src.application.play_card import play_card
 from src.domain.combat import CombatState
@@ -230,11 +231,17 @@ class CombatScene:
         positions = _card_positions(len(cards))
         self._card_rects = []
         for i, (card, (cx, cy)) in enumerate(zip(cards, positions)):
+            bonus_dmg = (
+                relic_effects.extra_attack_damage(self._state.relics)
+                if card.total_damage() > 0
+                else 0
+            )
             rect = draw_card(
                 surface, card, cx, cy, self._fonts,
-                selected   = self._state.selected_card_index == i,
-                hovered    = self._hovered_card == i,
-                affordable = self._state.mana.can_afford(card.cost),
+                selected     = self._state.selected_card_index == i,
+                hovered      = self._hovered_card == i,
+                affordable   = self._state.mana.can_afford(card.cost),
+                bonus_damage = bonus_dmg,
             )
             self._card_rects.append(rect)
 
@@ -266,7 +273,13 @@ class CombatScene:
 
     def _get_tooltip(self) -> TooltipContent | None:
         if self._hovered_card is not None and self._hovered_card < self._state.hand.count:
-            return card_tooltip(self._state.hand.cards[self._hovered_card])
+            card = self._state.hand.cards[self._hovered_card]
+            bonus_dmg = (
+                relic_effects.extra_attack_damage(self._state.relics)
+                if card.total_damage() > 0
+                else 0
+            )
+            return card_tooltip(card, bonus_damage=bonus_dmg)
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             return enemy_tooltip(self._state.enemies[self._hovered_enemy])

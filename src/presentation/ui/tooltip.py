@@ -48,7 +48,7 @@ _INTENT_DESCRIPTION: dict[IntentType, str] = {
 }
 
 
-def card_tooltip(card: Card) -> TooltipContent:
+def card_tooltip(card: Card, bonus_damage: int = 0) -> TooltipContent:
     title = card.name + (" (Rota)" if card.is_broken else "")
     lines: list[str] = [
         f"{_CARD_TYPE_NAME[card.card_type]}  ·  Coste: {card.cost} maná",
@@ -58,7 +58,13 @@ def card_tooltip(card: Card) -> TooltipContent:
     dmg = card.total_damage()
     blk = card.total_block()
     if dmg > 0:
-        lines.append(f"Inflige {BigValue.format_int(dmg)} de daño a un enemigo.")
+        effective = dmg + bonus_damage
+        base_str = BigValue.format_int(effective)
+        if bonus_damage > 0:
+            lines.append(f"Inflige {base_str} de daño a un enemigo.")
+            lines.append(f"  ({BigValue.format_int(dmg)} + {bonus_damage} del Orbe de Fuego)")
+        else:
+            lines.append(f"Inflige {base_str} de daño a un enemigo.")
     if blk > 0:
         lines.append(f"Otorga {BigValue.format_int(blk)} puntos de bloqueo.")
 
@@ -120,7 +126,8 @@ def enemy_tooltip(enemy: Enemy) -> TooltipContent:
 
 
 def relic_tooltip(relic: Relic) -> TooltipContent:
-    return TooltipContent(title=relic.name, lines=[relic.description])
+    status = "Estado: Activo" if relic.is_active else "Estado: Agotado"
+    return TooltipContent(title=relic.name, lines=[relic.description, "", status])
 
 
 def pile_tooltip(pile_label: str, count: int, *, is_draw: bool) -> TooltipContent:

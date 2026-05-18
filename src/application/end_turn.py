@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 
+from src.application import relic_effects
 from src.domain.combat import CombatState
 from src.domain.entities import Enemy, Intent, IntentType
 
@@ -14,6 +15,17 @@ def end_player_turn(state: CombatState) -> None:
     state.player.block = 0          # block resets at turn end (STS rule)
     _run_enemy_turn(state)
     _begin_player_turn(state)
+
+
+def draw_opening_hand(state: CombatState) -> None:
+    """Apply combat-start relic effects and draw the opening hand."""
+    random.shuffle(state.draw_pile.cards)
+    bonus_mana = relic_effects.bonus_starting_mana(state.relics)
+    if bonus_mana > 0:
+        state.mana.maximum += bonus_mana
+        state.mana.refill()
+    count = _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics)
+    _draw_cards(state, count)
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +57,7 @@ def _execute_intent(state: CombatState, enemy: Enemy) -> None:
             absorbed = min(state.player.block, dmg)
             state.player.block = max(0, state.player.block - absorbed)
             state.player.current_hp = max(0, state.player.current_hp - (dmg - absorbed))
+            relic_effects.try_spectral_shield(state)
 
         case IntentType.BLOCK:
             enemy.block += enemy.intent.value
@@ -54,7 +67,6 @@ def _execute_intent(state: CombatState, enemy: Enemy) -> None:
             enemy.intent = Intent(IntentType.ATTACK, random.randint(10, 20))
 
         case IntentType.DEBUFF:
-            # Placeholder — debuff effects TBD
             pass
 
         case IntentType.UNKNOWN:
@@ -79,7 +91,8 @@ def _begin_player_turn(state: CombatState) -> None:
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None
-    _draw_cards(state, _HAND_DRAW_SIZE)
+    count = _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics)
+    _draw_cards(state, count)
 
 
 def _draw_cards(state: CombatState, count: int) -> None:

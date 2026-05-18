@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from src.application.end_turn import draw_opening_hand
 from src.domain.card import Card, CardEffect, CardModifier, CardType, ModifierTag
 from src.domain.combat import CombatState
 from src.domain.entities import Enemy, Intent, IntentType, Player, StatusEffect
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
 from src.domain.pile import DiscardPile, DrawPile, Hand
-from src.domain.relic import Relic
+from src.domain.relic import Relic, RelicTag
 
 
 # ---------------------------------------------------------------------------
@@ -40,10 +41,14 @@ def _power(id: str, name: str, cost: int) -> Card:
 
 def create_sample_combat() -> CombatState:
     relics: list[Relic] = [
-        Relic("r1", "Amuleto de Combate",  "Ganas 1 maná extra al inicio del combate"),
-        Relic("r2", "Tótem Roto",          "+1 carta al robar cada turno"),
-        Relic("r3", "Orbe de Fuego",       "Tus ataques hacen 2 de daño extra"),
-        Relic("r4", "Escudo Espectral",    "Al recibir daño fatal, sobrevives con 1 HP"),
+        Relic("r1", "Amuleto de Combate", "Ganas 1 maná extra al inicio del combate.",
+              tag=RelicTag.COMBAT_AMULET),
+        Relic("r2", "Tótem Roto",         "Robas 1 carta adicional al inicio de cada turno.",
+              tag=RelicTag.BROKEN_TOTEM),
+        Relic("r3", "Orbe de Fuego",      "Tus ataques infligen 2 de daño extra.",
+              tag=RelicTag.FIRE_ORB),
+        Relic("r4", "Escudo Espectral",   "Al recibir daño fatal, sobrevives con 1 HP.",
+              tag=RelicTag.SPECTRAL_SHIELD),
     ]
 
     player = Player(
@@ -76,7 +81,6 @@ def create_sample_combat() -> CombatState:
         ),
     ]
 
-    # Build a hand that shows all card types and modifiers
     broken_card = _attack("slash_broken", "Tajo", 1, 9)
     broken_card.is_broken = True
 
@@ -86,27 +90,32 @@ def create_sample_combat() -> CombatState:
     )
     stacked_card.modifiers.append(CardModifier(ModifierTag.CHROMA, stacks=1))
 
-    hand_cards: list[Card] = [
-        _attack("s1", "Golpe",       1, 6),
-        _attack("s2", "Golpe",       1, 6),
-        _skill( "d1", "Defender",    1, 5),
-        _attack("bash","Embate",     2, 8),
-        _skill( "d2", "Defender",    1, 5),
-        _power( "fx", "Flexibilidad",0),
+    # All cards go into the draw pile; draw_opening_hand deals the opening hand
+    all_draw_cards: list[Card] = [
+        _attack("s1",   "Golpe",        1, 6),
+        _attack("s2",   "Golpe",        1, 6),
+        _skill( "d1",   "Defender",     1, 5),
+        _attack("bash", "Embate",       2, 8),
+        _skill( "d2",   "Defender",     1, 5),
+        _power( "fx",   "Flexibilidad", 0),
         stacked_card,
         broken_card,
+        *[_attack(f"dr{i}", "Golpe",   1, 6) for i in range(10)],
     ]
 
-    draw_cards  = [_attack(f"dr{i}", "Golpe",   1, 6) for i in range(10)]
     discard_cards = [_skill(f"dc{i}", "Defender", 1, 5) for i in range(3)]
 
-    return CombatState(
+    state = CombatState(
         player=player,
         enemies=enemies,
-        hand=Hand(cards=hand_cards),
-        draw_pile=DrawPile(cards=draw_cards),
+        hand=Hand(cards=[]),
+        draw_pile=DrawPile(cards=all_draw_cards),
         discard_pile=DiscardPile(cards=discard_cards),
         mana=Mana(current=3, maximum=3),
         relics=relics,
         turn=1,
     )
+
+    # Shuffle the deck and draw the opening hand, applying relic effects
+    draw_opening_hand(state)
+    return state

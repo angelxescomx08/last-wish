@@ -44,6 +44,7 @@ def draw_card(
     selected: bool = False,
     hovered: bool = False,
     affordable: bool = True,
+    bonus_damage: int = 0,
 ) -> pygame.Rect:
     """Draw a card rectangle and return its bounding Rect."""
     lift = -20 if (selected or hovered) else 0
@@ -79,12 +80,13 @@ def draw_card(
     surface.blit(name_surf, name_surf.get_rect(centerx=rect.x + CARD_W // 2 + 7,
                                                centery=rect.y + _HEADER_H // 2))
 
-    # Central value: damage or block
+    # Central value: damage or block (damage shows the final effective value)
     val_font  = fonts.get(22)
     dmg = card.total_damage()
     blk = card.total_block()
     if dmg > 0:
-        v_surf = val_font.render(BigValue.format_int(dmg), True, colors.TEXT_DAMAGE)
+        effective = dmg + bonus_damage
+        v_surf = val_font.render(BigValue.format_int(effective), True, colors.TEXT_DAMAGE)
         surface.blit(v_surf, v_surf.get_rect(centerx=rect.centerx, centery=rect.centery + 8))
     elif blk > 0:
         v_surf = val_font.render(BigValue.format_int(blk), True, colors.TEXT_BLOCK)

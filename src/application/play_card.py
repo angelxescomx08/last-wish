@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from src.application import relic_effects
 from src.domain.card import CardType
 from src.domain.combat import CombatState
 
@@ -33,16 +34,17 @@ def play_card(
     if dmg > 0 and target_enemy_index is None:
         return PlayResult(False, "Esta carta necesita un objetivo")
 
-    # Apply damage to target enemy
+    # Apply damage to target enemy (bonus from Orbe de Fuego added to attack cards)
     if dmg > 0 and target_enemy_index is not None:
         if target_enemy_index >= len(state.enemies):
             return PlayResult(False, "Objetivo inválido")
         enemy = state.enemies[target_enemy_index]
         if not enemy.is_alive:
             return PlayResult(False, "Ese enemigo ya está derrotado")
-        absorbed = min(enemy.block, dmg)
+        effective_dmg = dmg + relic_effects.extra_attack_damage(state.relics)
+        absorbed = min(enemy.block, effective_dmg)
         enemy.block = max(0, enemy.block - absorbed)
-        enemy.current_hp = max(0, enemy.current_hp - (dmg - absorbed))
+        enemy.current_hp = max(0, enemy.current_hp - (effective_dmg - absorbed))
 
     # Apply block to player
     if blk > 0:
