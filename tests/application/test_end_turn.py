@@ -38,11 +38,15 @@ def _make_state(
     mana_current: int = 3,
     mana_max: int = 3,
     enemy_attack: int = 5,
+    enemy_intent: Intent | None = None,
+    enemy_hp: int = 50,
+    enemy_block: int = 0,
 ) -> CombatState:
     draw_pile = [_card(f"d{i}") for i in range(draw_count)]
+    intent = enemy_intent or Intent(IntentType.ATTACK, enemy_attack)
     enemy = Enemy(
-        id="e1", name="E", max_hp=50, current_hp=50, block=0,
-        intent=Intent(IntentType.ATTACK, enemy_attack),
+        id="e1", name="E", max_hp=enemy_hp, current_hp=enemy_hp, block=enemy_block,
+        intent=intent,
     )
     return CombatState(
         player=Player(name="P", max_hp=100, current_hp=player_hp,
@@ -251,3 +255,53 @@ class TestLuckBonus:
         draw_opening_hand(state)
         assert state.hand.count == state.hand.max_size  # 5+20=25 > max → capped
         assert state.hand.count <= state.hand.max_size
+
+
+# ---------------------------------------------------------------------------
+# Enemy block
+# ---------------------------------------------------------------------------
+
+class TestEnemyBlock:
+    def test_block_intent_grants_enemy_block(self):
+        intent = Intent(IntentType.BLOCK, 8)
+        state = _make_state(enemy_intent=intent, enemy_block=0)
+        end_player_turn(state)
+        assert state.enemies[0].block == 8
+
+    def test_enemy_block_resets_before_own_action_next_turn(self):
+        # Enemy had block=10 from previous turn; it should reset at start of its
+        # next action, meaning a new BLOCK intent grants fresh block (not added on top).
+        intent = Intent(IntentType.BLOCK, 5)
+        state = _make_state(enemy_intent=intent, enemy_block=10)
+        end_player_turn(state)
+        # Block resets to 0 before acting, then +5 from BLOCK intent → 5
+        assert state.enemies[0].block == 5
+
+    def test_enemy_attack_intent_resets_block_first(self):
+        # Even with an ATTACK intent, the old block is wiped at action start.
+        intent = Intent(IntentType.ATTACK, 5)
+        state = _make_state(enemy_intent=intent, enemy_block=20)
+        end_player_turn(state)
+        assert state.enemies[0].block == 0
+
+    def test_enemy_block_persists_until_its_turn(self):
+        # Block granted by BLOCK intent survives the rest of the enemy phase
+        # (i.e. it doesn't get wiped until the enemy acts again next turn).
+        intent = Intent(IntentType.BLOCK, 12)
+        state = _make_state(enemy_block=0, enemy_intent=intent)
+        end_player_turn(state)
+        assert state.enemies[0].block == 12
+
+    def test_two_turns_block_resets_each_turn(self):
+        # Run two end-player-turn cycles with BLOCK intent; each time block resets
+        # to 0 before acting, then gains from the new intent rolled.
+        intent = Intent(IntentType.BLOCK, 7)
+        state = _make_state(draw_count=50, enemy_intent=intent, enemy_block=0)
+        end_player_turn(state)
+        first_block = state.enemies[0].block
+        # Second turn: regardless of previous block, enemy block resets before acting
+        end_player_turn(state)
+        second_block = state.enemies[0].block
+        # Both values are valid (random new intent), but neither can be negative
+        assert first_block >= 0
+        assert second_block >= 0

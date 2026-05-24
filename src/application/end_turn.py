@@ -47,13 +47,13 @@ def _discard_hand(state: CombatState) -> None:
 def _run_enemy_turn(state: CombatState) -> None:
     for enemy in state.enemies:
         if enemy.is_alive:
+            enemy.block = 0         # reset block at the START of each enemy's action
             _execute_intent(state, enemy)
 
     # Remove defeated enemies before rolling new intents
     state.enemies = [e for e in state.enemies if e.is_alive]
 
     for enemy in state.enemies:
-        enemy.block = 0             # enemy block also resets each turn
         enemy.intent = _roll_intent(enemy)
 
 
