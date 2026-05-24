@@ -92,10 +92,19 @@ class CombatScene:
     Game-rule mutations are delegated to use-case functions in application/.
     """
 
-    def __init__(self, state: CombatState, fonts: FontRegistry) -> None:
-        self._state              = state
-        self._fonts              = fonts
-        self._death_acknowledged = False  # prevents pushing DeathScene more than once
+    def __init__(
+        self,
+        state: CombatState,
+        fonts: FontRegistry,
+        *,
+        is_boss: bool = False,
+    ) -> None:
+        self._state               = state
+        self._fonts               = fonts
+        self._is_boss             = is_boss
+        self._death_acknowledged  = False   # prevents pushing DeathScene more than once
+        self._victory_acknowledged = False  # prevents pushing reward scene more than once
+        self._initial_enemy_count = len(state.enemies)
 
         # Mouse
         self._mouse: tuple[int, int] = (0, 0)
@@ -169,8 +178,27 @@ class CombatScene:
         return not self._state.player.is_alive
 
     @property
+    def combat_won(self) -> bool:
+        """True when all enemies are dead and victory hasn't been acknowledged."""
+        if self._victory_acknowledged:
+            return False
+        if self._initial_enemy_count == 0:
+            return False
+        return len(self._state.enemies) == 0 or all(
+            not e.is_alive for e in self._state.enemies
+        )
+
+    @property
+    def is_boss(self) -> bool:
+        return self._is_boss
+
+    @property
     def turn_reached(self) -> int:
         return self._state.turn
+
+    @property
+    def state(self) -> CombatState:
+        return self._state
 
     @property
     def _in_targeting_mode(self) -> bool:

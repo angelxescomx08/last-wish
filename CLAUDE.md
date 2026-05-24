@@ -105,22 +105,29 @@ Every file in this layer is pygame-free and has a corresponding test file.
 |---|---|---|
 | `numbers.py` | `BigValue`, `Operation` | Arbitrary-precision arithmetic: base + flat additions + multipliers |
 | `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list |
-| `relic.py` | `Relic`, `RelicTag` | Passive items with a tag identifying their mechanic |
+| `relic.py` | `Relic`, `RelicTag` | Passive items with a tag identifying their mechanic (8 tags total) |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
 | `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck` |
 | `pile.py` | `DrawPile`, `DiscardPile`, `Hand` | Card containers with `count` and `is_full` |
 | `mana.py` | `Mana` | Mana resource with `spend`, `gain`, `refill`, `can_afford` |
 | `combat.py` | `CombatState` | Single source of truth for the entire battle state |
+| `map_node.py` | `MapNode`, `RoomType` | Single node on the run map: id, room_type, row, col, connections, visited, available |
+| `game_map.py` | `GameMap` | Floor map: nodes dict, boss_id, rows, cols; `available_nodes()`, `mark_visited()` |
+| `run.py` | `Run` | Persistent state across rooms: character, seed, floor, gold, hp, deck, relics, map; `add_card`, `add_relic`, `apply_combat_result` |
+| `card_pool.py` | `PackTheme`, `PackDef`, `ALL_PACKS`, `starter_deck`, `card_factories_for_theme` | 4 card packs (ACERO/ESCUDO/MAGIA/EPICO), pack definitions with gold costs, starter 10-card deck |
 
 ### Application layer — `src/application/`
 
 | File | Public API | Responsibility |
 |---|---|---|
-| `relic_effects.py` | `extra_draw_per_turn`, `extra_attack_damage`, `bonus_starting_mana`, `try_spectral_shield` | Pure query functions — read relics, return bonuses or mutate state |
+| `relic_effects.py` | `extra_draw_per_turn`, `extra_attack_damage`, `bonus_starting_mana`, `try_spectral_shield`, `bonus_gold_reward`, `post_combat_heal`, `max_hp_bonus` | Pure query functions — read relics, return bonuses or mutate state |
 | `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult` | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block |
 | `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus + `player.luck // 5` |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
-| `combat_factory.py` | `create_combat_for_character(character)` → `CombatState` | Builds a fresh battle from a selected `Character`; all entities start at full HP |
+| `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
+| `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded STS-style path-based map generation. Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6) |
+| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory`, `generate_event_gold`, `pick_treasure_relic`, `pick_boss_relics`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
+| `card_rewards.py` | `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]` | Seeded card reward selection after combat and pack opening |
 
 ### Infrastructure layer — `src/infrastructure/`
 
@@ -135,9 +142,16 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | File | Responsibility |
 |---|---|
 | `scenes/main_menu_scene.py` | Main menu: Jugar/Continuar, Ajustes (stub), Salir. Sets `requested_action: MenuAction` |
-| `scenes/character_select_scene.py` | Character panel grid with stat bars. Sets `confirmed` / `back_to_menu` flags |
-| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. Exposes `death_occurred` / `turn_reached` |
+| `scenes/character_select_scene.py` | Character panel grid with stat bars; seed text input (click to focus, type digits). Sets `confirmed` / `back_to_menu`; exposes `seed: int` property |
+| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. `is_boss` constructor param; `combat_won` property; `state` property |
 | `scenes/death_scene.py` | Death screen: Nueva Partida / Menú Principal. Sets `requested_action: DeathAction` |
+| `scenes/map_scene.py` | STS-style node map. Signals `selected_node: MapNode \| None` |
+| `scenes/combat_reward_scene.py` | Gold display + 3 card choices after a non-boss combat. Signals `cleared: bool`, `chosen_card: Card \| None` |
+| `scenes/treasure_scene.py` | Show a relic, take or skip. Signals `cleared: bool`, `took_relic: bool` |
+| `scenes/shop_scene.py` | 4 pack tiles with gold cost. Signals `selected_pack: PackTheme \| None`, `cleared: bool` |
+| `scenes/pack_opening_scene.py` | 5-card pick-1 overlay. Signals `cleared: bool`, `chosen_card: Card \| None` |
+| `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
+| `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` — renders card with effective final values |
 | `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
@@ -207,6 +221,15 @@ Relics are stored in `CombatState.relics: list[Relic]`. Each `Relic` carries a `
 | Orbe de Fuego | `FIRE_ORB` | +2 flat damage on every attack played | `play_card()` when `card.total_damage() > 0` |
 | Escudo Espectral | `SPECTRAL_SHIELD` | Survive a fatal hit at 1 HP (one-time use) | `_execute_intent()` after ATTACK damage |
 
+### Four relics from the roguelike run
+
+| Name | Tag | Effect | When applied |
+|---|---|---|---|
+| Piedra de Energía | `ENERGY_STONE` | +1 card drawn per turn (stacks with BROKEN_TOTEM) | `draw_opening_hand()` and `_begin_player_turn()` |
+| Anillo de Oro | `GOLD_RING` | +15 gold after each combat | `apply_combat_victory()` in run_manager |
+| Corazón de Hierro | `IRON_HEART` | +15 max HP (applied when relic is acquired) | `pick_treasure_relic()` / `pick_boss_relics()` |
+| Poción de Sangre | `BLOOD_POTION` | Heal 8 HP after each combat | `post_combat_heal()` in run_manager |
+
 ### How to add a new relic
 
 1. Add a new variant to `RelicTag` in `src/domain/relic.py`.
@@ -263,17 +286,27 @@ The three characters (Guerrero / Mago / Pícaro) differ in these values so each 
 ```
 MainMenuScene
   → [Jugar]      → CharacterSelectScene
-                      → [confirm]  → CombatScene
-                                       → [death]  → DeathScene
-                                                       → [Nueva Partida] → CharacterSelectScene
-                                                       → [Menú]          → MainMenuScene
+                      → [confirm]  → create_run() → MapScene
+                                       → [COMBAT]    → CombatScene
+                                                          → [combat_won] → CombatRewardScene → MapScene
+                                                          → [death]      → DeathScene
+                                                                               → [Nueva Partida] → CharacterSelectScene
+                                                                               → [Menú]          → MainMenuScene
+                                       → [TREASURE]  → TreasureScene → MapScene
+                                       → [SHOP]      → ShopScene
+                                                          → [pack]       → PackOpeningScene → ShopScene → MapScene
+                                       → [EVENT]     → EventScene → MapScene
+                                       → [BOSS]      → CombatScene(is_boss=True)
+                                                          → [combat_won] → BossRewardScene
+                                                                               → [open_pack]  → PackOpeningScene → BossRewardScene
+                                                                               → [cleared]    → advance_floor() → MapScene
                       → [ESC]      → MainMenuScene
   → [Salir]      → quit
 ```
 
-`SceneManager` in `main.py` drives all transitions. After each `update()` call it inspects the top
-scene's flags (`requested_action`, `confirmed`, `back_to_menu`, `death_occurred`) and pushes/pops
-scenes accordingly. Flags are reset immediately after being consumed.
+`SceneManager` in `main.py` stores `_run: Run | None` and drives all transitions. After each
+`update()` call it inspects the top scene's flags and pushes/pops scenes accordingly. Flags are
+reset immediately after being consumed.
 
 ---
 
@@ -310,17 +343,24 @@ One test file per source module. All test files follow the same structure:
 |---|---|---|
 | `test_numbers.py` | `domain/numbers.py` | resolve, flat/mult chains, 10^1000, 2^200, 1000-op chains, merge, format, display |
 | `test_card.py` | `domain/card.py` | total_damage, total_block, stacking, modifiers, draw field, is_broken |
-| `test_relic.py` | `domain/relic.py` | RelicTag enum (all 4 values), Relic creation, defaults, is_active mutation |
+| `test_relic.py` | `domain/relic.py` | RelicTag enum (all 8 values), Relic creation, defaults, is_active mutation |
 | `test_character.py` | `domain/character.py` | CharacterStats, Character frozen fields, ALL_CHARACTERS count and invariants |
 | `test_entities.py` | `domain/entities.py` | is_alive (Player+Enemy), hp_ratio, dexterity/attack_bonus/luck defaults |
 | `test_pile.py` | `domain/pile.py` | DrawPile/DiscardPile count, Hand count, is_full, max_size, mutations |
 | `test_mana.py` | `domain/mana.py` | can_afford, spend, gain (capped), refill, boundary values, large amounts |
 | `test_combat.py` | `domain/combat.py` | CombatState defaults, field storage, mutations, no-pygame-dependency |
-| `test_relic_effects.py` | `application/relic_effects.py` | All 4 relic functions: active, inactive, two of same, relic without tag |
+| `test_map_node.py` | `domain/map_node.py` | RoomType enum, MapNode fields, connections, visited/available flags |
+| `test_game_map.py` | `domain/game_map.py` | GameMap fields, available_nodes, mark_visited, boss_id |
+| `test_run.py` | `domain/run.py` | Run creation, add_card, add_relic, apply_combat_result, field storage |
+| `test_card_pool.py` | `domain/card_pool.py` | PackTheme enum, ALL_PACKS count/costs, starter_deck size, card_factories_for_theme |
+| `test_relic_effects.py` | `application/relic_effects.py` | All 8 relic functions: active, inactive, two of same, relic without tag |
 | `test_play_card.py` | `application/play_card.py` | Validation, damage, Fire Orb, attack_bonus, block, dexterity bonus, mana, draw |
 | `test_end_turn.py` | `application/end_turn.py` | draw_opening_hand, end_player_turn, relic integration, STS block rule, luck draw |
 | `test_combat_manager.py` | `application/combat_manager.py` | Structural integrity, relic tags, mana=4/4, hand=6, card pool total |
 | `test_combat_factory.py` | `application/combat_factory.py` | Player stats from character, full HP enemies, mana setup, luck-based draw |
+| `test_map_generator.py` | `application/map_generator.py` | Determinism, row/col/path counts per floor, room type distribution, boss placement |
+| `test_run_manager.py` | `application/run_manager.py` | create_run, generate_enemies, generate_boss, apply_combat_victory, advance_floor |
+| `test_card_rewards.py` | `application/card_rewards.py` | pick_reward_cards count, pick_pack_cards theme filtering, seeded determinism |
 
 ### Testing rules
 

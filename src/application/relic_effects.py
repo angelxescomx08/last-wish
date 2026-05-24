@@ -5,8 +5,10 @@ from src.domain.relic import Relic, RelicTag
 
 
 def extra_draw_per_turn(relics: list[Relic]) -> int:
-    """Extra cards drawn at the start of each player turn (Tótem Roto: +1)."""
-    return sum(1 for r in relics if r.is_active and r.tag == RelicTag.BROKEN_TOTEM)
+    """Extra cards drawn at the start of each player turn (Tótem Roto / Piedra de Energía: +1 each)."""
+    totem  = sum(1 for r in relics if r.is_active and r.tag == RelicTag.BROKEN_TOTEM)
+    energy = sum(1 for r in relics if r.is_active and r.tag == RelicTag.ENERGY_STONE)
+    return totem + energy
 
 
 def extra_attack_damage(relics: list[Relic]) -> int:
@@ -17,6 +19,21 @@ def extra_attack_damage(relics: list[Relic]) -> int:
 def bonus_starting_mana(relics: list[Relic]) -> int:
     """Extra mana maximum granted once at combat start (Amuleto de Combate: +1)."""
     return sum(1 for r in relics if r.is_active and r.tag == RelicTag.COMBAT_AMULET)
+
+
+def bonus_gold_reward(relics: list[Relic]) -> int:
+    """Extra gold earned per combat victory (Anillo de Oro: +15 each)."""
+    return sum(15 for r in relics if r.is_active and r.tag == RelicTag.GOLD_RING)
+
+
+def post_combat_heal(relics: list[Relic]) -> int:
+    """HP restored after each combat victory (Poción de Sangre: +8 each)."""
+    return sum(8 for r in relics if r.is_active and r.tag == RelicTag.BLOOD_POTION)
+
+
+def max_hp_bonus(relics: list[Relic]) -> int:
+    """Permanent max-HP increase from relics (Corazón de Hierro: +15 each)."""
+    return sum(15 for r in relics if r.is_active and r.tag == RelicTag.IRON_HEART)
 
 
 def try_spectral_shield(state: CombatState) -> bool:

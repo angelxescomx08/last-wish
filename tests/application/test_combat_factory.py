@@ -72,17 +72,16 @@ class TestManaSetup:
     def test_mana_starts_at_max(self):
         for c in ALL_CHARACTERS:
             state = create_combat_for_character(c)
-            # COMBAT_AMULET adds 1 to mana.maximum; current must equal maximum
             assert state.mana.current == state.mana.maximum
 
     def test_warrior_base_mana(self):
         state = create_combat_for_character(_get(CharacterId.WARRIOR))
-        # COMBAT_AMULET adds 1; warrior has max_mana=2 → expected 3
-        assert state.mana.maximum == _get(CharacterId.WARRIOR).stats.max_mana + 1
+        # No relics → mana equals character max_mana exactly
+        assert state.mana.maximum == _get(CharacterId.WARRIOR).stats.max_mana
 
     def test_mage_base_mana(self):
         state = create_combat_for_character(_get(CharacterId.MAGE))
-        assert state.mana.maximum == _get(CharacterId.MAGE).stats.max_mana + 1
+        assert state.mana.maximum == _get(CharacterId.MAGE).stats.max_mana
 
 
 # ---------------------------------------------------------------------------
@@ -117,9 +116,10 @@ class TestCardAndRelicSetup:
             state = create_combat_for_character(c)
             assert state.hand.count > 0
 
-    def test_relics_present(self):
+    def test_no_starting_relics(self):
+        # Characters now start with 0 relics — relics are earned during the run
         state = create_combat_for_character(_get(CharacterId.MAGE))
-        assert len(state.relics) > 0
+        assert len(state.relics) == 0
 
     def test_turn_starts_at_one(self):
         state = create_combat_for_character(_get(CharacterId.ROGUE))

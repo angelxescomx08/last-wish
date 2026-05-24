@@ -11,15 +11,22 @@ from src.domain.relic import Relic, RelicTag
 # ---------------------------------------------------------------------------
 
 class TestRelicTag:
-    def test_all_four_tags_exist(self):
+    def test_core_tags_exist(self):
         tags = {t for t in RelicTag}
         assert RelicTag.COMBAT_AMULET   in tags
         assert RelicTag.BROKEN_TOTEM    in tags
         assert RelicTag.FIRE_ORB        in tags
         assert RelicTag.SPECTRAL_SHIELD in tags
 
-    def test_exactly_four_tags(self):
-        assert len(list(RelicTag)) == 4
+    def test_new_tags_exist(self):
+        tags = {t for t in RelicTag}
+        assert RelicTag.ENERGY_STONE in tags
+        assert RelicTag.GOLD_RING    in tags
+        assert RelicTag.IRON_HEART   in tags
+        assert RelicTag.BLOOD_POTION in tags
+
+    def test_eight_tags_total(self):
+        assert len(list(RelicTag)) == 8
 
     def test_tags_are_unique(self):
         values = [t.value for t in RelicTag]

@@ -35,12 +35,19 @@ tests/
     test_pile.py                    ← src/domain/pile.py
     test_mana.py                    ← src/domain/mana.py
     test_combat.py                  ← src/domain/combat.py
+    test_map_node.py                ← src/domain/map_node.py
+    test_game_map.py                ← src/domain/game_map.py
+    test_run.py                     ← src/domain/run.py
+    test_card_pool.py               ← src/domain/card_pool.py
   application/
     test_relic_effects.py           ← src/application/relic_effects.py
     test_play_card.py               ← src/application/play_card.py
     test_end_turn.py                ← src/application/end_turn.py
     test_combat_manager.py          ← src/application/combat_manager.py
     test_combat_factory.py          ← src/application/combat_factory.py
+    test_map_generator.py           ← src/application/map_generator.py
+    test_run_manager.py             ← src/application/run_manager.py
+    test_card_rewards.py            ← src/application/card_rewards.py
   infrastructure/
     test_colors.py                  ← src/infrastructure/colors.py
     test_fonts.py                   ← src/infrastructure/fonts.py

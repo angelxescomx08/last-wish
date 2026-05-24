@@ -8,10 +8,11 @@ Public flags consumed by SceneManager:
   confirmed   → True when player confirms a character (SceneManager resets it)
   back_to_menu→ True when player presses ESC (SceneManager resets it)
 
-selected_character is always valid while the scene is alive.
+selected_character and seed are always valid while the scene is alive.
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
 import pygame
@@ -37,6 +38,11 @@ _HINT_Y: int       = 692
 _BAR_W: int        = _PANEL_W - 28  # bar width inside the panel
 _BAR_H: int        = 5
 _CORNER: int       = 7
+
+_SEED_BOX_Y: int   = 548
+_SEED_BOX_W: int   = 320
+_SEED_BOX_H: int   = 32
+_SEED_BOX_X: int   = (1280 - _SEED_BOX_W) // 2
 
 
 # ---------------------------------------------------------------------------
@@ -82,20 +88,29 @@ class CharacterSelectScene:
         self.confirmed       = False
         self.back_to_menu    = False
 
+        # Seed input
+        self._default_seed   = random.randint(0, 2**63 - 1)
+        self._seed_str: str  = str(self._default_seed)
+        self._seed_active    = False
+        self._seed_rect      = pygame.Rect(_SEED_BOX_X, _SEED_BOX_Y, _SEED_BOX_W, _SEED_BOX_H)
+
     # ------------------------------------------------------------------
     # Protocol
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                self._move_selection(-1)
-            elif event.key == pygame.K_RIGHT:
-                self._move_selection(1)
-            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                self.confirmed = True
-            elif event.key == pygame.K_ESCAPE:
-                self.back_to_menu = True
+            if self._seed_active:
+                self._handle_seed_key(event)
+            else:
+                if event.key == pygame.K_LEFT:
+                    self._move_selection(-1)
+                elif event.key == pygame.K_RIGHT:
+                    self._move_selection(1)
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    self.confirmed = True
+                elif event.key == pygame.K_ESCAPE:
+                    self.back_to_menu = True
         elif event.type == pygame.MOUSEMOTION:
             self._update_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -118,16 +133,25 @@ class CharacterSelectScene:
                                     selected=(i == self._selected_index))
             self._panel_rects.append(rect)
 
+        self._draw_seed_input(surface, cx)
+
         hint_surf = self._fonts.get(13).render(self._NAV_HINT, True, colors.TEXT_SECONDARY)
         surface.blit(hint_surf, hint_surf.get_rect(centerx=cx, centery=_HINT_Y))
 
     # ------------------------------------------------------------------
-    # Public accessor
+    # Public accessors
     # ------------------------------------------------------------------
 
     @property
     def selected_character(self) -> Character:
         return ALL_CHARACTERS[self._selected_index]
+
+    @property
+    def seed(self) -> int:
+        try:
+            return int(self._seed_str) % (2 ** 63)
+        except (ValueError, OverflowError):
+            return self._default_seed
 
     # ------------------------------------------------------------------
     # Panel drawing
@@ -211,8 +235,41 @@ class CharacterSelectScene:
         pygame.draw.rect(surface, row.bar_color, fill_rect, border_radius=2)
 
     # ------------------------------------------------------------------
+    # Seed input drawing
+    # ------------------------------------------------------------------
+
+    def _draw_seed_input(self, surface: pygame.Surface, cx: int) -> None:
+        label = self._fonts.get(11).render("Semilla:", True, colors.TEXT_SECONDARY)
+        surface.blit(label, (self._seed_rect.x - label.get_width() - 8,
+                             self._seed_rect.centery - label.get_height() // 2))
+
+        border_col = colors.TEXT_ACCENT if self._seed_active else colors.PANEL_BORDER
+        pygame.draw.rect(surface, colors.BG_PANEL, self._seed_rect, border_radius=4)
+        pygame.draw.rect(surface, border_col,      self._seed_rect, 1, border_radius=4)
+
+        display = self._seed_str if self._seed_str else str(self._default_seed)
+        if self._seed_active and not self._seed_str:
+            display = ""
+        val_surf = self._fonts.get(12).render(display, True, colors.TEXT_PRIMARY)
+        surface.blit(val_surf, (self._seed_rect.x + 6,
+                                self._seed_rect.centery - val_surf.get_height() // 2))
+
+        hint = self._fonts.get(10).render(
+            "Haz clic para editar la semilla", True, colors.TEXT_SECONDARY
+        )
+        surface.blit(hint, hint.get_rect(centerx=cx, centery=_SEED_BOX_Y + _SEED_BOX_H + 12))
+
+    # ------------------------------------------------------------------
     # Input helpers
     # ------------------------------------------------------------------
+
+    def _handle_seed_key(self, event: pygame.event.Event) -> None:
+        if event.key == pygame.K_BACKSPACE:
+            self._seed_str = self._seed_str[:-1]
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+            self._seed_active = False
+        elif event.unicode.isdigit() and len(self._seed_str) < 19:
+            self._seed_str += event.unicode
 
     def _move_selection(self, delta: int) -> None:
         n = len(ALL_CHARACTERS)
@@ -225,6 +282,12 @@ class CharacterSelectScene:
                 return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self._seed_rect.collidepoint(pos):
+            self._seed_active = True
+            return
+
+        self._seed_active = False
+
         for i, rect in enumerate(self._panel_rects):
             if rect.collidepoint(pos):
                 if self._selected_index == i:
