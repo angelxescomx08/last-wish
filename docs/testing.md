@@ -25,33 +25,35 @@ uv run pytest tests/ -q
 
 ```
 tests/
-  conftest.py                  ← session-scoped pygame.init()
+  conftest.py                       ← session-scoped pygame.init()
   domain/
-    test_numbers.py            ← src/domain/numbers.py
-    test_card.py               ← src/domain/card.py
-    test_relic.py              ← src/domain/relic.py
-    test_entities.py           ← src/domain/entities.py
-    test_pile.py               ← src/domain/pile.py
-    test_mana.py               ← src/domain/mana.py
-    test_combat.py             ← src/domain/combat.py
+    test_numbers.py                 ← src/domain/numbers.py
+    test_card.py                    ← src/domain/card.py
+    test_relic.py                   ← src/domain/relic.py
+    test_character.py               ← src/domain/character.py
+    test_entities.py                ← src/domain/entities.py
+    test_pile.py                    ← src/domain/pile.py
+    test_mana.py                    ← src/domain/mana.py
+    test_combat.py                  ← src/domain/combat.py
   application/
-    test_relic_effects.py      ← src/application/relic_effects.py
-    test_play_card.py          ← src/application/play_card.py
-    test_end_turn.py           ← src/application/end_turn.py
-    test_combat_manager.py     ← src/application/combat_manager.py
+    test_relic_effects.py           ← src/application/relic_effects.py
+    test_play_card.py               ← src/application/play_card.py
+    test_end_turn.py                ← src/application/end_turn.py
+    test_combat_manager.py          ← src/application/combat_manager.py
+    test_combat_factory.py          ← src/application/combat_factory.py
   infrastructure/
-    test_colors.py             ← src/infrastructure/colors.py
-    test_fonts.py              ← src/infrastructure/fonts.py
-    test_viewport.py           ← src/infrastructure/viewport.py
+    test_colors.py                  ← src/infrastructure/colors.py
+    test_fonts.py                   ← src/infrastructure/fonts.py
+    test_viewport.py                ← src/infrastructure/viewport.py
   presentation/
     ui/
-      test_tooltip.py          ← src/presentation/ui/tooltip.py
-      test_card_widget.py      ← src/presentation/ui/card_widget.py
-      test_entity_widget.py    ← src/presentation/ui/entity_widget.py
-      test_hud_widget.py       ← src/presentation/ui/hud_widget.py
-      test_pile_viewer.py      ← src/presentation/ui/pile_viewer.py
+      test_tooltip.py               ← src/presentation/ui/tooltip.py
+      test_card_widget.py           ← src/presentation/ui/card_widget.py
+      test_entity_widget.py         ← src/presentation/ui/entity_widget.py
+      test_hud_widget.py            ← src/presentation/ui/hud_widget.py
+      test_pile_viewer.py           ← src/presentation/ui/pile_viewer.py
     scenes/
-      test_combat_scene.py     ← src/presentation/scenes/combat_scene.py
+      test_combat_scene.py          ← src/presentation/scenes/combat_scene.py
 ```
 
 ---
@@ -111,6 +113,9 @@ class TestSomeConcept:
 - Active relic + inactive relic — never conflate them.
 - Two of the same relic — effects must stack.
 - Relic with `tag=None` — must be silently ignored.
+- `player.dexterity = 0` vs. non-zero — block bonus must only apply when non-zero.
+- `player.attack_bonus = 0` vs. non-zero — damage bonus must only apply when non-zero.
+- `player.luck < 5` vs. `>= 5` — extra draw only kicks in at thresholds.
 
 ### Smoke tests (presentation layer)
 
@@ -131,6 +136,8 @@ Always verify that calling `.add_flat()` or `.add_multiplier()` on a `BigValue` 
 ### `application/` tests
 - Build minimal `CombatState` objects using the inline helpers in each test file.
 - Never import from `presentation/` or `infrastructure/`.
+- The `_make_state()` helpers in play_card and end_turn tests accept `player_dexterity`,
+  `player_attack_bonus`, and `player_luck` to exercise character-stat paths cleanly.
 
 ### `infrastructure/` tests
 - `pygame.Color` objects work without `pygame.init()`.
@@ -138,6 +145,7 @@ Always verify that calling `.add_flat()` or `.add_multiplier()` on a `BigValue` 
 
 ### `presentation/` tests
 - Content generators in `tooltip.py` (`card_tooltip`, `relic_tooltip`, etc.) are pure Python — no pygame needed.
+- `card_tooltip` now accepts keyword-only `bonus_damage` and `bonus_block`; both default to 0.
 - Widget rendering functions (`draw_card`, `draw_enemy`, etc.) need a `pygame.Surface`. Create it with `pygame.Surface((w, h))` — no display required.
 - Smoke-test rendering by calling the function and checking the return type; don't assert colors or pixel values.
 
@@ -152,6 +160,7 @@ Every code change must be accompanied by tests. Specifically:
 | New domain class / field | At least: default values, storage, boundary inputs |
 | New use case / function | At least: success path, failure path, boundary inputs |
 | New relic | Tag enum, relic_effects query, integration in end_turn or play_card |
+| New character | Entry in `ALL_CHARACTERS`, stat values, invariants (hp > 0, mana > 0) |
 | New widget function | Smoke test + return type |
 | Bug fix | Regression test that reproduces the bug before the fix |
 | BigValue formula change | Stress tests at 10^100 and chain of 100+ ops |

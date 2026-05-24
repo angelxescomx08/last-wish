@@ -9,7 +9,7 @@ Every combat turn follows a strict two-phase pipeline:
 
 ## Combat start
 
-Called once when `create_sample_combat()` builds the initial state:
+Called once when `create_combat_for_character()` (or `create_sample_combat()`) builds the initial state:
 
 ```
 draw_opening_hand(state)
@@ -22,14 +22,20 @@ draw_opening_hand(state)
   │         state.mana.maximum += bonus
   │         state.mana.refill()
   │
-  └─ _draw_cards(state, 5 + extra_draw_per_turn(relics))
+  └─ _draw_cards(state, 5 + extra_draw_per_turn(relics) + player.luck // 5)
         ├─ if draw_pile empty → shuffle discard into draw_pile
         └─ pop cards until count reached or hand is full (max 10)
 ```
 
-**Result with sample relics:**
-- Mana: 3 + 1 (Amuleto) = **4/4**
-- Hand: 5 + 1 (Tótem) = **6 cards**
+**Example with all four sample relics and a Guerrero (luck=2):**
+- Mana: 2 + 1 (Amuleto) = **3/3**
+- Luck bonus: 2 // 5 = **0 extra cards**
+- Hand: 5 + 1 (Tótem) + 0 = **6 cards**
+
+**Example with a Mago (luck=5):**
+- Mana: 4 + 1 (Amuleto) = **5/5**
+- Luck bonus: 5 // 5 = **1 extra card**
+- Hand: 5 + 1 (Tótem) + 1 = **7 cards**
 
 ---
 
@@ -39,8 +45,10 @@ The player has full control:
 
 - **Play card:** calls `play_card(state, card_index, target_enemy_index)`.
   - Validates index, mana, and target.
-  - Applies damage (+ Orbe de Fuego bonus) to the target.
-  - Applies block to the player.
+  - Computes effective damage: `card.total_damage() + extra_attack_damage(relics) + player.attack_bonus`.
+  - Computes effective block: `card.total_block() + player.dexterity`.
+  - Applies effective damage to the target enemy (minus enemy block absorption).
+  - Applies effective block to the player.
   - Spends mana.
   - Moves card: POWER → `active_powers`, others → `discard_pile`.
   - Draws bonus cards (`fx.draw` summed across all effects).
@@ -77,7 +85,7 @@ end_player_turn(state)
         ├─ state.turn += 1
         ├─ state.mana.refill()
         ├─ state.selected_card_index = None
-        └─ _draw_cards(state, 5 + extra_draw_per_turn(relics))
+        └─ _draw_cards(state, 5 + extra_draw_per_turn(relics) + player.luck // 5)
 ```
 
 ---
@@ -87,6 +95,8 @@ end_player_turn(state)
 > Player block resets to **0** at the **end of the player's turn**, **before** enemies execute their intents.
 
 Block gained by playing skill cards **does not** carry over to absorb enemy attacks that same turn. This is intentional — it matches the Slay the Spire design. Block gained at the start of the next turn (from cards played on that turn) is the intended protection mechanism.
+
+Note: dexterity still applies when the block card is played — the increase happens at play time, not at reset time.
 
 ---
 
@@ -107,6 +117,29 @@ if draw_pile is not empty and hand is not full:
 ```
 
 The draw pile is a stack (pop from end). The discard is unordered — when reshuffled it becomes the new draw order.
+
+---
+
+## Character stat effects on draw
+
+The `player.luck` field (set from `Character.stats.luck` at combat creation) adds extra cards each turn:
+
+| Luck value | Extra cards per turn |
+|---|---|
+| 0–4 | 0 |
+| 5–9 | 1 |
+| 10–14 | 2 |
+| … | … |
+
+Formula: `extra = player.luck // 5`
+
+---
+
+## Death detection
+
+After `end_player_turn(state)` returns, `CombatScene` checks `state.player.is_alive` via its
+`death_occurred` property. If `False`, `SceneManager` pushes `DeathScene` on the next update tick.
+The `_death_acknowledged` flag on `CombatScene` prevents the push from firing more than once.
 
 ---
 

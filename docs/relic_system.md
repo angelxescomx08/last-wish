@@ -53,9 +53,14 @@ Effects are **pure query functions** in `src/application/relic_effects.py`. They
 - **Effect:** +2 flat damage on every attack card played.
 - **Applied:** in `play_card()` when `card.total_damage() > 0`.
   ```python
-  effective_dmg = dmg + relic_effects.extra_attack_damage(state.relics)
+  effective_dmg = (
+      dmg
+      + relic_effects.extra_attack_damage(state.relics)
+      + state.player.attack_bonus          # from character stats
+  )
   ```
-- **UI:** card widget and tooltip both show the effective final value.
+- **UI:** card widget and tooltip both show the combined effective value. The tooltip breakdown
+  shows `base + total_bonus` when any bonus is non-zero.
 
 ### Escudo Espectral  (`SPECTRAL_SHIELD`)
 - **Effect:** when player HP drops to 0 from an enemy attack, survive at 1 HP. One-time use.
@@ -72,8 +77,8 @@ Effects are **pure query functions** in `src/application/relic_effects.py`. They
 1. Add a new variant to `RelicTag` in `src/domain/relic.py`.
 2. Add a query function in `src/application/relic_effects.py`.
 3. Call it at the right hook in `end_turn.py` or `play_card.py`.
-4. Propagate any UI hint (`bonus_damage`, etc.) from `CombatScene` to the widget/tooltip.
-5. Add the relic to `create_sample_combat()` in `combat_manager.py`.
+4. Propagate any UI hint (`bonus_damage`, `bonus_block`, etc.) from `CombatScene` to the widget/tooltip.
+5. Add the relic to `create_sample_combat()` in `combat_manager.py` **and** to `create_combat_for_character()` in `combat_factory.py`.
 6. Write tests:
    - `tests/domain/test_relic.py` — tag exists, fields correct.
    - `tests/application/test_relic_effects.py` — active, inactive, stacked, boundary.
