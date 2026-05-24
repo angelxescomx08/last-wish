@@ -310,6 +310,64 @@ reset immediately after being consumed.
 
 ---
 
+## Roguelike Run System
+
+A full roguelike run persists state across rooms via the `Run` domain object and the `run_manager` / `map_generator` use cases.
+
+### Run object (`src/domain/run.py`)
+
+`Run` is the single source of truth for everything that survives between rooms:
+
+| Field | Type | Description |
+|---|---|---|
+| `character` | `Character` | Selected character (immutable after run start) |
+| `seed` | `int` | RNG seed for deterministic map and reward generation |
+| `floor` | `int` | Current floor (starts at 1, increments after boss) |
+| `gold` | `int` | Current gold amount |
+| `player_max_hp` | `int` | Maximum HP (can increase from relics) |
+| `player_current_hp` | `int` | Current HP (persists across rooms) |
+| `deck` | `list[Card]` | Full card collection (draw pile is rebuilt from this each combat) |
+| `relics` | `list[Relic]` | Acquired relics (active from the moment they are added) |
+| `current_map` | `GameMap` | The current floor's node map |
+| `current_room_id` | `str \| None` | ID of the room the player is currently in |
+
+Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_after)`.
+
+### Seeded map generation (`src/application/map_generator.py`)
+
+`generate_map(seed, floor) → GameMap` produces a deterministic STS-style map:
+
+- **Seed formula**: `6364136223846793005 × seed + 1442695040888963407 × floor`
+- **Dimensions**: rows = `min(7 + (floor-1)//2, 12)`, cols = `min(5 + (floor-1)//3, 8)`
+- **Paths**: `min(3 + (floor-1)//3, 6)` independent paths from row 0 to boss row
+- Mid-rows receive TREASURE, SHOP, and EVENT nodes; all other non-boss rooms are COMBAT
+
+### Room types (`src/domain/map_node.py`)
+
+| `RoomType` | Scene | Outcome |
+|---|---|---|
+| `COMBAT` | `CombatScene` | Fight enemies → `CombatRewardScene` (pick 1 of 3 cards, earn gold) |
+| `TREASURE` | `TreasureScene` | Take or skip a free relic |
+| `SHOP` | `ShopScene` → `PackOpeningScene` | Spend gold to buy a card pack (pick 1 of 5 cards) |
+| `EVENT` | `EventScene` | Narrative event with gold reward |
+| `BOSS` | `CombatScene(is_boss=True)` | Fight boss → `BossRewardScene` (gold + epic pack + relic choice) |
+
+### Card packs (`src/domain/card_pool.py`)
+
+Four pack themes are available in the shop. Each pack shows 5 cards; the player picks 1.
+
+| `PackTheme` | Cost | Focus |
+|---|---|---|
+| `ACERO` | 75 gold | Attack cards |
+| `ESCUDO` | 75 gold | Block / defense cards |
+| `MAGIA` | 75 gold | Special / utility cards |
+| `EPICO` | 150 gold | High-power mixed cards |
+
+`starter_deck()` returns the initial 10-card deck used when creating a new run.
+`card_factories_for_theme(theme)` returns a list of zero-argument callables that produce the cards belonging to that theme — used by `pick_pack_cards()`.
+
+---
+
 ## Card Rendering
 
 `draw_card()` in `card_widget.py` accepts `bonus_damage: int = 0`. The number shown in the card centre is always the **effective** value: `card.total_damage() + bonus_damage`.
