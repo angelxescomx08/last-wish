@@ -10,9 +10,12 @@ _HAND_DRAW_SIZE: int = 5
 
 
 def end_player_turn(state: CombatState) -> None:
-    """Full end-of-turn pipeline: discard → enemies act → new player turn."""
+    """Full end-of-turn pipeline: discard → enemies act → new player turn.
+
+    Block resets at the START of the player's next turn (inside
+    _begin_player_turn), so block accumulated this turn absorbs enemy attacks.
+    """
     _discard_hand(state)
-    state.player.block = 0          # block resets at turn end (STS rule)
     _run_enemy_turn(state)
     _begin_player_turn(state)
 
@@ -91,6 +94,7 @@ def _roll_intent(enemy: Enemy) -> Intent:
 
 
 def _begin_player_turn(state: CombatState) -> None:
+    state.player.block = 0           # block resets at the START of the new turn
     state.turn += 1
     state.mana.refill()
     state.selected_card_index = None

@@ -137,12 +137,12 @@ class TestEndPlayerTurn:
         # We just verify the final hand has 5 new cards
         assert state.hand.count == 5
 
-    def test_player_block_resets(self):
+    def test_player_block_resets_at_start_of_next_turn(self):
+        # Block resets at the START of the new player turn (after enemies act)
         state = _make_state(player_block=10)
         state.player.block = 10
         end_player_turn(state)
-        # Block resets at turn end (before enemies act)
-        # After enemies act and new turn starts, block is 0
+        # After enemies act and new turn begins, block is 0
         assert state.player.block == 0
 
     def test_turn_incremented(self):
@@ -162,13 +162,20 @@ class TestEndPlayerTurn:
         # player block was 0, enemy attacks for 10
         assert state.player.current_hp == 70
 
-    def test_player_block_does_not_protect_vs_enemies(self):
-        # STS rule: player block resets to 0 at end of player turn, BEFORE enemies act
+    def test_player_block_absorbs_enemy_attack(self):
+        # Block earned during the player's turn protects against enemy attacks
         state = _make_state(player_hp=80, player_block=5, enemy_attack=10)
         state.player.block = 5
         end_player_turn(state)
-        # Block was 0 when enemy attacked → takes full 10 damage
-        assert state.player.current_hp == 70
+        # 5 block absorbs 5 of the 10 damage → takes 5 damage
+        assert state.player.current_hp == 75
+
+    def test_player_block_fully_absorbs_weak_attack(self):
+        state = _make_state(player_hp=80, player_block=15, enemy_attack=10)
+        state.player.block = 15
+        end_player_turn(state)
+        # 15 block fully absorbs 10 damage → no HP loss
+        assert state.player.current_hp == 80
 
     def test_draw_respects_broken_totem_each_turn(self):
         state = _make_state(draw_count=20, relics=[_relic(RelicTag.BROKEN_TOTEM)])

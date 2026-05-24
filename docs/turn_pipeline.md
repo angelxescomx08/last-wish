@@ -65,9 +65,7 @@ end_player_turn(state)
   │     state.discard_pile.cards.extend(state.hand.cards)
   │     state.hand.cards.clear()
   │
-  ├─ state.player.block = 0          ← STS rule: block resets BEFORE enemies act
-  │
-  ├─ _run_enemy_turn(state)
+  ├─ _run_enemy_turn(state)          ← block still active here — absorbs damage
   │     │
   │     ├─ for each living enemy → _execute_intent(state, enemy)
   │     │     ├─ ATTACK:  dmg = intent.value
@@ -82,6 +80,7 @@ end_player_turn(state)
   │     └─ Roll new intent for each living enemy
   │
   └─ _begin_player_turn(state)
+        ├─ state.player.block = 0   ← block resets at START of new turn
         ├─ state.turn += 1
         ├─ state.mana.refill()
         ├─ state.selected_card_index = None
@@ -90,11 +89,11 @@ end_player_turn(state)
 
 ---
 
-## STS block rule
+## Block rule
 
-> Player block resets to **0** at the **end of the player's turn**, **before** enemies execute their intents.
+> Player block resets to **0** at the **start of the player's next turn**, after enemies have already acted.
 
-Block gained by playing skill cards **does not** carry over to absorb enemy attacks that same turn. This is intentional — it matches the Slay the Spire design. Block gained at the start of the next turn (from cards played on that turn) is the intended protection mechanism.
+Block gained by playing skill cards **does** absorb enemy attacks that same turn — this is the intended mechanic. At the beginning of the following player turn, block is cleared so the player starts fresh.
 
 Note: dexterity still applies when the block card is played — the increase happens at play time, not at reset time.
 

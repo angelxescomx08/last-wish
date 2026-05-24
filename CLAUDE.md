@@ -251,18 +251,18 @@ draw_opening_hand(state)         ← called once at combat start
 
 end_player_turn(state)           ← called each time player ends their turn
   ├── _discard_hand()            discard all hand cards
-  ├── state.player.block = 0    STS rule: block resets BEFORE enemies act
-  ├── _run_enemy_turn()
+  ├── _run_enemy_turn()          block still active — absorbs enemy damage
   │     ├── _execute_intent() for each living enemy
   │     │     └── ATTACK: apply damage → try_spectral_shield()
   │     └── _roll_intent()       random new intent for next turn
   └── _begin_player_turn()
+        ├── state.player.block = 0  ← block resets at START of new turn
         ├── state.turn += 1
         ├── state.mana.refill()
         └── _draw_cards(5 + extra_draw_per_turn(relics) + player.luck // 5)
 ```
 
-**Important STS rule:** The player's block resets to 0 at end of their turn, _before_ enemies execute their intents. Block gained during the player's turn does **not** absorb enemy attacks that same turn.
+**Block rule:** Block resets to 0 at the **start of the player's next turn**, after enemies have already acted. Block gained during the player's turn **does** absorb enemy attacks that same turn.
 
 ---
 
