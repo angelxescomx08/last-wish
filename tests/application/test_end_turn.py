@@ -34,6 +34,7 @@ def _make_state(
     relics: list[Relic] | None = None,
     player_hp: int = 80,
     player_block: int = 0,
+    player_luck: int = 0,
     mana_current: int = 3,
     mana_max: int = 3,
     enemy_attack: int = 5,
@@ -44,7 +45,8 @@ def _make_state(
         intent=Intent(IntentType.ATTACK, enemy_attack),
     )
     return CombatState(
-        player=Player(name="P", max_hp=100, current_hp=player_hp, block=player_block),
+        player=Player(name="P", max_hp=100, current_hp=player_hp,
+                      block=player_block, luck=player_luck),
         enemies=[enemy],
         hand=Hand(cards=list(hand_cards or [])),
         draw_pile=DrawPile(cards=draw_pile),
@@ -205,3 +207,40 @@ class TestEndPlayerTurn:
         for _ in range(3):
             end_player_turn(state)
             assert state.hand.count == 5
+
+
+# ---------------------------------------------------------------------------
+# Luck bonus draw
+# ---------------------------------------------------------------------------
+
+class TestLuckBonus:
+    def test_zero_luck_no_extra_draw(self):
+        state = _make_state(draw_count=20, player_luck=0)
+        draw_opening_hand(state)
+        assert state.hand.count == 5
+
+    def test_luck_4_no_extra_draw(self):
+        state = _make_state(draw_count=20, player_luck=4)
+        draw_opening_hand(state)
+        assert state.hand.count == 5  # 4 // 5 == 0
+
+    def test_luck_5_draws_one_extra(self):
+        state = _make_state(draw_count=20, player_luck=5)
+        draw_opening_hand(state)
+        assert state.hand.count == 6  # 5 // 5 == 1
+
+    def test_luck_10_draws_two_extra(self):
+        state = _make_state(draw_count=20, player_luck=10)
+        draw_opening_hand(state)
+        assert state.hand.count == 7  # 10 // 5 == 2
+
+    def test_luck_bonus_also_applies_each_turn(self):
+        state = _make_state(draw_count=20, player_luck=5)
+        end_player_turn(state)
+        assert state.hand.count == 6
+
+    def test_luck_100_capped_by_hand_max(self):
+        state = _make_state(draw_count=50, player_luck=100)
+        draw_opening_hand(state)
+        assert state.hand.count == state.hand.max_size  # 5+20=25 > max → capped
+        assert state.hand.count <= state.hand.max_size

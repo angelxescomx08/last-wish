@@ -51,6 +51,8 @@ def _make_state(
     enemy_block: int = 0,
     player_hp: int = 80,
     player_block: int = 0,
+    player_dexterity: int = 0,
+    player_attack_bonus: int = 0,
     mana_current: int = 3,
     mana_max: int = 3,
     relics: list[Relic] | None = None,
@@ -61,7 +63,10 @@ def _make_state(
         block=enemy_block, intent=Intent(IntentType.ATTACK, 5),
     )
     return CombatState(
-        player=Player(name="P", max_hp=100, current_hp=player_hp, block=player_block),
+        player=Player(
+            name="P", max_hp=100, current_hp=player_hp, block=player_block,
+            dexterity=player_dexterity, attack_bonus=player_attack_bonus,
+        ),
         enemies=[enemy],
         hand=Hand(cards=list(hand)),
         draw_pile=DrawPile(cards=list(draw_cards or [])),
@@ -296,3 +301,66 @@ class TestDrawEffect:
         state.hand.cards[0] = skill
         play_card(state, 0, None)
         assert state.hand.count == 10  # capped at max
+
+
+# ---------------------------------------------------------------------------
+# Dexterity bonus on block
+# ---------------------------------------------------------------------------
+
+class TestDexterityBonus:
+    def test_dexterity_adds_to_block(self):
+        state = _make_state([_skill_card(5)], player_dexterity=3)
+        play_card(state, 0, None)
+        assert state.player.block == 8  # 5 + 3
+
+    def test_zero_dexterity_no_change(self):
+        state = _make_state([_skill_card(5)], player_dexterity=0)
+        play_card(state, 0, None)
+        assert state.player.block == 5
+
+    def test_dexterity_stacks_with_existing_block(self):
+        state = _make_state([_skill_card(5)], player_block=4, player_dexterity=2)
+        play_card(state, 0, None)
+        assert state.player.block == 11  # 4 + 5 + 2
+
+    def test_dexterity_does_not_affect_attack_damage(self):
+        state = _make_state([_attack_card(6)], player_dexterity=4)
+        play_card(state, 0, 0)
+        assert state.enemies[0].current_hp == 44  # 50 - 6, no dexterity bonus
+
+    def test_large_dexterity(self):
+        state = _make_state([_skill_card(1)], player_dexterity=10**6)
+        play_card(state, 0, None)
+        assert state.player.block == 1 + 10**6
+
+
+# ---------------------------------------------------------------------------
+# Character attack_bonus on damage
+# ---------------------------------------------------------------------------
+
+class TestAttackBonus:
+    def test_attack_bonus_adds_to_damage(self):
+        state = _make_state([_attack_card(6)], player_attack_bonus=4)
+        play_card(state, 0, 0)
+        assert state.enemies[0].current_hp == 40  # 50 - (6+4)
+
+    def test_zero_attack_bonus_no_change(self):
+        state = _make_state([_attack_card(6)], player_attack_bonus=0)
+        play_card(state, 0, 0)
+        assert state.enemies[0].current_hp == 44  # 50 - 6
+
+    def test_attack_bonus_does_not_affect_block(self):
+        state = _make_state([_skill_card(5)], player_attack_bonus=10)
+        play_card(state, 0, None)
+        assert state.player.block == 5  # no attack_bonus on block
+
+    def test_attack_bonus_and_relic_bonus_stack(self):
+        orb = Relic("r", "Orbe", "", tag=RelicTag.FIRE_ORB)
+        state = _make_state([_attack_card(6)], player_attack_bonus=4, relics=[orb])
+        play_card(state, 0, 0)
+        assert state.enemies[0].current_hp == 38  # 50 - (6+2+4)
+
+    def test_large_attack_bonus(self):
+        state = _make_state([_attack_card(1)], player_attack_bonus=10**9, enemy_hp=10**9 + 2)
+        play_card(state, 0, 0)
+        assert state.enemies[0].current_hp == 1  # 10^9+2 - (1+10^9)

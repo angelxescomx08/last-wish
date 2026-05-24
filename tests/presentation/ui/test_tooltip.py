@@ -134,15 +134,15 @@ class TestCardTooltip:
         combined = "\n".join(card_tooltip(card).lines)
         assert "ROTA" in combined or "fusionarse" in combined
 
-    def test_bonus_damage_zero_no_orb_line(self):
+    def test_bonus_damage_zero_no_bonus_line(self):
         tt = card_tooltip(_attack(6), bonus_damage=0)
         combined = "\n".join(tt.lines)
-        assert "Orbe" not in combined
+        assert "bonus" not in combined
 
-    def test_bonus_damage_shows_orb_line(self):
+    def test_bonus_damage_shows_breakdown(self):
         tt = card_tooltip(_attack(6), bonus_damage=2)
         combined = "\n".join(tt.lines)
-        assert "Orbe de Fuego" in combined
+        assert "bonus" in combined
 
     def test_bonus_damage_adds_to_displayed_value(self):
         tt = card_tooltip(_attack(6), bonus_damage=2)
@@ -152,7 +152,22 @@ class TestCardTooltip:
     def test_large_bonus_damage(self):
         tt = card_tooltip(_attack(10**9), bonus_damage=10**9)
         combined = "\n".join(tt.lines)
-        assert "Orbe de Fuego" in combined
+        assert "bonus" in combined
+
+    def test_bonus_block_zero_no_dexterity_line(self):
+        tt = card_tooltip(_skill(5), bonus_block=0)
+        combined = "\n".join(tt.lines)
+        assert "destreza" not in combined
+
+    def test_bonus_block_shows_dexterity_breakdown(self):
+        tt = card_tooltip(_skill(5), bonus_block=3)
+        combined = "\n".join(tt.lines)
+        assert "destreza" in combined
+
+    def test_bonus_block_adds_to_displayed_value(self):
+        tt = card_tooltip(_skill(5), bonus_block=3)
+        combined = "\n".join(tt.lines)
+        assert "8" in combined  # 5 + 3
 
     def test_returns_tooltip_content(self):
         assert isinstance(card_tooltip(_attack(6)), TooltipContent)

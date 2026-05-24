@@ -208,3 +208,45 @@ class TestPlayerFields:
         p = _player()
         p.status_effects = fx
         assert p.status_effects[0].name == "Fuerza"
+
+    def test_default_dexterity_zero(self):
+        assert _player().dexterity == 0
+
+    def test_default_attack_bonus_zero(self):
+        assert _player().attack_bonus == 0
+
+    def test_default_luck_zero(self):
+        assert _player().luck == 0
+
+    def test_dexterity_stored(self):
+        p = Player(name="X", max_hp=80, current_hp=80, dexterity=4)
+        assert p.dexterity == 4
+
+    def test_attack_bonus_stored(self):
+        p = Player(name="X", max_hp=80, current_hp=80, attack_bonus=6)
+        assert p.attack_bonus == 6
+
+    def test_luck_stored(self):
+        p = Player(name="X", max_hp=80, current_hp=80, luck=8)
+        assert p.luck == 8
+
+
+# ---------------------------------------------------------------------------
+# Player.is_alive
+# ---------------------------------------------------------------------------
+
+class TestPlayerIsAlive:
+    def test_alive_when_positive_hp(self):
+        assert _player(hp=1).is_alive
+
+    def test_alive_at_full_hp(self):
+        assert _player(hp=80, max_hp=80).is_alive
+
+    def test_dead_at_zero_hp(self):
+        assert not _player(hp=0).is_alive
+
+    def test_alive_with_one_hp(self):
+        assert _player(hp=1, max_hp=100).is_alive
+
+    def test_dead_large_max_hp(self):
+        assert not Player(name="X", max_hp=10**9, current_hp=0).is_alive

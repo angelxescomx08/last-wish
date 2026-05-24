@@ -34,21 +34,25 @@ def play_card(
     if dmg > 0 and target_enemy_index is None:
         return PlayResult(False, "Esta carta necesita un objetivo")
 
-    # Apply damage to target enemy (bonus from Orbe de Fuego added to attack cards)
+    # Apply damage to target enemy (relic bonus + character attack_bonus)
     if dmg > 0 and target_enemy_index is not None:
         if target_enemy_index >= len(state.enemies):
             return PlayResult(False, "Objetivo inválido")
         enemy = state.enemies[target_enemy_index]
         if not enemy.is_alive:
             return PlayResult(False, "Ese enemigo ya está derrotado")
-        effective_dmg = dmg + relic_effects.extra_attack_damage(state.relics)
+        effective_dmg = (
+            dmg
+            + relic_effects.extra_attack_damage(state.relics)
+            + state.player.attack_bonus
+        )
         absorbed = min(enemy.block, effective_dmg)
         enemy.block = max(0, enemy.block - absorbed)
         enemy.current_hp = max(0, enemy.current_hp - (effective_dmg - absorbed))
 
-    # Apply block to player
+    # Apply block to player (character dexterity adds a flat bonus)
     if blk > 0:
-        state.player.block += blk
+        state.player.block += blk + state.player.dexterity
 
     # Compute extra draws before mutating the hand
     draw_count = sum(fx.draw for fx in card.all_effects())

@@ -50,7 +50,14 @@ class Player:
     max_hp: int
     current_hp: int
     block: int = 0
+    dexterity: int = 0    # bonus block added to every block card played
+    attack_bonus: int = 0  # bonus damage added to every attack card played
+    luck: int = 0          # extra cards drawn per turn (1 per 5 luck)
     status_effects: list[StatusEffect] = field(default_factory=list)
+
+    @property
+    def is_alive(self) -> bool:
+        return self.current_hp > 0
 
     @property
     def hp_ratio(self) -> float:

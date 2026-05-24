@@ -48,7 +48,12 @@ _INTENT_DESCRIPTION: dict[IntentType, str] = {
 }
 
 
-def card_tooltip(card: Card, bonus_damage: int = 0) -> TooltipContent:
+def card_tooltip(
+    card: Card,
+    *,
+    bonus_damage: int = 0,
+    bonus_block: int = 0,
+) -> TooltipContent:
     title = card.name + (" (Rota)" if card.is_broken else "")
     lines: list[str] = [
         f"{_CARD_TYPE_NAME[card.card_type]}  ·  Coste: {card.cost} maná",
@@ -59,14 +64,18 @@ def card_tooltip(card: Card, bonus_damage: int = 0) -> TooltipContent:
     blk = card.total_block()
     if dmg > 0:
         effective = dmg + bonus_damage
-        base_str = BigValue.format_int(effective)
         if bonus_damage > 0:
-            lines.append(f"Inflige {base_str} de daño a un enemigo.")
-            lines.append(f"  ({BigValue.format_int(dmg)} + {bonus_damage} del Orbe de Fuego)")
+            lines.append(f"Inflige {BigValue.format_int(effective)} de daño a un enemigo.")
+            lines.append(f"  ({BigValue.format_int(dmg)} base + {bonus_damage} bonus)")
         else:
-            lines.append(f"Inflige {base_str} de daño a un enemigo.")
+            lines.append(f"Inflige {BigValue.format_int(effective)} de daño a un enemigo.")
     if blk > 0:
-        lines.append(f"Otorga {BigValue.format_int(blk)} puntos de bloqueo.")
+        effective_blk = blk + bonus_block
+        if bonus_block > 0:
+            lines.append(f"Otorga {BigValue.format_int(effective_blk)} puntos de bloqueo.")
+            lines.append(f"  ({BigValue.format_int(blk)} base + {bonus_block} destreza)")
+        else:
+            lines.append(f"Otorga {BigValue.format_int(blk)} puntos de bloqueo.")
 
     base_draw = card.base_effect.draw + sum(fx.draw for fx in card.stacked_effects)
     if base_draw > 0:

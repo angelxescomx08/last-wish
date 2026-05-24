@@ -24,7 +24,11 @@ def draw_opening_hand(state: CombatState) -> None:
     if bonus_mana > 0:
         state.mana.maximum += bonus_mana
         state.mana.refill()
-    count = _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics)
+    count = (
+        _HAND_DRAW_SIZE
+        + relic_effects.extra_draw_per_turn(state.relics)
+        + state.player.luck // 5
+    )
     _draw_cards(state, count)
 
 
@@ -91,7 +95,11 @@ def _begin_player_turn(state: CombatState) -> None:
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None
-    count = _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics)
+    count = (
+        _HAND_DRAW_SIZE
+        + relic_effects.extra_draw_per_turn(state.relics)
+        + state.player.luck // 5
+    )
     _draw_cards(state, count)
 
 

@@ -106,7 +106,8 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `numbers.py` | `BigValue`, `Operation` | Arbitrary-precision arithmetic: base + flat additions + multipliers |
 | `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list |
 | `relic.py` | `Relic`, `RelicTag` | Passive items with a tag identifying their mechanic |
-| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents |
+| `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
+| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck` |
 | `pile.py` | `DrawPile`, `DiscardPile`, `Hand` | Card containers with `count` and `is_full` |
 | `mana.py` | `Mana` | Mana resource with `spend`, `gain`, `refill`, `can_afford` |
 | `combat.py` | `CombatState` | Single source of truth for the entire battle state |
@@ -116,9 +117,10 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | File | Public API | Responsibility |
 |---|---|---|
 | `relic_effects.py` | `extra_draw_per_turn`, `extra_attack_damage`, `bonus_starting_mana`, `try_spectral_shield` | Pure query functions — read relics, return bonuses or mutate state |
-| `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult` | Validate and execute playing a card from hand |
-| `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline; also exposes `_draw_cards` internally |
-| `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle, calls `draw_opening_hand` |
+| `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult` | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block |
+| `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus + `player.luck // 5` |
+| `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
+| `combat_factory.py` | `create_combat_for_character(character)` → `CombatState` | Builds a fresh battle from a selected `Character`; all entities start at full HP |
 
 ### Infrastructure layer — `src/infrastructure/`
 
@@ -132,11 +134,14 @@ Every file in this layer is pygame-free and has a corresponding test file.
 
 | File | Responsibility |
 |---|---|
-| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch |
-| `ui/card_widget.py` | `draw_card(…, bonus_damage=0)` — renders card with effective final damage |
+| `scenes/main_menu_scene.py` | Main menu: Jugar/Continuar, Ajustes (stub), Salir. Sets `requested_action: MenuAction` |
+| `scenes/character_select_scene.py` | Character panel grid with stat bars. Sets `confirmed` / `back_to_menu` flags |
+| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. Exposes `death_occurred` / `turn_reached` |
+| `scenes/death_scene.py` | Death screen: Nueva Partida / Menú Principal. Sets `requested_action: DeathAction` |
+| `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` — renders card with effective final values |
 | `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
-| `ui/tooltip.py` | `card_tooltip(card, bonus_damage=0)`, `relic_tooltip`, `enemy_tooltip`, etc. |
+| `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc. |
 | `ui/pile_viewer.py` | Modal overlay for browsing a pile's cards |
 
 ---
@@ -219,7 +224,7 @@ Relics are stored in `CombatState.relics: list[Relic]`. Each `Relic` carries a `
 draw_opening_hand(state)         ← called once at combat start
   ├── random.shuffle(draw_pile)
   ├── COMBAT_AMULET: mana.maximum += 1; mana.refill()
-  └── _draw_cards(5 + extra_draw_per_turn(relics))
+  └── _draw_cards(5 + extra_draw_per_turn(relics) + player.luck // 5)
 
 end_player_turn(state)           ← called each time player ends their turn
   ├── _discard_hand()            discard all hand cards
@@ -231,10 +236,44 @@ end_player_turn(state)           ← called each time player ends their turn
   └── _begin_player_turn()
         ├── state.turn += 1
         ├── state.mana.refill()
-        └── _draw_cards(5 + extra_draw_per_turn(relics))
+        └── _draw_cards(5 + extra_draw_per_turn(relics) + player.luck // 5)
 ```
 
 **Important STS rule:** The player's block resets to 0 at end of their turn, _before_ enemies execute their intents. Block gained during the player's turn does **not** absorb enemy attacks that same turn.
+
+---
+
+## Character System
+
+Three playable characters are defined in `src/domain/character.py`. Each has five stats that map to
+Player fields and affect combat calculations:
+
+| Stat | Player field | Effect |
+|---|---|---|
+| `damage` | `attack_bonus` | Flat bonus added to every attack card's effective damage |
+| `max_hp` | `max_hp` / `current_hp` | Starting and maximum HP |
+| `luck` | `luck` | Extra cards drawn per turn: `luck // 5` |
+| `max_mana` | `mana.maximum` | Starting mana pool (before COMBAT_AMULET adds 1) |
+| `dexterity` | `dexterity` | Flat bonus added to every block card's effective block |
+
+The three characters (Guerrero / Mago / Pícaro) differ in these values so each offers a different playstyle.
+
+### Scene flow
+
+```
+MainMenuScene
+  → [Jugar]      → CharacterSelectScene
+                      → [confirm]  → CombatScene
+                                       → [death]  → DeathScene
+                                                       → [Nueva Partida] → CharacterSelectScene
+                                                       → [Menú]          → MainMenuScene
+                      → [ESC]      → MainMenuScene
+  → [Salir]      → quit
+```
+
+`SceneManager` in `main.py` drives all transitions. After each `update()` call it inspects the top
+scene's flags (`requested_action`, `confirmed`, `back_to_menu`, `death_occurred`) and pushes/pops
+scenes accordingly. Flags are reset immediately after being consumed.
 
 ---
 
@@ -272,14 +311,16 @@ One test file per source module. All test files follow the same structure:
 | `test_numbers.py` | `domain/numbers.py` | resolve, flat/mult chains, 10^1000, 2^200, 1000-op chains, merge, format, display |
 | `test_card.py` | `domain/card.py` | total_damage, total_block, stacking, modifiers, draw field, is_broken |
 | `test_relic.py` | `domain/relic.py` | RelicTag enum (all 4 values), Relic creation, defaults, is_active mutation |
-| `test_entities.py` | `domain/entities.py` | is_alive, hp_ratio, StatusEffect, Intent, Player/Enemy field defaults |
+| `test_character.py` | `domain/character.py` | CharacterStats, Character frozen fields, ALL_CHARACTERS count and invariants |
+| `test_entities.py` | `domain/entities.py` | is_alive (Player+Enemy), hp_ratio, dexterity/attack_bonus/luck defaults |
 | `test_pile.py` | `domain/pile.py` | DrawPile/DiscardPile count, Hand count, is_full, max_size, mutations |
 | `test_mana.py` | `domain/mana.py` | can_afford, spend, gain (capped), refill, boundary values, large amounts |
 | `test_combat.py` | `domain/combat.py` | CombatState defaults, field storage, mutations, no-pygame-dependency |
 | `test_relic_effects.py` | `application/relic_effects.py` | All 4 relic functions: active, inactive, two of same, relic without tag |
-| `test_play_card.py` | `application/play_card.py` | Validation, damage, absorption, Fire Orb bonus, block, mana, movement, draw |
-| `test_end_turn.py` | `application/end_turn.py` | draw_opening_hand, end_player_turn, relic integration, STS block rule |
+| `test_play_card.py` | `application/play_card.py` | Validation, damage, Fire Orb, attack_bonus, block, dexterity bonus, mana, draw |
+| `test_end_turn.py` | `application/end_turn.py` | draw_opening_hand, end_player_turn, relic integration, STS block rule, luck draw |
 | `test_combat_manager.py` | `application/combat_manager.py` | Structural integrity, relic tags, mana=4/4, hand=6, card pool total |
+| `test_combat_factory.py` | `application/combat_factory.py` | Player stats from character, full HP enemies, mana setup, luck-based draw |
 
 ### Testing rules
 
