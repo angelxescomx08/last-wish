@@ -8,10 +8,16 @@ Relics are passive items that permanently alter combat rules. They are stored as
 
 ```python
 class RelicTag(Enum):
+    # Combat relics (sample set)
     COMBAT_AMULET   = "combat_amulet"
     BROKEN_TOTEM    = "broken_totem"
     FIRE_ORB        = "fire_orb"
     SPECTRAL_SHIELD = "spectral_shield"
+    # Roguelike run relics
+    ENERGY_STONE    = "energy_stone"
+    GOLD_RING       = "gold_ring"
+    IRON_HEART      = "iron_heart"
+    BLOOD_POTION    = "blood_potion"
 
 @dataclass
 class Relic:
@@ -34,10 +40,15 @@ Effects are **pure query functions** in `src/application/relic_effects.py`. They
 | `extra_attack_damage(relics)` | `int` bonus flat damage | `play_card` when `total_damage() > 0` |
 | `bonus_starting_mana(relics)` | `int` extra mana maximum | `draw_opening_hand` |
 | `try_spectral_shield(state)` | `bool` — True if triggered | `_execute_intent` after ATTACK damage |
+| `bonus_gold_reward(relics)` | `int` extra gold per combat | `apply_combat_victory` in run_manager |
+| `post_combat_heal(relics)` | `int` HP healed after combat | `apply_combat_victory` in run_manager |
+| `max_hp_bonus(relics)` | `int` extra max HP | `pick_treasure_relic` / `pick_boss_relics` when relic acquired |
 
 ---
 
-## The four sample relics
+## Combat relics (sample set)
+
+These four relics are present in every combat built by `create_sample_combat()` and `create_combat_for_character()`.
 
 ### Amuleto de Combate  (`COMBAT_AMULET`)
 - **Effect:** +1 mana maximum for the entire combat.
@@ -72,20 +83,44 @@ Effects are **pure query functions** in `src/application/relic_effects.py`. They
 
 ---
 
-## How to add a new relic
+## Roguelike run relics
 
-1. Add a new variant to `RelicTag` in `src/domain/relic.py`.
-2. Add a query function in `src/application/relic_effects.py`.
-3. Call it at the right hook in `end_turn.py` or `play_card.py`.
-4. Propagate any UI hint (`bonus_damage`, `bonus_block`, etc.) from `CombatScene` to the widget/tooltip.
-5. Add the relic to `create_sample_combat()` in `combat_manager.py` **and** to `create_combat_for_character()` in `combat_factory.py`.
-6. Write tests:
-   - `tests/domain/test_relic.py` — tag exists, fields correct.
-   - `tests/application/test_relic_effects.py` — active, inactive, stacked, boundary.
-   - Relevant use-case test — integration coverage.
+These four relics can be acquired during a run (treasure rooms, boss rewards). They are added to `run.relics` via `run.add_relic()` and carried into every subsequent combat via `create_combat_from_run()`.
+
+### Piedra de Energía  (`ENERGY_STONE`)
+- **Effect:** +1 card drawn per turn (stacks additively with BROKEN_TOTEM).
+- **Applied:** `extra_draw_per_turn(relics)` sums all active `BROKEN_TOTEM` and `ENERGY_STONE` relics.
+
+### Anillo de Oro  (`GOLD_RING`)
+- **Effect:** +15 gold after each combat victory.
+- **Applied:** `bonus_gold_reward(relics)` called in `apply_combat_victory()` in run_manager.
+
+### Corazón de Hierro  (`IRON_HEART`)
+- **Effect:** +15 maximum HP, applied at the moment the relic is acquired.
+- **Applied:** `max_hp_bonus(relics)` called in `pick_treasure_relic()` and `pick_boss_relics()`.
+  `run.player_max_hp` is recalculated as `character.stats.max_hp + max_hp_bonus(run.relics)`.
+
+### Poción de Sangre  (`BLOOD_POTION`)
+- **Effect:** heal 8 HP after each combat victory.
+- **Applied:** `post_combat_heal(relics)` called in `apply_combat_victory()` in run_manager.
+  Healed HP is capped at `run.player_max_hp`.
 
 ---
 
 ## Multiple relics of the same type
 
 All query functions use `sum(... for r in relics if r.is_active and r.tag == tag)`, so owning two `FIRE_ORB` relics gives +4 damage, two `BROKEN_TOTEM` relics give +2 draw, etc.
+
+---
+
+## How to add a new relic
+
+1. Add a new variant to `RelicTag` in `src/domain/relic.py`.
+2. Add a query function in `src/application/relic_effects.py`.
+3. Call it at the right hook in `end_turn.py`, `play_card.py`, or `run_manager.py`.
+4. Propagate any UI hint (`bonus_damage`, `bonus_block`, etc.) from `CombatScene` to the widget/tooltip.
+5. Add the relic to `create_sample_combat()` in `combat_manager.py` **and** to `create_combat_for_character()` in `combat_factory.py` if it belongs to the base combat set.
+6. Write tests:
+   - `tests/domain/test_relic.py` — tag exists, fields correct.
+   - `tests/application/test_relic_effects.py` — active, inactive, stacked, boundary.
+   - Relevant use-case test — integration coverage.

@@ -48,6 +48,25 @@ Design intent:
 
 ---
 
+## Sprites
+
+Each character has a 32×32 sprite from the **Dungeon Crawl Stone Soup** asset pack
+(CC0, `assets/dungeon-crawl-stone-soup-full/`), loaded and cached by `SpriteLoader`
+in `src/infrastructure/sprite_loader.py`.
+
+| Character | Sprite file |
+|---|---|
+| El Guerrero | `player/base/human_male.png` |
+| El Mago | `player/base/deep_elf_male.png` |
+| El Pícaro | `player/base/halfling_male.png` |
+
+`SpriteLoader.get_player_sprite(player.name, size=128)` looks up by the Spanish display
+name and returns a `pygame.Surface` scaled to `size×size` pixels (nearest-neighbour), or
+`None` if the file is missing. `CombatScene` calls this each draw cycle (the result is cached
+after the first load) and passes the surface to `draw_player()` via the `sprite=` keyword.
+
+---
+
 ## How stats map to Player fields
 
 `create_combat_for_character()` in `src/application/combat_factory.py` builds the `Player`:
@@ -140,9 +159,13 @@ Set to `character.stats.max_mana` before `draw_opening_hand()` applies the COMBA
 1. Add a new variant to `CharacterId` in `src/domain/character.py`.
 2. Define the `CharacterStats` values.
 3. Append a `Character(...)` entry to `ALL_CHARACTERS`.
-4. The character select scene picks up `ALL_CHARACTERS` automatically — no UI changes needed
+4. Add a sprite entry to `PLAYER_SPRITE_PATHS` in `src/infrastructure/sprite_loader.py`
+   mapping `character.name` → relative path inside `assets/dungeon-crawl-stone-soup-full/`.
+5. The character select scene picks up `ALL_CHARACTERS` automatically — no UI changes needed
    unless you exceed three panels.
-5. Write tests in `tests/domain/test_character.py`:
+6. Write tests in `tests/domain/test_character.py`:
    - `id` is unique across `ALL_CHARACTERS`.
    - `max_hp > 0`, `max_mana > 0`.
    - Any design invariants (e.g. tank has most HP, etc.).
+7. Add a file-existence test in `tests/test_sprite_loader.py` (or update the existing
+   `TestAssetFilesExist` class) to verify the new sprite path resolves on disk.

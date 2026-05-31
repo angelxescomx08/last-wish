@@ -135,6 +135,7 @@ def draw_enemy(
     *,
     targeted: bool = False,
     highlighted: bool = False,
+    sprite: pygame.Surface | None = None,
 ) -> pygame.Rect:
     rect = pygame.Rect(x, y, ENEMY_W, ENEMY_H)
 
@@ -155,7 +156,7 @@ def draw_enemy(
     name_surf = name_font.render(enemy.name, True, colors.TEXT_ACCENT)
     surface.blit(name_surf, name_surf.get_rect(centerx=rect.centerx, bottom=y - 4))
 
-    # Body
+    # Body background
     if highlighted:
         body_col = pygame.Color(160, 70, 40)
         border   = pygame.Color(255, 160, 50)
@@ -170,6 +171,11 @@ def draw_enemy(
         bw       = 1
 
     pygame.draw.rect(surface, body_col, rect, border_radius=_CORNER)
+
+    # Sprite centred inside body (drawn before border so border overlaps edges)
+    if sprite is not None:
+        surface.blit(sprite, sprite.get_rect(center=rect.center))
+
     pygame.draw.rect(surface, border, rect, bw, border_radius=_CORNER)
 
     # Targeting crosshair corners when highlighted
@@ -211,11 +217,18 @@ def draw_player(
     x: int,
     y: int,
     fonts: FontRegistry,
+    *,
+    sprite: pygame.Surface | None = None,
 ) -> pygame.Rect:
     rect = pygame.Rect(x, y, PLAYER_W, PLAYER_H)
 
-    # Body
+    # Body background
     pygame.draw.rect(surface, colors.PLAYER_BODY, rect, border_radius=_CORNER)
+
+    # Sprite centred inside body (drawn before border)
+    if sprite is not None:
+        surface.blit(sprite, sprite.get_rect(center=rect.center))
+
     pygame.draw.rect(surface, colors.PLAYER_ACCENT, rect, 2, border_radius=_CORNER)
 
     # Name

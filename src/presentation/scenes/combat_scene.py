@@ -8,6 +8,7 @@ from src.application.play_card import play_card
 from src.domain.combat import CombatState
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.sprite_loader import SpriteLoader
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.entity_widget import (
     ENEMY_W,
@@ -101,6 +102,7 @@ class CombatScene:
     ) -> None:
         self._state               = state
         self._fonts               = fonts
+        self._sprites             = SpriteLoader()
         self._is_boss             = is_boss
         self._death_acknowledged  = False   # prevents pushing DeathScene more than once
         self._victory_acknowledged = False  # prevents pushing reward scene more than once
@@ -243,11 +245,13 @@ class CombatScene:
                 surface, enemy, ex, ey, self._fonts,
                 targeted    = self._state.targeted_enemy_index == i,
                 highlighted = targeting and enemy.is_alive,
+                sprite      = self._sprites.get_enemy_sprite(enemy.name),
             )
             self._enemy_rects.append(rect)
 
         self._player_rect = draw_player(
-            surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts
+            surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
+            sprite=self._sprites.get_player_sprite(self._state.player.name),
         )
 
         if self._state.active_powers:

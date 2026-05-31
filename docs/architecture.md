@@ -13,7 +13,7 @@ Layers form a strict dependency hierarchy — outer layers depend on inner ones,
 │   scenes/ main_menu · character_select             │
 │           combat · death · map · combat_reward      │
 │           treasure · shop · pack_opening            │
-│           event · boss_reward                       │
+│           event · boss_reward · settings            │
 │   ui/ card_widget · entity_widget · hud_widget      │
 │       tooltip · pile_viewer                         │
 └───────────────────┬─────────────────────────────────┘
@@ -35,6 +35,7 @@ Layers form a strict dependency hierarchy — outer layers depend on inner ones,
 ┌─────────────────────────────────────────────────────┐
 │                 infrastructure/                      │
 │   colors · fonts · viewport                         │
+│   preferences · sprite_loader                       │
 │   (used by presentation only)                       │
 └─────────────────────────────────────────────────────┘
 ```
@@ -82,27 +83,30 @@ Violation = a higher layer leaking into a lower layer (e.g. domain importing pyg
 | `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` |
 | `combat_manager.py` | `create_sample_combat() → CombatState` — dev/test fixture |
 | `combat_factory.py` | `create_combat_for_character(character) → CombatState`; `create_combat_from_run(run, enemies) → CombatState` |
-| `map_generator.py` | `generate_map(seed, floor) → GameMap` — seeded STS-style path-based generation |
+| `map_generator.py` | `generate_map(seed, floor) → GameMap` — orthogonal-only edges (see Map section below) |
 | `run_manager.py` | `create_run(character, seed) → Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory`, `generate_event_gold`, `pick_treasure_relic`, `pick_boss_relics`, `advance_floor` |
 | `card_rewards.py` | `pick_reward_cards(run, room_id, count=3) → list[Card]`; `pick_pack_cards(run, theme, count=5) → list[Card]` |
 
-### `src/infrastructure/`  — pygame utilities
+### `src/infrastructure/`  — pygame utilities + persistence
 
 | File | Key exports |
 |---|---|
 | `colors.py` | 49 named `pygame.Color` constants |
 | `fonts.py` | `FontRegistry` — lazy SysFont cache keyed by point size |
 | `viewport.py` | `Viewport`, `VIRTUAL_W = 1280`, `VIRTUAL_H = 720` |
+| `preferences.py` | `UserPreferences(show_fps)`, `load_preferences()`, `save_preferences()` — JSON at project root |
+| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 DCSS sprites; `get_player_sprite(name, size=128)`, `get_enemy_sprite(name, size=96)` |
 
 ### `src/presentation/`  — Screens and widgets
 
 | File | Responsibility |
 |---|---|
-| `scenes/main_menu_scene.py` | Main menu with Jugar/Continuar, Ajustes (stub), Salir |
+| `scenes/main_menu_scene.py` | Main menu with Jugar/Continuar, **Ajustes**, Salir |
 | `scenes/character_select_scene.py` | Three-panel character selector with stat bars; seed text input field; `seed: int` property |
-| `scenes/combat_scene.py` | Full battle screen: input, layout, hover, tooltip dispatch. `is_boss` param, `combat_won` property |
+| `scenes/combat_scene.py` | Full battle screen: input, layout, hover, tooltip dispatch. Creates `SpriteLoader` internally; passes sprites to entity widgets. `is_boss` param, `combat_won` property |
 | `scenes/death_scene.py` | Death screen with Nueva Partida / Menú Principal options |
-| `scenes/map_scene.py` | STS-style node map display; signals `selected_node: MapNode \| None` |
+| `scenes/map_scene.py` | Crossword-style node map (orthogonal corridors only); signals `selected_node: MapNode \| None` |
+| `scenes/settings_scene.py` | Toggle preferences (Mostrar FPS). Mutates `UserPreferences` in-place; signals `cleared: bool`. SceneManager saves to disk on exit |
 | `scenes/combat_reward_scene.py` | Gold display + 3 card choices after a non-boss combat |
 | `scenes/treasure_scene.py` | Show a relic and let the player take or skip it |
 | `scenes/shop_scene.py` | 4 pack tiles with gold cost; signals `selected_pack: PackTheme \| None` |
@@ -110,7 +114,7 @@ Violation = a higher layer leaking into a lower layer (e.g. domain importing pyg
 | `scenes/event_scene.py` | Spanish narrative text + gold pickup ("Recoger" button) |
 | `scenes/boss_reward_scene.py` | 3-phase reward (gold → epic pack → relic choice); signals `chosen_relic: Relic \| None` |
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` → `pygame.Rect` |
-| `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` → `pygame.Rect` |
+| `ui/entity_widget.py` | `draw_player(…, sprite=None)`, `draw_enemy(…, sprite=None)` → `pygame.Rect` |
 | `ui/hud_widget.py` | Relic bar, mana, pile buttons, turn counter, End Turn button |
 | `ui/tooltip.py` | Content generators + `draw_tooltip()` renderer |
 | `ui/pile_viewer.py` | `PileViewer` — modal card list overlay |
@@ -137,10 +141,11 @@ MainMenuScene
                                                                                              → [open_pack]    → PackOpeningScene → BossRewardScene
                                                                                              → [cleared]      → advance_floor() → MapScene (next floor)
                                → [ESC]      → MainMenuScene (pop)
+  → [Ajustes]            → SettingsScene → MainMenuScene (saves preferences on exit)
   → [Salir]              → quit
 ```
 
-`SceneManager` in `main.py` stores `_run: Run | None` and drives all transitions. After each
+`SceneManager` in `main.py` stores `_run: Run | None` and `_prefs: UserPreferences`, and drives all transitions. After each
 `update()` tick it reads the top scene's flags and pushes/pops accordingly. Each flag is reset
 immediately after being consumed to prevent re-triggering on the following frame.
 
@@ -157,6 +162,28 @@ immediately after being consumed to prevent re-triggering on the following frame
 | `PackOpeningScene` | `cleared: bool`, `chosen_card: Card \| None` |
 | `EventScene` | `cleared: bool` |
 | `BossRewardScene` | `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
+| `SettingsScene` | `cleared: bool` |
+
+---
+
+## Map generation — orthogonal connections
+
+`generate_map(seed, floor)` produces a crossword-style map with **orthogonal-only edges**:
+
+- **Single entry:** one start node at `(row=0, col=max_cols//2)` — the only available node at game start.
+- **Single exit:** one boss node at `(row=rows-1, col=max_cols//2)`.
+- **Horizontal edges:** same row, adjacent column — bidirectional. Unlocked when any neighbour in the same row is visited; allows sideways movement before ascending.
+- **Vertical edges:** same column, adjacent row — directed upward. Paths only rise, never descend.
+- **Shifting columns:** when a path shifts column between rows it first places a horizontal edge in the current row, then rises vertically. The pre-boss row always walks horizontally to `boss_col` before the final vertical step.
+- **Optional side rooms:** nodes with no upward connection are dead-end side branches that can be skipped.
+
+Floor scaling:
+
+| Parameter | Formula | Floor 1 | Floor 10 |
+|---|---|---|---|
+| Rows | `min(7 + (floor-1)//2, 12)` | 7 | 11 |
+| Cols | `min(5 + (floor-1)//3, 8)` | 5 | 8 |
+| Paths | `min(3 + (floor-1)//3, 6)` | 3 | 6 |
 
 ---
 
@@ -165,17 +192,22 @@ immediately after being consumed to prevent re-triggering on the following frame
 `main.py` owns the pygame loop and wires all layers:
 
 ```python
+prefs         = load_preferences()
+fonts         = FontRegistry()
+scene_manager = SceneManager(MainMenuScene(fonts), fonts, prefs)
 clock         = pygame.time.Clock()
-scene_manager = SceneManager(MainMenuScene(fonts))
 
 while running:
     dt = clock.tick(60) / 1000.0
     for event in pygame.event.get():
         scene_manager.handle_event(_transform_mouse(event, viewport))
-    scene_manager.update(dt, fonts)
+    scene_manager.update(dt)
     if scene_manager.quit_requested:
         running = False
     scene_manager.draw(viewport.surface)
+    if prefs.show_fps:
+        # draw FPS counter top-right of virtual canvas
+        ...
     viewport.present(screen)
     pygame.display.flip()
 ```

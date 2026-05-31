@@ -26,6 +26,8 @@ uv run pytest tests/ -q
 ```
 tests/
   conftest.py                       ← session-scoped pygame.init()
+  test_preferences.py               ← src/infrastructure/preferences.py
+  test_sprite_loader.py             ← src/infrastructure/sprite_loader.py
   domain/
     test_numbers.py                 ← src/domain/numbers.py
     test_card.py                    ← src/domain/card.py
@@ -145,16 +147,40 @@ Always verify that calling `.add_flat()` or `.add_multiplier()` on a `BigValue` 
 - Never import from `presentation/` or `infrastructure/`.
 - The `_make_state()` helpers in play_card and end_turn tests accept `player_dexterity`,
   `player_attack_bonus`, and `player_luck` to exercise character-stat paths cleanly.
+- Map generator tests include `TestOrthogonalConnections`: all edges must be purely horizontal
+  (same row, col diff = 1) or purely vertical (same col, row diff = 1). No diagonals allowed.
 
 ### `infrastructure/` tests
+
+#### `preferences.py`
 - `pygame.Color` objects work without `pygame.init()`.
-- `FontRegistry.get()`, `Viewport`, and any `pygame.Surface` creation require the session fixture (`conftest.py` handles this automatically).
+- Tests redirect `_PREFS_FILE` via a context manager to avoid touching the real `preferences.json`.
+- Covers: defaults, load (present / missing / invalid JSON / empty object / unknown keys),
+  save (creates file, correct values), round-trip.
+
+#### `sprite_loader.py`
+- Tests do **not** require `pygame.init()` — they only call `Path.is_file()` and inspect the
+  mapping tables (`PLAYER_SPRITE_PATHS`, `ENEMY_SPRITE_PATHS`).
+- `SpriteLoader._load()` is never called in tests; only the public API with unknown names
+  (returns `None` early, before any pygame call) and the cache state are tested.
+- Key checks: all expected Spanish names are in the tables, all mapped `.png` files exist on
+  disk under `assets/dungeon-crawl-stone-soup-full/`, unknown name returns `None` without
+  populating the cache.
+
+#### Other infrastructure
+- `FontRegistry.get()`, `Viewport`, and any `pygame.Surface` creation require the session
+  fixture (`conftest.py` handles this automatically).
 
 ### `presentation/` tests
 - Content generators in `tooltip.py` (`card_tooltip`, `relic_tooltip`, etc.) are pure Python — no pygame needed.
 - `card_tooltip` now accepts keyword-only `bonus_damage` and `bonus_block`; both default to 0.
-- Widget rendering functions (`draw_card`, `draw_enemy`, etc.) need a `pygame.Surface`. Create it with `pygame.Surface((w, h))` — no display required.
-- Smoke-test rendering by calling the function and checking the return type; don't assert colors or pixel values.
+- Widget rendering functions (`draw_card`, `draw_enemy`, `draw_player`, etc.) need a `pygame.Surface`.
+  Create it with `pygame.Surface((w, h))` — no display required.
+- `draw_player` and `draw_enemy` now accept an optional `sprite: pygame.Surface | None = None`
+  parameter. Smoke tests should exercise both the `sprite=None` path and a `sprite=pygame.Surface`
+  path to ensure neither crashes.
+- Smoke-test rendering by calling the function and checking the return type; don't assert colors
+  or pixel values.
 
 ---
 
@@ -169,5 +195,7 @@ Every code change must be accompanied by tests. Specifically:
 | New relic | Tag enum, relic_effects query, integration in end_turn or play_card |
 | New character | Entry in `ALL_CHARACTERS`, stat values, invariants (hp > 0, mana > 0) |
 | New widget function | Smoke test + return type |
+| New sprite mapping | Entry in `PLAYER_SPRITE_PATHS` or `ENEMY_SPRITE_PATHS`, file exists on disk |
 | Bug fix | Regression test that reproduces the bug before the fix |
 | BigValue formula change | Stress tests at 10^100 and chain of 100+ ops |
+| Map generation change | Orthogonal invariant still holds across multiple seeds and floors |

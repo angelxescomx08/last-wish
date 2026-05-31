@@ -141,6 +141,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fonts.py` | `FontRegistry` — lazy font cache, keyed by point size |
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
+| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128)` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None` |
 
 ### Presentation layer — `src/presentation/`
 
@@ -430,6 +431,7 @@ One test file per source module. All test files follow the same structure:
 | `test_run_manager.py` | `application/run_manager.py` | create_run, generate_enemies, generate_boss, apply_combat_victory, advance_floor |
 | `test_card_rewards.py` | `application/card_rewards.py` | pick_reward_cards count, pick_pack_cards theme filtering, seeded determinism |
 | `test_preferences.py` | `infrastructure/preferences.py` | defaults, load (present/missing/invalid JSON), save, round-trip, unknown keys ignored |
+| `test_sprite_loader.py` | `infrastructure/sprite_loader.py` | mapping completeness, all asset files exist on disk, unknown-name → None, cache empty on unknown |
 
 ### Testing rules
 
