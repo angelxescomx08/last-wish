@@ -37,6 +37,17 @@ ENEMY_SPRITE_PATHS: dict[str, str] = {
     "Señor de la Cripta": "monster/undead/ancient_lich_new.png",
 }
 
+RELIC_SPRITE_PATHS: dict[str, str] = {
+    "Amuleto de Combate":  "item/amulet/celtic_red.png",
+    "Tótem Roto":          "item/misc/misc_stone_old.png",
+    "Orbe de Fuego":       "item/misc/misc_orb.png",
+    "Escudo Espectral":    "item/armor/shields/shield_of_reflection.png",
+    "Piedra de Energía":   "item/misc/misc_stone_new.png",
+    "Anillo de Oro":       "item/ring/gold.png",
+    "Corazón de Hierro":   "item/amulet/crystal_red.png",
+    "Poción de Sangre":    "item/potion/ruby_new.png",
+}
+
 
 # ---------------------------------------------------------------------------
 # Loader
@@ -65,6 +76,11 @@ class SpriteLoader:
     def get_enemy_sprite(self, enemy_name: str, size: int = 96) -> pygame.Surface | None:
         """Return a scaled surface for the named enemy, or None."""
         rel = ENEMY_SPRITE_PATHS.get(enemy_name)
+        return self._load(rel, size) if rel else None
+
+    def get_relic_sprite(self, relic_name: str, size: int = 32) -> pygame.Surface | None:
+        """Return a scaled surface for the named relic icon, or None."""
+        rel = RELIC_SPRITE_PATHS.get(relic_name)
         return self._load(rel, size) if rel else None
 
     # ------------------------------------------------------------------

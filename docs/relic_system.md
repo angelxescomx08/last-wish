@@ -113,9 +113,29 @@ All query functions use `sum(... for r in relics if r.is_active and r.tag == tag
 
 ---
 
+## Relic icons
+
+Every relic has a 32×32 sprite icon from the DCSS asset pack, displayed in the HUD relic bar.
+Loaded and cached by `SpriteLoader.get_relic_sprite(relic.name, size=36)`.
+When a one-time relic is exhausted (`is_active = False`) a semi-transparent dark overlay is drawn on top of the icon.
+
+| Relic | Icon file |
+|---|---|
+| Amuleto de Combate | `item/amulet/celtic_red.png` |
+| Tótem Roto | `item/misc/misc_stone_old.png` |
+| Orbe de Fuego | `item/misc/misc_orb.png` |
+| Escudo Espectral | `item/armor/shields/shield_of_reflection.png` |
+| Piedra de Energía | `item/misc/misc_stone_new.png` |
+| Anillo de Oro | `item/ring/gold.png` |
+| Corazón de Hierro | `item/amulet/crystal_red.png` |
+| Poción de Sangre | `item/potion/ruby_new.png` |
+
+---
+
 ## How to add a new relic
 
 1. Add a new variant to `RelicTag` in `src/domain/relic.py`.
+1b. Add an entry to `RELIC_SPRITE_PATHS` in `src/infrastructure/sprite_loader.py` mapping `relic.name` → PNG path relative to `assets/dungeon-crawl-stone-soup-full/`.
 2. Add a query function in `src/application/relic_effects.py`.
 3. Call it at the right hook in `end_turn.py`, `play_card.py`, or `run_manager.py`.
 4. Propagate any UI hint (`bonus_damage`, `bonus_block`, etc.) from `CombatScene` to the widget/tooltip.

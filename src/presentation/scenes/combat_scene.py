@@ -222,6 +222,7 @@ class CombatScene:
         self._relic_rects = draw_relics(
             surface, self._state.relics, 10, 10, self._fonts,
             hovered_index=self._hovered_relic,
+            sprites=self._sprites,
         )
         draw_turn_counter(surface, self._state.turn, surface.get_width() // 2, 34, self._fonts)
 

@@ -7,9 +7,11 @@ from src.domain.pile import DiscardPile, DrawPile
 from src.domain.relic import Relic
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.sprite_loader import SpriteLoader
 
-RELIC_SZ: int = 48
-_RELIC_GAP: int = 5
+RELIC_SZ: int       = 48
+_RELIC_GAP: int     = 5
+_RELIC_ICON_SZ: int = 36   # sprite size inside the 48×48 box (6 px inset each side)
 _PILE_W: int = 56
 _PILE_H: int = 76
 
@@ -26,6 +28,7 @@ def draw_relics(
     fonts: FontRegistry,
     *,
     hovered_index: int | None = None,
+    sprites: SpriteLoader | None = None,
 ) -> list[pygame.Rect]:
     """Draw the relic bar and return each relic's bounding Rect."""
     rects: list[pygame.Rect] = []
@@ -33,20 +36,30 @@ def draw_relics(
         rect = pygame.Rect(x, y, RELIC_SZ, RELIC_SZ)
         rects.append(rect)
 
-        bg     = colors.TEXT_ACCENT if i == hovered_index else colors.RELIC_BG
-        border = colors.TEXT_PRIMARY if i == hovered_index else colors.RELIC_BORDER
+        hovered = i == hovered_index
+        bg      = colors.TEXT_ACCENT if hovered else colors.RELIC_BG
+        border  = colors.TEXT_PRIMARY if hovered else colors.RELIC_BORDER
         pygame.draw.rect(surface, bg, rect, border_radius=6)
-        pygame.draw.rect(surface, border, rect, 1 if i != hovered_index else 2, border_radius=6)
+        pygame.draw.rect(surface, border, rect, 2 if hovered else 1, border_radius=6)
 
-        abbr_font = fonts.get(10)
-        abbr_col  = colors.BG_DARK if i == hovered_index else colors.TEXT_ACCENT
-        abbr_surf = abbr_font.render(relic.name[:5], True, abbr_col)
-        surface.blit(abbr_surf, abbr_surf.get_rect(centerx=rect.centerx, centery=rect.centery - 4))
+        icon = sprites.get_relic_sprite(relic.name, size=_RELIC_ICON_SZ) if sprites else None
 
-        sub_font = fonts.get(7)
-        sub_col  = colors.BG_DARK if i == hovered_index else colors.TEXT_SECONDARY
-        sub_surf = sub_font.render(relic.name[5:10], True, sub_col)
-        surface.blit(sub_surf, sub_surf.get_rect(centerx=rect.centerx, centery=rect.centery + 9))
+        if icon is not None:
+            surface.blit(icon, icon.get_rect(center=rect.center))
+            # Dim exhausted relics with a translucent overlay
+            if not relic.is_active:
+                dim = pygame.Surface((RELIC_SZ, RELIC_SZ), pygame.SRCALPHA)
+                dim.fill((0, 0, 0, 170))
+                surface.blit(dim, rect.topleft)
+        else:
+            # Fallback: text abbreviation when no sprite available
+            abbr_col  = colors.BG_DARK if hovered else colors.TEXT_ACCENT
+            abbr_surf = fonts.get(10).render(relic.name[:5], True, abbr_col)
+            surface.blit(abbr_surf, abbr_surf.get_rect(centerx=rect.centerx, centery=rect.centery - 4))
+
+            sub_col  = colors.BG_DARK if hovered else colors.TEXT_SECONDARY
+            sub_surf = fonts.get(7).render(relic.name[5:10], True, sub_col)
+            surface.blit(sub_surf, sub_surf.get_rect(centerx=rect.centerx, centery=rect.centery + 9))
 
         x += RELIC_SZ + _RELIC_GAP
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from src.infrastructure.sprite_loader import (
     ENEMY_SPRITE_PATHS,
     PLAYER_SPRITE_PATHS,
+    RELIC_SPRITE_PATHS,
     SpriteLoader,
     _ASSETS,
 )
@@ -24,6 +25,10 @@ _EXPECTED_ENEMIES = {
     "Cultista", "Guardián", "Brujo", "Esqueleto",
     "Golem", "Asesino", "Señor de la Cripta",
 }
+_EXPECTED_RELICS = {
+    "Amuleto de Combate", "Tótem Roto", "Orbe de Fuego", "Escudo Espectral",
+    "Piedra de Energía", "Anillo de Oro", "Corazón de Hierro", "Poción de Sangre",
+}
 
 
 class TestMappingCompleteness:
@@ -33,11 +38,17 @@ class TestMappingCompleteness:
     def test_all_enemy_names_mapped(self):
         assert _EXPECTED_ENEMIES == set(ENEMY_SPRITE_PATHS.keys())
 
+    def test_all_relic_names_mapped(self):
+        assert _EXPECTED_RELICS == set(RELIC_SPRITE_PATHS.keys())
+
     def test_no_empty_player_paths(self):
         assert all(v for v in PLAYER_SPRITE_PATHS.values())
 
     def test_no_empty_enemy_paths(self):
         assert all(v for v in ENEMY_SPRITE_PATHS.values())
+
+    def test_no_empty_relic_paths(self):
+        assert all(v for v in RELIC_SPRITE_PATHS.values())
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +63,10 @@ class TestAssetFilesExist:
     def test_enemy_sprites_exist(self):
         for name, rel in ENEMY_SPRITE_PATHS.items():
             assert (_ASSETS / rel).is_file(), f"Missing sprite for {name!r}: {rel}"
+
+    def test_relic_sprites_exist(self):
+        for name, rel in RELIC_SPRITE_PATHS.items():
+            assert (_ASSETS / rel).is_file(), f"Missing relic icon for {name!r}: {rel}"
 
     def test_assets_dir_exists(self):
         assert _ASSETS.is_dir()
@@ -70,6 +85,10 @@ class TestUnknownNameFallback:
         loader = SpriteLoader()
         assert loader.get_enemy_sprite("Monstruo", size=32) is None
 
+    def test_unknown_relic_returns_none(self):
+        loader = SpriteLoader()
+        assert loader.get_relic_sprite("Reliquia Falsa", size=32) is None
+
     def test_empty_string_player_returns_none(self):
         loader = SpriteLoader()
         assert loader.get_player_sprite("", size=32) is None
@@ -77,6 +96,10 @@ class TestUnknownNameFallback:
     def test_empty_string_enemy_returns_none(self):
         loader = SpriteLoader()
         assert loader.get_enemy_sprite("", size=32) is None
+
+    def test_empty_string_relic_returns_none(self):
+        loader = SpriteLoader()
+        assert loader.get_relic_sprite("", size=32) is None
 
 
 # ---------------------------------------------------------------------------
@@ -107,4 +130,12 @@ class TestCacheBehaviour:
 
     def test_all_enemy_paths_end_with_png(self):
         for path in ENEMY_SPRITE_PATHS.values():
+            assert path.endswith(".png")
+
+    def test_all_relic_paths_are_strings(self):
+        for path in RELIC_SPRITE_PATHS.values():
+            assert isinstance(path, str)
+
+    def test_all_relic_paths_end_with_png(self):
+        for path in RELIC_SPRITE_PATHS.values():
             assert path.endswith(".png")
