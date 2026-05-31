@@ -9,7 +9,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\dungeon-crawl-stone-soup-full\\\\player\" -Recurse -Include \"*.png\")",
       "Bash(Select-Object FullName)",
       "Bash(dir \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\dungeon-crawl-stone-soup-full\\\\player\\\\base\" /B)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\Card Sprites\" -Recurse -Force | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\Card Sprites\\\\\"\\), \"\" })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\Card Sprites\" -Recurse -Force | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\Card Sprites\\\\\"\\), \"\" })",
+      "Bash(python3 *)"
     ]
   }
 }
