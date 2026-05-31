@@ -129,7 +129,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus + `player.luck // 5` |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
-| `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded STS-style path-based map generation. Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6) |
+| `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
 | `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory`, `generate_event_gold`, `pick_treasure_relic`, `pick_boss_relics`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
 | `card_rewards.py` | `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]` | Seeded card reward selection after combat and pack opening |
 
@@ -342,11 +342,14 @@ Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_
 
 ### Seeded map generation (`src/application/map_generator.py`)
 
-`generate_map(seed, floor) → GameMap` produces a deterministic STS-style map:
+`generate_map(seed, floor) → GameMap` produces a deterministic crossword-style map:
 
 - **Seed formula**: `6364136223846793005 × seed + 1442695040888963407 × floor`
 - **Dimensions**: rows = `min(7 + (floor-1)//2, 12)`, cols = `min(5 + (floor-1)//3, 8)`
 - **Paths**: `min(3 + (floor-1)//3, 6)` independent paths from row 0 to boss row
+- **Orthogonal edges only**: horizontal edges connect same-row adjacent-column nodes (bidirectional); vertical edges connect same-column adjacent-row nodes (directed upward).
+- When a path shifts column it adds a horizontal edge in the current row, then ascends vertically. The pre-boss row walks horizontally to `boss_col` before the final vertical step.
+- Horizontal neighbours become available when any adjacent node in their row is visited — the player can walk sideways before ascending. Nodes with no upward connection are optional side rooms that can be skipped.
 - Mid-rows receive TREASURE, SHOP, and EVENT nodes; all other non-boss rooms are COMBAT
 
 ### Room types (`src/domain/map_node.py`)
@@ -423,7 +426,7 @@ One test file per source module. All test files follow the same structure:
 | `test_end_turn.py` | `application/end_turn.py` | draw_opening_hand, end_player_turn, relic integration, STS block rule, luck draw |
 | `test_combat_manager.py` | `application/combat_manager.py` | Structural integrity, relic tags, mana=4/4, hand=6, card pool total |
 | `test_combat_factory.py` | `application/combat_factory.py` | Player stats from character, full HP enemies, mana setup, luck-based draw |
-| `test_map_generator.py` | `application/map_generator.py` | Determinism, row/col/path counts per floor, room type distribution, boss placement |
+| `test_map_generator.py` | `application/map_generator.py` | Determinism, row/col/path counts per floor, room type distribution, boss placement, orthogonal-only edges, bidirectional horizontal, upward-only vertical |
 | `test_run_manager.py` | `application/run_manager.py` | create_run, generate_enemies, generate_boss, apply_combat_victory, advance_floor |
 | `test_card_rewards.py` | `application/card_rewards.py` | pick_reward_cards count, pick_pack_cards theme filtering, seeded determinism |
 | `test_preferences.py` | `infrastructure/preferences.py` | defaults, load (present/missing/invalid JSON), save, round-trip, unknown keys ignored |

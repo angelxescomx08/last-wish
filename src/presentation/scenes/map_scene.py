@@ -201,7 +201,8 @@ class MapScene:
         cell: int,
         org: tuple[int, int],
     ) -> None:
-        corr_w = max(8, cell // 4)
+        corr_w  = max(8, cell // 4)
+        drawn:  set[frozenset[str]] = set()   # dedup bidirectional horiz edges
         for node in gm.nodes.values():
             x1, y1 = _centre(node, org, cell, gm.rows)
             live    = node.visited or node.available
@@ -209,8 +210,14 @@ class MapScene:
                 child = gm.nodes.get(cid)
                 if child is None:
                     continue
+                key = frozenset((node.id, cid))
+                if key in drawn:
+                    continue
+                drawn.add(key)
                 x2, y2 = _centre(child, org, cell, gm.rows)
-                col = _CORRIDOR_LIVE if live else _CORRIDOR_IDLE
+                # Use the brighter end's colour so a live→locked edge looks active
+                live_edge = live or child.visited or child.available
+                col = _CORRIDOR_LIVE if live_edge else _CORRIDOR_IDLE
                 pygame.draw.line(surface, col, (x1, y1), (x2, y2), corr_w)
 
     # ------------------------------------------------------------------
