@@ -22,6 +22,7 @@ from src.domain.map_node import RoomType
 from src.infrastructure.colors import TEXT_ACCENT, TEXT_PRIMARY
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.viewport import Viewport
+from src.infrastructure.preferences import UserPreferences, load_preferences, save_preferences
 from src.presentation.scenes.boss_reward_scene import BossRewardScene
 from src.presentation.scenes.character_select_scene import CharacterSelectScene
 from src.presentation.scenes.combat_reward_scene import CombatRewardScene
@@ -31,6 +32,7 @@ from src.presentation.scenes.event_scene import EventScene
 from src.presentation.scenes.main_menu_scene import MainMenuScene, MenuAction
 from src.presentation.scenes.map_scene import MapScene
 from src.presentation.scenes.pack_opening_scene import PackOpeningScene
+from src.presentation.scenes.settings_scene import SettingsScene
 from src.presentation.scenes.shop_scene import ShopScene
 from src.presentation.scenes.treasure_scene import TreasureScene
 
@@ -80,9 +82,10 @@ class SceneManager:
     scene needing to know about the next one.
     """
 
-    def __init__(self, initial: Scene, fonts: FontRegistry) -> None:
+    def __init__(self, initial: Scene, fonts: FontRegistry, prefs: UserPreferences) -> None:
         self._stack:         list[Scene] = [initial]
         self._fonts          = fonts
+        self._prefs          = prefs
         self._run            = None           # set when character is selected
         self.quit_requested: bool = False
 
@@ -144,6 +147,8 @@ class SceneManager:
             self._t_event(top)
         elif isinstance(top, BossRewardScene):
             self._t_boss_reward(top)
+        elif isinstance(top, SettingsScene):
+            self._t_settings(top)
         elif isinstance(top, DeathScene):
             self._t_death(top)
 
@@ -158,6 +163,8 @@ class SceneManager:
         scene.requested_action = None
         if action == MenuAction.PLAY:
             self.push(CharacterSelectScene(self._fonts))
+        elif action == MenuAction.SETTINGS:
+            self.push(SettingsScene(self._fonts, self._prefs))
         elif action == MenuAction.EXIT:
             self.quit_requested = True
 
@@ -311,6 +318,12 @@ class SceneManager:
             advance_floor(run)
             self.push(MapScene(run, self._fonts))
 
+    def _t_settings(self, scene: SettingsScene) -> None:
+        if scene.cleared:
+            scene.cleared = False
+            save_preferences(self._prefs)
+            self.pop()
+
     def _t_death(self, scene: DeathScene) -> None:
         action = scene.requested_action
         if action is None:
@@ -356,7 +369,8 @@ def run(settings: GameSettings) -> None:
 
     viewport      = Viewport(settings.width, settings.height)
     fonts         = FontRegistry()
-    scene_manager = SceneManager(MainMenuScene(fonts), fonts)
+    prefs         = load_preferences()
+    scene_manager = SceneManager(MainMenuScene(fonts), fonts, prefs)
     clock         = pygame.time.Clock()
 
     running = True
@@ -382,6 +396,13 @@ def run(settings: GameSettings) -> None:
             running = False
 
         scene_manager.draw(viewport.surface)
+
+        if prefs.show_fps:
+            fps_text = f"FPS: {clock.get_fps():.0f}"
+            fps_surf = fonts.get(16).render(fps_text, True, pygame.Color(255, 220, 50))
+            vw = viewport.surface.get_width()
+            viewport.surface.blit(fps_surf, (vw - fps_surf.get_width() - 8, 8))
+
         viewport.present(screen)
         pygame.display.flip()
 

@@ -106,7 +106,7 @@ class MainMenuScene:
         play_label = "Continuar" if has_active_game else "Jugar"
         return [
             _Option(play_label, MenuAction.PLAY),
-            _Option("Ajustes",  MenuAction.SETTINGS, enabled=False),
+            _Option("Ajustes",  MenuAction.SETTINGS),
             _Option("Salir",    MenuAction.EXIT),
         ]
 

@@ -60,7 +60,7 @@ The project follows Clean Architecture with SOLID principles. Layers must not be
 src/
   domain/        # Pure business logic — no pygame, no I/O
   application/   # Use cases — orchestrate domain objects, no pygame
-  infrastructure/# pygame utilities: colors, fonts, viewport scaling
+  infrastructure/# pygame utilities + user-preference persistence
   presentation/  # Screens, UI widgets, scene manager
 main.py          # Entry point — wires layers and owns the game loop
 tests/           # pytest unit tests — one file per module
@@ -81,17 +81,21 @@ infrastructure  →  (used by presentation only)
 
 ```python
 clock = pygame.time.Clock()
-scene_manager = SceneManager(...)
+prefs = load_preferences()
+scene_manager = SceneManager(MainMenuScene(fonts), fonts, prefs)
 while running:
     dt = clock.tick(60) / 1000.0
     for event in pygame.event.get():
         scene_manager.handle_event(event)
     scene_manager.update(dt)
-    scene_manager.draw(screen)
+    scene_manager.draw(viewport.surface)
+    if prefs.show_fps:                       # FPS overlay (top-right corner)
+        ...
+    viewport.present(screen)
     pygame.display.flip()
 ```
 
-Scenes are pushed/popped on a stack managed by `SceneManager`; each scene implements `handle_event`, `update(dt)`, and `draw(surface)`.
+Scenes are pushed/popped on a stack managed by `SceneManager`; each scene implements `handle_event`, `update(dt)`, and `draw(surface)`. `SceneManager` also holds `_prefs: UserPreferences` and calls `save_preferences()` when `SettingsScene` clears.
 
 ---
 
@@ -136,12 +140,14 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `colors.py` | Named `pygame.Color` constants for the entire project |
 | `fonts.py` | `FontRegistry` — lazy font cache, keyed by point size |
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
+| `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 
 ### Presentation layer — `src/presentation/`
 
 | File | Responsibility |
 |---|---|
-| `scenes/main_menu_scene.py` | Main menu: Jugar/Continuar, Ajustes (stub), Salir. Sets `requested_action: MenuAction` |
+| `scenes/main_menu_scene.py` | Main menu: Jugar/Continuar, Ajustes, Salir. Sets `requested_action: MenuAction` |
+| `scenes/settings_scene.py` | Settings screen: toggle "Mostrar FPS" (Activado/Desactivado). Mutates `UserPreferences` in-place; sets `cleared: bool`. SceneManager saves to disk on exit |
 | `scenes/character_select_scene.py` | Character panel grid with stat bars; seed text input (click to focus, type digits). Sets `confirmed` / `back_to_menu`; exposes `seed: int` property |
 | `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. `is_boss` constructor param; `combat_won` property; `state` property |
 | `scenes/death_scene.py` | Death screen: Nueva Partida / Menú Principal. Sets `requested_action: DeathAction` |
@@ -301,10 +307,11 @@ MainMenuScene
                                                                                → [open_pack]  → PackOpeningScene → BossRewardScene
                                                                                → [cleared]    → advance_floor() → MapScene
                       → [ESC]      → MainMenuScene
+  → [Ajustes]    → SettingsScene → MainMenuScene (saves preferences on exit)
   → [Salir]      → quit
 ```
 
-`SceneManager` in `main.py` stores `_run: Run | None` and drives all transitions. After each
+`SceneManager` in `main.py` stores `_run: Run | None` and `_prefs: UserPreferences`, and drives all transitions. After each
 `update()` call it inspects the top scene's flags and pushes/pops scenes accordingly. Flags are
 reset immediately after being consumed.
 
@@ -419,6 +426,7 @@ One test file per source module. All test files follow the same structure:
 | `test_map_generator.py` | `application/map_generator.py` | Determinism, row/col/path counts per floor, room type distribution, boss placement |
 | `test_run_manager.py` | `application/run_manager.py` | create_run, generate_enemies, generate_boss, apply_combat_victory, advance_floor |
 | `test_card_rewards.py` | `application/card_rewards.py` | pick_reward_cards count, pick_pack_cards theme filtering, seeded determinism |
+| `test_preferences.py` | `infrastructure/preferences.py` | defaults, load (present/missing/invalid JSON), save, round-trip, unknown keys ignored |
 
 ### Testing rules
 
