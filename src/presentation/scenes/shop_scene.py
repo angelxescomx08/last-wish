@@ -16,6 +16,7 @@ from src.domain.card_pool import ALL_PACKS, PackDef, PackTheme
 from src.domain.run import Run
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.sprite_loader import SpriteLoader
 
 _BG      = pygame.Color(10, 14, 18)
 _PACK_W  = 260
@@ -29,6 +30,7 @@ class ShopScene:
     def __init__(self, run: Run, fonts: FontRegistry) -> None:
         self._run          = run
         self._fonts        = fonts
+        self._sprites      = SpriteLoader()
         self._pack_rects:  list[pygame.Rect] = []
         self._hovered:     int | None = None
         self._exit_rect:   pygame.Rect | None = None
@@ -77,7 +79,7 @@ class ShopScene:
             py   = start_y + row * (_PACK_H + _PACK_GAP)
             rect = pygame.Rect(px, py, _PACK_W, _PACK_H)
             self._pack_rects.append(rect)
-            self._draw_pack_tile(surface, pack, rect, idx)
+            self._draw_pack_tile(surface, pack, rect, idx, self._sprites)
 
         # Exit
         es = self._fonts.get(14).render("Salir", True, colors.TEXT_SECONDARY)
@@ -93,6 +95,7 @@ class ShopScene:
         pack: PackDef,
         rect: pygame.Rect,
         idx: int,
+        sprites: SpriteLoader,
     ) -> None:
         can_afford = self._run.gold >= pack.cost
         hovered    = self._hovered == idx
@@ -103,26 +106,33 @@ class ShopScene:
                    pygame.Color(50, 50, 60)
 
         pygame.draw.rect(surface, bg_col,   rect, border_radius=8)
+
+        # Booster art on the left side of the tile
+        booster = sprites.get_pack_sprite(pack.theme.value, size=100)
+        if booster is not None:
+            br = booster.get_rect(left=rect.x + 10, centery=rect.centery)
+            surface.blit(booster, br)
+            text_cx = rect.x + 120 + (rect.width - 120) // 2
+        else:
+            text_cx = rect.centerx
+
         pygame.draw.rect(surface, border_c, rect, 2, border_radius=8)
 
-        cx = rect.centerx
-        ns = self._fonts.get(15).render(
-            pack.name, True, colors.TEXT_ACCENT if can_afford else pygame.Color(80, 80, 80)
-        )
-        surface.blit(ns, ns.get_rect(centerx=cx, centery=rect.top + 30))
+        name_col = colors.TEXT_ACCENT if can_afford else pygame.Color(80, 80, 80)
+        ns = self._fonts.get(15).render(pack.name, True, name_col)
+        surface.blit(ns, ns.get_rect(centerx=text_cx, centery=rect.top + 38))
 
-        ds = self._fonts.get(11).render(
-            pack.description, True, colors.TEXT_SECONDARY if can_afford else pygame.Color(60, 60, 60)
-        )
-        surface.blit(ds, ds.get_rect(centerx=cx, centery=rect.top + 70))
+        desc_col = colors.TEXT_SECONDARY if can_afford else pygame.Color(60, 60, 60)
+        ds = self._fonts.get(11).render(pack.description, True, desc_col)
+        surface.blit(ds, ds.get_rect(centerx=text_cx, centery=rect.top + 70))
 
         cost_col = pygame.Color(220, 190, 50) if can_afford else pygame.Color(150, 80, 80)
         cs = self._fonts.get(14).render(f"{pack.cost} oro", True, cost_col)
-        surface.blit(cs, cs.get_rect(centerx=cx, centery=rect.top + 110))
+        surface.blit(cs, cs.get_rect(centerx=text_cx, centery=rect.top + 104))
 
         if not can_afford:
             na = self._fonts.get(10).render("Sin fondos", True, pygame.Color(150, 80, 80))
-            surface.blit(na, na.get_rect(centerx=cx, centery=rect.top + 140))
+            surface.blit(na, na.get_rect(centerx=text_cx, centery=rect.top + 132))
 
     # ------------------------------------------------------------------
     # Input

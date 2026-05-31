@@ -9,11 +9,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.infrastructure.sprite_loader import (
+    CARD_ART_PATHS,
     ENEMY_SPRITE_PATHS,
+    PACK_SPRITE_PATHS,
     PLAYER_SPRITE_PATHS,
+    RARITY_BADGE_PATHS,
     RELIC_SPRITE_PATHS,
     SpriteLoader,
     _ASSETS,
+    _CARD_ASSETS,
 )
 
 # ---------------------------------------------------------------------------
@@ -54,6 +58,43 @@ class TestMappingCompleteness:
 # ---------------------------------------------------------------------------
 # Asset files exist on disk
 # ---------------------------------------------------------------------------
+
+class TestCardAssets:
+    def test_card_assets_dir_exists(self):
+        assert _CARD_ASSETS.is_dir()
+
+    def test_card_art_paths_all_exist(self):
+        for card_id, rel in CARD_ART_PATHS.items():
+            assert (_CARD_ASSETS / rel).is_file(), f"Missing art for {card_id!r}: {rel}"
+
+    def test_rarity_badge_paths_all_exist(self):
+        for rarity, rel in RARITY_BADGE_PATHS.items():
+            assert (_CARD_ASSETS / rel).is_file(), f"Missing badge for {rarity!r}: {rel}"
+
+    def test_pack_sprite_paths_all_exist(self):
+        for theme, rel in PACK_SPRITE_PATHS.items():
+            assert (_CARD_ASSETS / rel).is_file(), f"Missing pack sprite for {theme!r}: {rel}"
+
+    def test_rarity_badges_cover_all_five_tiers(self):
+        assert set(RARITY_BADGE_PATHS.keys()) == {
+            "COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"
+        }
+
+    def test_pack_sprites_cover_all_themes(self):
+        assert set(PACK_SPRITE_PATHS.keys()) == {"acero", "escudo", "magia", "epico"}
+
+    def test_unknown_card_art_returns_none(self):
+        loader = SpriteLoader()
+        assert loader.get_card_art("carta_inexistente", size=32) is None
+
+    def test_unknown_rarity_badge_returns_none(self):
+        loader = SpriteLoader()
+        assert loader.get_rarity_badge("MYTHIC", size=16) is None
+
+    def test_unknown_pack_returns_none(self):
+        loader = SpriteLoader()
+        assert loader.get_pack_sprite("oscuro", size=80) is None
+
 
 class TestAssetFilesExist:
     def test_player_sprites_exist(self):

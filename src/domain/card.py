@@ -12,6 +12,14 @@ class CardType(Enum):
     POWER = auto()
 
 
+class CardRarity(Enum):
+    COMMON    = 1   # Común     — starter / basic pool
+    UNCOMMON  = 2   # Poco Común — low-cost pack cards
+    RARE      = 3   # Raro       — mid-cost pack cards
+    EPIC      = 4   # Épico      — high-cost pack cards
+    LEGENDARY = 5   # Legendario — EPICO pack cards
+
+
 class ModifierTag(Enum):
     """Stackable modifiers that alter how a card resolves.
 
@@ -61,10 +69,15 @@ class Card:
     card_type: CardType
     cost: int
     base_effect: CardEffect
+    rarity: CardRarity = field(default=None)  # set post-init; None → COMMON fallback
     stacked_effects: list[CardEffect] = field(default_factory=list)
     modifiers: list[CardModifier] = field(default_factory=list)
     is_broken: bool = False
     is_upgraded: bool = False
+
+    def __post_init__(self) -> None:
+        if self.rarity is None:
+            self.rarity = CardRarity.COMMON
 
     # ------------------------------------------------------------------
     # Queries

@@ -9,8 +9,22 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
-from src.domain.card import Card, CardEffect, CardType
+from src.domain.card import Card, CardEffect, CardRarity, CardType
 from src.domain.numbers import BigValue
+
+
+def _rar(cost: int, *, epic: bool = False, legendary: bool = False) -> CardRarity:
+    if legendary:
+        return CardRarity.LEGENDARY
+    if epic:
+        return CardRarity.EPIC
+    if cost == 0:
+        return CardRarity.COMMON
+    if cost == 1:
+        return CardRarity.UNCOMMON
+    if cost == 2:
+        return CardRarity.RARE
+    return CardRarity.EPIC
 
 
 # ---------------------------------------------------------------------------
@@ -44,32 +58,39 @@ ALL_PACKS: list[PackDef] = [
 # Internal card factories
 # ---------------------------------------------------------------------------
 
-def _atk(id: str, name: str, cost: int, dmg: int, draw: int = 0) -> Card:
+def _atk(id: str, name: str, cost: int, dmg: int, draw: int = 0, *,
+         legendary: bool = False) -> Card:
     return Card(
         id=id, name=name, card_type=CardType.ATTACK, cost=cost,
         base_effect=CardEffect(name=name, damage=BigValue(dmg), draw=draw),
+        rarity=_rar(cost, legendary=legendary),
     )
 
 
-def _skl(id: str, name: str, cost: int, blk: int, draw: int = 0) -> Card:
+def _skl(id: str, name: str, cost: int, blk: int, draw: int = 0, *,
+         legendary: bool = False) -> Card:
     return Card(
         id=id, name=name, card_type=CardType.SKILL, cost=cost,
         base_effect=CardEffect(name=name, block=BigValue(blk), draw=draw),
+        rarity=_rar(cost, legendary=legendary),
     )
 
 
-def _combo(id: str, name: str, cost: int, dmg: int, blk: int, draw: int = 0) -> Card:
-    """Attack that also grants block."""
+def _combo(id: str, name: str, cost: int, dmg: int, blk: int, draw: int = 0, *,
+           legendary: bool = False) -> Card:
     return Card(
         id=id, name=name, card_type=CardType.ATTACK, cost=cost,
         base_effect=CardEffect(name=name, damage=BigValue(dmg), block=BigValue(blk), draw=draw),
+        rarity=_rar(cost, legendary=legendary),
     )
 
 
-def _pwr(id: str, name: str, cost: int, draw: int = 0) -> Card:
+def _pwr(id: str, name: str, cost: int, draw: int = 0, *,
+         legendary: bool = False) -> Card:
     return Card(
         id=id, name=name, card_type=CardType.POWER, cost=cost,
         base_effect=CardEffect(name=name, draw=draw),
+        rarity=_rar(cost, legendary=legendary),
     )
 
 
@@ -152,14 +173,14 @@ _MAGIA: list[Callable[[], Card]] = [
 # ---------------------------------------------------------------------------
 
 _EPICO: list[Callable[[], Card]] = [
-    lambda: _atk("ep_golpe_mortal",     "Golpe Mortal",        2, 22),
-    lambda: _skl("ep_escudo_impenet",   "Escudo Impenetrable", 2, 22),
-    lambda: _combo("ep_tormenta",       "Tormenta",            3, 16, 12),
-    lambda: _pwr("ep_poder_oculto",     "Poder Oculto",        1, draw=4),
-    lambda: _atk("ep_ejecucion",        "Ejecución",           3, 30),
-    lambda: _skl("ep_bastion",          "Bastión",             3, 30),
-    lambda: _atk("ep_descarga",         "Descarga",            2, 18, draw=2),
-    lambda: _skl("ep_escudo_arcano",    "Escudo Arcano",       2, 14, draw=2),
+    lambda: _atk("ep_golpe_mortal",     "Golpe Mortal",        2, 22,       legendary=True),
+    lambda: _skl("ep_escudo_impenet",   "Escudo Impenetrable", 2, 22,       legendary=True),
+    lambda: _combo("ep_tormenta",       "Tormenta",            3, 16, 12,   legendary=True),
+    lambda: _pwr("ep_poder_oculto",     "Poder Oculto",        1, draw=4,   legendary=True),
+    lambda: _atk("ep_ejecucion",        "Ejecución",           3, 30,       legendary=True),
+    lambda: _skl("ep_bastion",          "Bastión",             3, 30,       legendary=True),
+    lambda: _atk("ep_descarga",         "Descarga",            2, 18, draw=2, legendary=True),
+    lambda: _skl("ep_escudo_arcano",    "Escudo Arcano",       2, 14, draw=2, legendary=True),
 ]
 
 

@@ -64,8 +64,8 @@ class TestCreateRun:
     def test_floor_one(self):
         assert _run().floor == 1
 
-    def test_gold_zero(self):
-        assert _run().gold == 0
+    def test_gold_initial(self):
+        assert _run().gold == 2000
 
     def test_current_map_not_none(self):
         assert _run().current_map is not None

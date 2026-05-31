@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.domain.card import Card, CardEffect, CardModifier, CardType, ModifierTag
+from src.domain.card import Card, CardEffect, CardModifier, CardRarity, CardType, ModifierTag
 from src.domain.numbers import BigValue
 
 
@@ -195,3 +195,41 @@ class TestCardEffectDraw:
         card = _skill(5, draw=2)
         total_draw = sum(fx.draw for fx in card.all_effects())
         assert total_draw == 2
+
+
+# ---------------------------------------------------------------------------
+# CardRarity
+# ---------------------------------------------------------------------------
+
+class TestCardRarity:
+    def test_default_rarity_is_common(self):
+        card = _attack(6)
+        assert card.rarity == CardRarity.COMMON
+
+    def test_explicit_rarity_stored(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.ATTACK, cost=2,
+            base_effect=CardEffect(name="x", damage=BigValue(10)),
+            rarity=CardRarity.RARE,
+        )
+        assert card.rarity == CardRarity.RARE
+
+    def test_legendary_rarity_stored(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.POWER, cost=1,
+            base_effect=CardEffect(name="x"),
+            rarity=CardRarity.LEGENDARY,
+        )
+        assert card.rarity == CardRarity.LEGENDARY
+
+    def test_all_rarity_values_exist(self):
+        values = {r.value for r in CardRarity}
+        assert values == {1, 2, 3, 4, 5}
+
+    def test_rarity_none_falls_back_to_common(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=1,
+            base_effect=CardEffect(name="x", block=BigValue(5)),
+            rarity=None,
+        )
+        assert card.rarity == CardRarity.COMMON

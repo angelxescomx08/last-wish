@@ -95,7 +95,7 @@ Violation = a higher layer leaking into a lower layer (e.g. domain importing pyg
 | `fonts.py` | `FontRegistry` — lazy SysFont cache keyed by point size |
 | `viewport.py` | `Viewport`, `VIRTUAL_W = 1280`, `VIRTUAL_H = 720` |
 | `preferences.py` | `UserPreferences(show_fps)`, `load_preferences()`, `save_preferences()` — JSON at project root |
-| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 DCSS sprites; `get_player_sprite(name, size=128)`, `get_enemy_sprite(name, size=96)` |
+| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache. DCSS sprites: `get_player_sprite`, `get_enemy_sprite`, `get_relic_sprite`. Card Sprites pack: `get_card_art(card_id)`, `get_rarity_badge(rarity_name)`, `get_pack_sprite(theme_value)` |
 
 ### `src/presentation/`  — Screens and widgets
 

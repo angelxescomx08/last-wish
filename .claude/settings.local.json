@@ -8,7 +8,8 @@
       "PowerShell(\\(Get-Content \"C:\\\\Users\\\\USER\\\\.claude\\\\projects\\\\C--Users-USER-Desktop-web-python-last-wish\\\\731e89af-f723-47dd-87aa-add5a1e56dc7\\\\tool-results\\\\bagws69td.txt\"\\) | Select-String \"humanoid|human|orc|goblin|cultist|assassin|skeleton|golem\" | Select-Object -First 50)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\dungeon-crawl-stone-soup-full\\\\player\" -Recurse -Include \"*.png\")",
       "Bash(Select-Object FullName)",
-      "Bash(dir \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\dungeon-crawl-stone-soup-full\\\\player\\\\base\" /B)"
+      "Bash(dir \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\dungeon-crawl-stone-soup-full\\\\player\\\\base\" /B)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\Card Sprites\" -Recurse -Force | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\USER\\\\Desktop\\\\web\\\\python\\\\last-wish\\\\assets\\\\Card Sprites\\\\\"\\), \"\" })"
     ]
   }
 }

@@ -34,7 +34,7 @@ def create_run(character: Character, seed: int) -> Run:
         character=character,
         seed=seed,
         floor=1,
-        gold=0,
+        gold=2000,
         player_max_hp=character.stats.max_hp,
         player_current_hp=character.stats.max_hp,
         deck=starter_deck(),
