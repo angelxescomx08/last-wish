@@ -1,41 +1,60 @@
+"""Card widget — layered sprite card renderer.
+
+Layer order (back to front):
+  1. Card frame          Alternate (1/2/3) — full background by card type
+  2. Portrait tint       coloured oval matching card type
+  3. Portrait frame      minion (4) — oval border, transparent centre
+  4. Name banner         minion (6) — ribbon overlapping portrait top
+  5. Mana gem            minion (7) — protrudes above card top
+  6. Ability box         minion (2) — skill plate below portrait
+  7. Rarity gem          _Rarity/rarity (N) — centred below portrait
+  8. Stat hexagons       minion (8) — red=ATK left, green=DEF right
+  9. Type plate          minion (3) — centred between hexagons
+ 10. Text overlays       mana cost, name, effect, ATK, DEF, type label
+"""
 from __future__ import annotations
 
 import pygame
 
-from src.domain.card import Card, CardRarity, CardType, ModifierTag
+from src.domain.card import Card, CardRarity, CardType
 from src.domain.numbers import BigValue
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
 
 # ---------------------------------------------------------------------------
-# Card dimensions  (maintained at ~0.72 aspect ratio matching the frame art)
+# Card dimensions  (ratio 0.676 ≈ portrait card)
 # ---------------------------------------------------------------------------
 
-CARD_W: int = 90
-CARD_H: int = 124
+CARD_W: int = 100
+CARD_H: int = 148
 
-# Layer Y positions within the card (all in card-local coordinates)
-_MANA_Y:  int = 0    # minion(7) top decoration
-_MANA_H:  int = 27
-_TITLE_Y: int = 24   # minion(6) title decoration  (slight overlap with mana)
-_TITLE_H: int = 22
-_DESC_Y:  int = 78   # minion(2) description box
-_DESC_H:  int = 28
-_STAT_Y:  int = 106  # minion(8) ATK/DEF hexagons
-_STAT_H:  int = 18
-_GEM_SZ:  int = 14   # rarity gem size
+# Mana gem: protrudes this many pixels above the card rect top
+_MANA_OVERHANG: int = 14
 
-# Text centre-Y positions
-_MANA_CY:  int = _MANA_Y  + _MANA_H  // 2
-_TITLE_CY: int = _TITLE_Y + _TITLE_H // 2
-_DESC_CY:  int = _DESC_Y  + _DESC_H  // 2
-_ATK_CX:   int = CARD_W // 4           # red (left) hexagon centre-x
-_DEF_CX:   int = CARD_W * 3 // 4      # green (right) hexagon centre-x
-_STAT_CY:  int = _STAT_Y  + _STAT_H  // 2
+# Layer geometry (y in card-local coordinates, origin = card rect top-left)
+_BANNER_Y: int   = 2     # name ribbon top
+_BANNER_H: int   = 22    # name ribbon height
 
-# Fallback border palette (used when frame sprites are absent)
-_CORNER: int = 5
+_PORTRAIT_Y: int = 18    # oval frame top (overlaps banner bottom)
+_PORTRAIT_H: int = 58    # oval frame height → ~40% of card
+_PORTRAIT_W: int = 55    # oval frame width  (maintains 0.95 ratio)
+_PORTRAIT_X: int = (_PORTRAIT_W // 2) * 0  # centred, see _px below
+
+_GEM_SZ: int     = 16    # rarity gem size
+_GEM_Y: int      = _PORTRAIT_Y + _PORTRAIT_H + 4   # below oval
+
+_ABILITY_Y: int  = _GEM_Y + _GEM_SZ + 4            # ability box top
+_ABILITY_H: int  = 34    # ability box height
+
+_STATS_Y: int    = _ABILITY_Y + _ABILITY_H + 2      # hexagons top
+_STATS_H: int    = 20    # hexagons height (fills to CARD_H)
+
+_TYPE_H: int     = 16    # type-plate height (centred over stats row)
+
+# Horizontal centres for ATK and DEF hexagons
+_ATK_CX: int = 20        # left hexagon centre-x
+_DEF_CX: int = 80        # right hexagon centre-x
 
 # ---------------------------------------------------------------------------
 # Lazy module-level sprite loader
@@ -52,7 +71,7 @@ def _sp() -> SpriteLoader:
 
 
 # ---------------------------------------------------------------------------
-# Rarity colours (fallback dots / tints)
+# Rarity colours for fallback tints
 # ---------------------------------------------------------------------------
 
 _RARITY_COLOR: dict[CardRarity, pygame.Color] = {
@@ -63,26 +82,29 @@ _RARITY_COLOR: dict[CardRarity, pygame.Color] = {
     CardRarity.LEGENDARY: pygame.Color(230, 160, 20),
 }
 
+_TYPE_TINT: dict[CardType, pygame.Color] = {
+    CardType.ATTACK: pygame.Color(160, 40,  40),
+    CardType.SKILL:  pygame.Color(40,  90,  180),
+    CardType.POWER:  pygame.Color(100, 40,  160),
+}
+
+_TYPE_LABEL: dict[CardType, str] = {
+    CardType.ATTACK: "ataque",
+    CardType.SKILL:  "habilidad",
+    CardType.POWER:  "poder",
+}
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _type_fallback_palette(card_type: CardType) -> tuple[pygame.Color, pygame.Color]:
-    match card_type:
-        case CardType.ATTACK: return colors.CARD_ATTACK,  colors.CARD_ATTACK_DARK
-        case CardType.SKILL:  return colors.CARD_SKILL,   colors.CARD_SKILL_DARK
-        case CardType.POWER:  return colors.CARD_POWER,   colors.CARD_POWER_DARK
-
-
 def _effect_line(card: Card) -> str:
-    """Short description shown in the description box."""
     total_draw = sum(fx.draw for fx in card.all_effects())
     parts: list[str] = []
     if total_draw > 0:
         parts.append(f"Roba {total_draw}")
     if card.card_type == CardType.POWER:
-        parts.append("Poder")
+        parts.append("Poder permanente")
     return "  ".join(parts)
 
 
@@ -103,130 +125,152 @@ def draw_card(
     bonus_damage: int = 0,
     bonus_block: int = 0,
 ) -> pygame.Rect:
-    """Draw a card using layered sprites and return its bounding Rect."""
+    """Draw a layered sprite card and return its bounding Rect."""
     lift = -20 if (selected or hovered) else 0
-    rect = pygame.Rect(x, y + lift, CARD_W, CARD_H)
-    sp   = _sp()
+    rect  = pygame.Rect(x, y + lift, CARD_W, CARD_H)
+    sp    = _sp()
+    rx, ry = rect.x, rect.y   # shortcuts
+
+    # Portrait centred x
+    px = rx + (CARD_W - _PORTRAIT_W) // 2
+
+    # Dim factor for unaffordable cards
+    dim_alpha = 110 if not affordable else 0
+
+    def _blit(surf: pygame.Surface | None, bx: int, by: int) -> None:
+        if surf is None:
+            return
+        if dim_alpha:
+            s = surf.copy()
+            dark = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+            dark.fill((0, 0, 0, dim_alpha))
+            s.blit(dark, (0, 0))
+            surface.blit(s, (bx, by))
+        else:
+            surface.blit(surf, (bx, by))
 
     # ------------------------------------------------------------------
-    # Layer 1: card frame (Alternate 1/2/3 by CardType)
+    # Layer 1: card frame  (Alternate 1/2/3)
     # ------------------------------------------------------------------
     frame = sp.get_card_frame(card.card_type.name, CARD_W, CARD_H)
-    if frame is not None:
-        if not affordable:
-            dim = pygame.Surface((CARD_W, CARD_H), pygame.SRCALPHA)
-            dim.blit(frame, (0, 0))
-            dark = pygame.Surface((CARD_W, CARD_H), pygame.SRCALPHA)
-            dark.fill((0, 0, 0, 120))
-            dim.blit(dark, (0, 0))
-            surface.blit(dim, rect.topleft)
-        else:
-            surface.blit(frame, rect.topleft)
-    else:
+    _blit(frame, rx, ry)
+    if frame is None:
         # Fallback coloured rectangle
-        body_col, dark_col = _type_fallback_palette(card.card_type)
-        if not affordable:
-            dark_col = pygame.Color(dark_col.r // 2, dark_col.g // 2, dark_col.b // 2)
-        pygame.draw.rect(surface, dark_col, rect, border_radius=_CORNER)
-        border_col = colors.CARD_SELECTED if selected else (
-            colors.CARD_HOVER if hovered else colors.CARD_BORDER
-        )
-        pygame.draw.rect(surface, border_col, rect, 1, border_radius=_CORNER)
+        tint = _TYPE_TINT.get(card.card_type, colors.BG_PANEL)
+        pygame.draw.rect(surface, tint, rect, border_radius=6)
+        pygame.draw.rect(surface, colors.CARD_BORDER, rect, 1, border_radius=6)
 
     # ------------------------------------------------------------------
-    # Layer 2: mana top decoration  (minion 7)
+    # Layer 2: portrait tint (coloured ellipse inside the oval area)
     # ------------------------------------------------------------------
-    mana_surf = sp.get_card_component("mana", CARD_W, _MANA_H)
-    if mana_surf is not None:
-        surface.blit(mana_surf, (rect.x, rect.y + _MANA_Y))
+    tint_col = _TYPE_TINT.get(card.card_type, colors.BG_PANEL)
+    tint_rect = pygame.Rect(px + 6, ry + _PORTRAIT_Y + 6,
+                            _PORTRAIT_W - 12, _PORTRAIT_H - 12)
+    pygame.draw.ellipse(surface, tint_col, tint_rect)
 
     # ------------------------------------------------------------------
-    # Layer 3: title decoration  (minion 6)
+    # Layer 3: portrait oval frame  (minion 4, transparent centre)
     # ------------------------------------------------------------------
-    title_surf = sp.get_card_component("title", CARD_W, _TITLE_H)
-    if title_surf is not None:
-        surface.blit(title_surf, (rect.x, rect.y + _TITLE_Y))
+    portrait_frame = sp.get_card_component("portrait", _PORTRAIT_W, _PORTRAIT_H)
+    _blit(portrait_frame, px, ry + _PORTRAIT_Y)
 
     # ------------------------------------------------------------------
-    # Layer 4: description box  (minion 2)
+    # Layer 4: name banner  (minion 6)
     # ------------------------------------------------------------------
-    desc_surf = sp.get_card_component("description", CARD_W, _DESC_H)
-    if desc_surf is not None:
-        surface.blit(desc_surf, (rect.x, rect.y + _DESC_Y))
-
-    # ------------------------------------------------------------------
-    # Layer 5: stat hexagons  (minion 8 — full width, red left | green right)
-    # ------------------------------------------------------------------
-    stats_surf = sp.get_card_component("stats", CARD_W, _STAT_H)
-    if stats_surf is not None:
-        surface.blit(stats_surf, (rect.x, rect.y + _STAT_Y))
+    banner = sp.get_card_component("banner", CARD_W, _BANNER_H)
+    _blit(banner, rx, ry + _BANNER_Y)
 
     # ------------------------------------------------------------------
-    # Text overlays
+    # Layer 5: mana gem  (minion 7 — protrudes above card top)
     # ------------------------------------------------------------------
-    # Mana cost
-    mana_font = fonts.get(13)
-    mana_col  = colors.TEXT_PRIMARY if affordable else pygame.Color(160, 30, 30)
-    mana_s    = mana_font.render(str(card.cost), True, mana_col)
-    surface.blit(mana_s, mana_s.get_rect(centerx=rect.centerx, centery=rect.y + _MANA_CY))
-
-    # Card name
-    name_font = fonts.get(8)
-    name_col  = colors.TEXT_PRIMARY if affordable else pygame.Color(100, 100, 100)
-    short     = card.name[:10]
-    name_s    = name_font.render(short, True, name_col)
-    surface.blit(name_s, name_s.get_rect(centerx=rect.centerx, centery=rect.y + _TITLE_CY))
-
-    # Effect description (draw, power)
-    eff_line = _effect_line(card)
-    if eff_line:
-        eff_font = fonts.get(7)
-        eff_s    = eff_font.render(eff_line, True, colors.TEXT_SECONDARY)
-        surface.blit(eff_s, eff_s.get_rect(centerx=rect.centerx, centery=rect.y + _DESC_CY))
-
-    # ATK value on left (red) hexagon
-    dmg = card.total_damage()
-    atk_font = fonts.get(11)
-    if dmg > 0:
-        atk_val = BigValue.format_int(dmg + bonus_damage)
-        atk_col = colors.TEXT_DAMAGE
-    else:
-        atk_val = "—"
-        atk_col = pygame.Color(90, 60, 60)
-    atk_s = atk_font.render(atk_val, True, atk_col)
-    surface.blit(atk_s, atk_s.get_rect(centerx=rect.x + _ATK_CX, centery=rect.y + _STAT_CY))
-
-    # DEF value on right (green) hexagon
-    blk = card.total_block()
-    if blk > 0:
-        def_val = BigValue.format_int(blk + bonus_block)
-        def_col = colors.TEXT_BLOCK
-    else:
-        def_val = "—"
-        def_col = pygame.Color(60, 90, 60)
-    def_s = atk_font.render(def_val, True, def_col)
-    surface.blit(def_s, def_s.get_rect(centerx=rect.x + _DEF_CX, centery=rect.y + _STAT_CY))
+    mana_w, mana_h = 44, 22
+    mana_surf = sp.get_card_component("mana", mana_w, mana_h)
+    mana_bx   = rx + (CARD_W - mana_w) // 2
+    mana_by   = ry - _MANA_OVERHANG - mana_h // 2
+    _blit(mana_surf, mana_bx, mana_by)
 
     # ------------------------------------------------------------------
-    # Layer 6: rarity gem (bottom-right of description box)
+    # Layer 6: ability / skill box  (minion 2)
+    # ------------------------------------------------------------------
+    ability = sp.get_card_component("ability", CARD_W, _ABILITY_H)
+    _blit(ability, rx, ry + _ABILITY_Y)
+
+    # ------------------------------------------------------------------
+    # Layer 7: rarity gem  (centred below portrait)
     # ------------------------------------------------------------------
     gem = sp.get_rarity_badge(card.rarity.name, size=_GEM_SZ)
-    if gem is not None:
-        surface.blit(gem, (rect.right - _GEM_SZ - 2, rect.y + _DESC_Y + 1))
-    else:
+    gem_bx = rx + (CARD_W - _GEM_SZ) // 2
+    gem_by = ry + _GEM_Y
+    _blit(gem, gem_bx, gem_by)
+    if gem is None:
         gem_col = _RARITY_COLOR.get(card.rarity, colors.TEXT_SECONDARY)
-        pygame.draw.circle(surface, gem_col, (rect.right - 6, rect.y + _DESC_Y + 6), 4)
+        pygame.draw.circle(surface, gem_col, (rx + CARD_W // 2, ry + _GEM_Y + _GEM_SZ // 2), 6)
 
     # ------------------------------------------------------------------
-    # Broken diagonal stripe
+    # Layer 8: stat hexagons  (minion 8 — full width)
     # ------------------------------------------------------------------
+    stats_surf = sp.get_card_component("stats", CARD_W, _STATS_H)
+    _blit(stats_surf, rx, ry + _STATS_Y)
+
+    # ------------------------------------------------------------------
+    # Layer 9: type plate  (minion 3 — centred between hexagons)
+    # ------------------------------------------------------------------
+    type_w = 42
+    type_surf = sp.get_card_component("type_plate", type_w, _TYPE_H)
+    _blit(type_surf, rx + (CARD_W - type_w) // 2, ry + _STATS_Y + (_STATS_H - _TYPE_H) // 2)
+
+    # ------------------------------------------------------------------
+    # Layer 10: text overlays
+    # ------------------------------------------------------------------
+    stat_cy = ry + _STATS_Y + _STATS_H // 2
+
+    # Mana cost
+    mana_col = colors.TEXT_PRIMARY if affordable else pygame.Color(200, 60, 60)
+    mc = fonts.get(14).render(str(card.cost), True, mana_col)
+    surface.blit(mc, mc.get_rect(centerx=rx + CARD_W // 2,
+                                  centery=mana_by + mana_h // 2))
+
+    # Card name
+    name_col = colors.TEXT_PRIMARY if affordable else pygame.Color(110, 110, 110)
+    ns = fonts.get(8).render(card.name[:11], True, name_col)
+    surface.blit(ns, ns.get_rect(centerx=rx + CARD_W // 2,
+                                  centery=ry + _BANNER_Y + _BANNER_H // 2))
+
+    # Effect line in ability box
+    eff = _effect_line(card)
+    if eff:
+        es = fonts.get(7).render(eff, True, colors.TEXT_SECONDARY)
+        surface.blit(es, es.get_rect(centerx=rx + CARD_W // 2,
+                                      centery=ry + _ABILITY_Y + _ABILITY_H // 2))
+
+    # ATK (left, red hexagon)
+    dmg = card.total_damage()
+    atk_val = BigValue.format_int(dmg + bonus_damage) if dmg > 0 else "—"
+    atk_col = colors.TEXT_DAMAGE if dmg > 0 else pygame.Color(80, 55, 55)
+    ats = fonts.get(11).render(atk_val, True, atk_col)
+    surface.blit(ats, ats.get_rect(centerx=rx + _ATK_CX, centery=stat_cy))
+
+    # DEF (right, green hexagon)
+    blk = card.total_block()
+    def_val = BigValue.format_int(blk + bonus_block) if blk > 0 else "—"
+    def_col = colors.TEXT_BLOCK if blk > 0 else pygame.Color(55, 80, 55)
+    dfs = fonts.get(11).render(def_val, True, def_col)
+    surface.blit(dfs, dfs.get_rect(centerx=rx + _DEF_CX, centery=stat_cy))
+
+    # Type label (centred between hexagons)
+    tl = fonts.get(7).render(_TYPE_LABEL[card.card_type], True, colors.TEXT_SECONDARY)
+    surface.blit(tl, tl.get_rect(centerx=rx + CARD_W // 2, centery=stat_cy))
+
+    # ------------------------------------------------------------------
+    # Selection / hover border
+    # ------------------------------------------------------------------
+    if selected:
+        pygame.draw.rect(surface, colors.CARD_SELECTED, rect, 2, border_radius=5)
+    elif hovered:
+        pygame.draw.rect(surface, colors.CARD_HOVER, rect, 2, border_radius=5)
+
+    # Broken diagonal
     if card.is_broken:
-        pygame.draw.line(surface, colors.CARD_BROKEN,
-                         rect.topleft, rect.bottomright, 1)
-
-    # Selection / hover highlight border
-    if selected or hovered:
-        border_col = colors.CARD_SELECTED if selected else colors.CARD_HOVER
-        pygame.draw.rect(surface, border_col, rect, 2, border_radius=_CORNER)
+        pygame.draw.line(surface, colors.CARD_BROKEN, rect.topleft, rect.bottomright, 1)
 
     return rect

@@ -9,7 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.infrastructure.sprite_loader import (
-    CARD_ART_PATHS,
+    CARD_COMPONENT_PATHS,
+    CARD_FRAME_PATHS,
     ENEMY_SPRITE_PATHS,
     PACK_SPRITE_PATHS,
     PLAYER_SPRITE_PATHS,
@@ -54,6 +55,12 @@ class TestMappingCompleteness:
     def test_no_empty_relic_paths(self):
         assert all(v for v in RELIC_SPRITE_PATHS.values())
 
+    def test_no_empty_frame_paths(self):
+        assert all(v for v in CARD_FRAME_PATHS.values())
+
+    def test_no_empty_component_paths(self):
+        assert all(v for v in CARD_COMPONENT_PATHS.values())
+
 
 # ---------------------------------------------------------------------------
 # Asset files exist on disk
@@ -63,9 +70,21 @@ class TestCardAssets:
     def test_card_assets_dir_exists(self):
         assert _CARD_ASSETS.is_dir()
 
-    def test_card_art_paths_all_exist(self):
-        for card_id, rel in CARD_ART_PATHS.items():
-            assert (_CARD_ASSETS / rel).is_file(), f"Missing art for {card_id!r}: {rel}"
+    def test_card_frame_paths_all_exist(self):
+        for ctype, rel in CARD_FRAME_PATHS.items():
+            assert (_CARD_ASSETS / rel).is_file(), f"Missing frame for {ctype!r}: {rel}"
+
+    def test_card_frame_covers_all_types(self):
+        assert set(CARD_FRAME_PATHS.keys()) == {"ATTACK", "SKILL", "POWER"}
+
+    def test_card_component_paths_all_exist(self):
+        for name, rel in CARD_COMPONENT_PATHS.items():
+            assert (_CARD_ASSETS / rel).is_file(), f"Missing component {name!r}: {rel}"
+
+    def test_card_components_cover_all_layers(self):
+        assert set(CARD_COMPONENT_PATHS.keys()) == {
+            "mana", "banner", "portrait", "ability", "type_plate", "stats"
+        }
 
     def test_rarity_badge_paths_all_exist(self):
         for rarity, rel in RARITY_BADGE_PATHS.items():
@@ -82,10 +101,6 @@ class TestCardAssets:
 
     def test_pack_sprites_cover_all_themes(self):
         assert set(PACK_SPRITE_PATHS.keys()) == {"acero", "escudo", "magia", "epico"}
-
-    def test_unknown_card_art_returns_none(self):
-        loader = SpriteLoader()
-        assert loader.get_card_art("carta_inexistente", size=32) is None
 
     def test_unknown_rarity_badge_returns_none(self):
         loader = SpriteLoader()

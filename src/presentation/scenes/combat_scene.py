@@ -43,10 +43,10 @@ from src.presentation.ui.tooltip import (
 
 _TOP_BAR_H: int    = 68
 _HAND_AREA_Y: int  = 500
-_CARD_Y: int       = 588
-_CARD_GAP: int     = 8
-_CARD_AREA_X0: int = 130
-_CARD_AREA_X1: int = 1130
+_CARD_Y: int       = 568   # bottom = 568+148 = 716, within 720
+_CARD_GAP: int     = 6
+_CARD_AREA_X0: int = 55    # wider area for 100px cards (10×100+9×6=1054 ≤ 1165)
+_CARD_AREA_X1: int = 1220
 
 _ENEMY_Y: int  = 125
 _PLAYER_X: int = 930
