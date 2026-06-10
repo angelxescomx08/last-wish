@@ -7,7 +7,7 @@ Layer order (back to front):
   4. Name banner         minion (6) — ribbon overlapping portrait top
   5. Mana gem            minion (7) — protrudes above card top
   6. Ability box         minion (2) — skill plate below portrait
-  7. Rarity gem          _Rarity/rarity (N) — centred, straddles portrait and ability
+  7. Rarity gem          _Rarity/rarity (N) — fixed right side, top of portrait
   8. Stat hexagons       minion (8) — red=ATK left, green=DEF right
   9. Text overlays       mana cost, name (truncated), ability lines, ATK, DEF
 """
@@ -29,27 +29,29 @@ CARD_W: int = 140
 CARD_H: int = 194
 
 # Mana gem protrudes this many pixels above card rect top
-_MANA_OVERHANG: int = 20
+_MANA_OVERHANG: int = 27
 
 # ---------------------------------------------------------------------------
 # Layer geometry  (y in card-local coordinates, origin = card rect top-left)
 # Follows the ~40-45% portrait distribution requested.
 # ---------------------------------------------------------------------------
 
-_BANNER_Y: int   = 0
-_BANNER_H: int   = 22          # 11% of card
+_BANNER_Y: int   = -40
+_BANNER_H: int   = 100
+_BANNER_W: int   = 180          # más ancho que la carta; centrado horizontalmente
 
-_PORTRAIT_Y: int = 22
-_PORTRAIT_H: int = 84          # 43% of card — dominant element
+_PORTRAIT_Y: int = -5
+_PORTRAIT_H: int = 120          # 43% of card — dominant element
 _PORTRAIT_W: int = 118         # 84% of card width (11 px margin each side)
 
-# Rarity gem straddles portrait bottom and ability top
-_GEM_SZ: int    = 24
-_GEM_Y: int     = _PORTRAIT_Y + _PORTRAIT_H - 8    # overlaps portrait 8 px
+# Rarity gem: fixed right side, near top of card (above portrait and description)
+_GEM_SZ: int    = 35
+_GEM_X: int     = (CARD_W - _GEM_SZ) // 2          # centred horizontally
+_GEM_Y: int     = (CARD_H - _GEM_SZ) // 2 - 3      # centred vertically
 
-# Ability box tight under gem
-_ABILITY_Y: int = _GEM_Y + _GEM_SZ - 8             # overlaps gem 8 px
-_ABILITY_H: int = 52           # 27% of card — tall enough for 3 text lines
+# Ability box: adjust _ABILITY_Y to move it; height fills to card bottom automatically
+_ABILITY_Y: int = _PORTRAIT_Y + _PORTRAIT_H - 50    # negative = more overlap with portrait
+_ABILITY_H: int = CARD_H - _ABILITY_Y               # auto-fills remaining space
 
 # Stats hexagons: bottom-anchored, no type plate between them
 _STATS_H: int   = 28
@@ -102,6 +104,24 @@ def _fit(text: str, font: pygame.font.Font, max_w: int) -> str:
     while len(text) > 1 and font.size(text + "…")[0] > max_w:
         text = text[:-1]
     return text + "…"
+
+
+def _wrap(text: str, font: pygame.font.Font, max_w: int) -> list[str]:
+    """Word-wrap text into lines that fit max_w. Truncates with '…' only if a single word doesn't fit."""
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = (current + " " + word).strip()
+        if font.size(candidate)[0] <= max_w:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word if font.size(word)[0] <= max_w else _fit(word, font, max_w)
+    if current:
+        lines.append(current)
+    return lines or [""]
 
 
 def _ability_lines(card: Card) -> list[str]:
@@ -190,19 +210,20 @@ def draw_card(
     _blit(portrait_frame, px, ry + _PORTRAIT_Y)
 
     # ------------------------------------------------------------------
-    # 4. Name banner  (minion 6, full width)
+    # 4. Mana gem  (detrás del banner, encima del frame)
     # ------------------------------------------------------------------
-    banner = sp.get_card_component("banner", CARD_W, _BANNER_H)
-    _blit(banner, rx, ry + _BANNER_Y)
-
-    # ------------------------------------------------------------------
-    # 5. Mana gem  (minion 7, protrudes above card top)
-    # ------------------------------------------------------------------
-    mana_w, mana_h = 52, 26
+    mana_w, mana_h = 100, 26
     mana_surf = sp.get_card_component("mana", mana_w, mana_h)
     mana_bx   = rx + (CARD_W - mana_w) // 2
     mana_by   = ry - _MANA_OVERHANG - mana_h // 2
     _blit(mana_surf, mana_bx, mana_by)
+
+    # ------------------------------------------------------------------
+    # 5. Name banner  (encima del mana gem)
+    # ------------------------------------------------------------------
+    banner = sp.get_card_component("banner", _BANNER_W, _BANNER_H)
+    banner_bx = rx + (CARD_W - _BANNER_W) // 2
+    _blit(banner, banner_bx, ry + _BANNER_Y)
 
     # ------------------------------------------------------------------
     # 6. Ability box  (minion 2, full width)
@@ -211,68 +232,59 @@ def draw_card(
     _blit(ability, rx, ry + _ABILITY_Y)
 
     # ------------------------------------------------------------------
-    # 7. Rarity gem  (centred, straddles portrait/ability boundary)
+    # 7. Rarity gem  (fixed right side, top of card, above portrait)
     # ------------------------------------------------------------------
     gem    = sp.get_rarity_badge(card.rarity.name, size=_GEM_SZ)
-    gem_bx = rx + (CARD_W - _GEM_SZ) // 2
+    gem_bx = rx + _GEM_X
     gem_by = ry + _GEM_Y
     _blit(gem, gem_bx, gem_by)
     if gem is None:
         gem_col = _RARITY_COLOR.get(card.rarity, colors.TEXT_SECONDARY)
         pygame.draw.circle(surface, gem_col,
-                           (rx + CARD_W // 2, ry + _GEM_Y + _GEM_SZ // 2), 8)
+                           (gem_bx + _GEM_SZ // 2, gem_by + _GEM_SZ // 2), 8)
 
     # ------------------------------------------------------------------
-    # 8. Stat hexagons  (minion 8, full width, no plate between them)
+    # 8. Text overlays
     # ------------------------------------------------------------------
-    stats_surf = sp.get_card_component("stats", CARD_W, _STATS_H)
-    _blit(stats_surf, rx, ry + _STATS_Y)
-
-    # ------------------------------------------------------------------
-    # 9. Text overlays
-    # ------------------------------------------------------------------
-    stat_cy = ry + _STATS_Y + _STATS_H // 2
 
     # — Mana cost (always visible, never truncated)
     mana_col = colors.TEXT_PRIMARY if affordable else pygame.Color(220, 60, 60)
     mc = fonts.get(17).render(str(card.cost), True, mana_col)
     surface.blit(mc, mc.get_rect(centerx=rx + CARD_W // 2,
-                                  centery=mana_by + mana_h // 2))
+                                  centery=mana_by + mana_h // 2 - 4))
 
     # — Card name (truncated with … if needed)
     name_col  = colors.TEXT_PRIMARY if affordable else pygame.Color(110, 110, 110)
     name_font = fonts.get(10)
     max_name  = CARD_W - 26               # leave room for mana orb on the left
     name_s    = name_font.render(_fit(card.name, name_font, max_name), True, name_col)
-    surface.blit(name_s, name_s.get_rect(centerx=rx + CARD_W // 2,
-                                          centery=ry + _BANNER_Y + _BANNER_H // 2))
+    surface.blit(name_s, name_s.get_rect(centerx=rx + CARD_W // 2 ,
+                                          centery=ry + _BANNER_Y + _BANNER_H // 2 - 15))
 
-    # — Ability lines (up to 3 lines inside ability box)
-    lines = _ability_lines(card)
-    if lines:
-        eff_font  = fonts.get(9)
-        max_text  = CARD_W - 14
-        line_h    = eff_font.size("A")[1] + 2
-        total_h   = len(lines) * line_h
-        start_y   = ry + _ABILITY_Y + (_ABILITY_H - total_h) // 2
-        for i, line in enumerate(lines):
-            eff_s = eff_font.render(_fit(line, eff_font, max_text), True, colors.TEXT_SECONDARY)
+    # — Ability lines (word-wrap; truncate with … only when truly no space left)
+    raw_lines = _ability_lines(card)
+    if raw_lines:
+        eff_font   = fonts.get(11)
+        pad_x      = 18
+        max_text   = CARD_W - pad_x * 2
+        line_h     = eff_font.size("A")[1] + 2
+        max_lines  = (_ABILITY_H - 8) // line_h
+
+        wrapped: list[str] = []
+        for raw in raw_lines:
+            wrapped.extend(_wrap(raw, eff_font, max_text))
+
+        if len(wrapped) > max_lines:
+            wrapped = wrapped[:max_lines]
+            wrapped[-1] = _fit(wrapped[-1] + "…", eff_font, max_text)
+
+        total_h = len(wrapped) * line_h
+        start_y = ry + _ABILITY_Y + (_ABILITY_H - total_h) // 2 - 6
+        for i, line in enumerate(wrapped):
+            eff_s = eff_font.render(line, True, colors.TEXT_PRIMARY)
             surface.blit(eff_s, eff_s.get_rect(centerx=rx + CARD_W // 2,
                                                  centery=start_y + i * line_h + line_h // 2))
 
-    # — ATK  (left red hexagon, NEVER hidden or truncated)
-    dmg     = card.total_damage()
-    atk_val = BigValue.format_int(dmg + bonus_damage) if dmg > 0 else "—"
-    atk_col = colors.TEXT_DAMAGE if dmg > 0 else pygame.Color(100, 60, 60)
-    ats     = fonts.get(13).render(atk_val, True, atk_col)
-    surface.blit(ats, ats.get_rect(centerx=rx + _ATK_CX, centery=stat_cy))
-
-    # — DEF  (right green hexagon, NEVER hidden or truncated)
-    blk     = card.total_block()
-    def_val = BigValue.format_int(blk + bonus_block) if blk > 0 else "—"
-    def_col = colors.TEXT_BLOCK if blk > 0 else pygame.Color(60, 100, 60)
-    dfs     = fonts.get(13).render(def_val, True, def_col)
-    surface.blit(dfs, dfs.get_rect(centerx=rx + _DEF_CX, centery=stat_cy))
 
     # ------------------------------------------------------------------
     # Selection / hover border  (drawn last so it's always on top)

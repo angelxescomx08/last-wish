@@ -62,18 +62,18 @@ ENEMY_SPRITE_PATHS: dict[str, str] = {
 #   _Rarity/rarity (N) = rarity gem (centred below portrait)
 
 CARD_FRAME_PATHS: dict[str, str] = {
-    "ATTACK": "Minion/Alternate (1).png",
-    "SKILL":  "Minion/Alternate (2).png",
-    "POWER":  "Minion/Alternate (3).png",
+    "ATTACK": "Landmark/Alternate (1).png",
+    "SKILL":  "Landmark/Alternate (2).png",
+    "POWER":  "Landmark/Alternate (3).png",
 }
 
 CARD_COMPONENT_PATHS: dict[str, str] = {
-    "mana":       "Minion/minion (7).png",   # mana gem — sticks out above card top
-    "banner":     "Minion/minion (6).png",   # name ribbon — overlaps portrait top
-    "portrait":   "Minion/minion (4).png",   # oval portrait frame (transparent centre)
-    "ability":    "Minion/minion (2).png",   # skill/ability box
-    "type_plate": "Minion/minion (3).png",   # "minion" type label
-    "stats":      "Minion/minion (8).png",   # two hexagons: red ATK | green DEF
+    "mana":       "Landmark/landmark (7).png",
+    "banner":     "Landmark/landmark (6).png",
+    "portrait":   "Landmark/minion (4).png",
+    "ability":    "Landmark/landmark (2).png",
+    "type_plate": "Landmark/landmark (3).png",
+    "stats":      "Landmark/minion (8).png",   # new pack — two hexagons: red ATK | green DEF
 }
 
 RARITY_BADGE_PATHS: dict[str, str] = {
