@@ -34,3 +34,6 @@ htmlcov/
 
 # pygame assets cache
 assets/cache/
+
+# Large design source files (exceed GitHub 100 MB limit)
+assets/3_Creative Pack/
