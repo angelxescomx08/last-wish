@@ -7,8 +7,10 @@ from src.application.end_turn import end_player_turn
 from src.application.play_card import play_card
 from src.domain.combat import CombatState
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
+from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.entity_widget import (
     ENEMY_W,
@@ -104,9 +106,12 @@ class CombatScene:
         self._fonts               = fonts
         self._sprites             = SpriteLoader()
         self._is_boss             = is_boss
-        self._death_acknowledged  = False   # prevents pushing DeathScene more than once
-        self._victory_acknowledged = False  # prevents pushing reward scene more than once
+        self._death_acknowledged  = False
+        self._victory_acknowledged = False
         self._initial_enemy_count = len(state.enemies)
+
+        self._sound = SoundPlayer()
+        self._fx    = FxLayer(fonts.get(16))
 
         # Mouse
         self._mouse: tuple[int, int] = (0, 0)
@@ -153,12 +158,15 @@ class CombatScene:
     def update(self, dt: float) -> None:
         if self._overlay is not None and self._overlay.dismissed:
             self._overlay = None
+        self._fx.update(dt)
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(colors.BG_DARK)
         self._draw_top_bar(surface)
         self._draw_battlefield(surface)
         self._draw_hand_area(surface)
+
+        self._fx.draw(surface)
 
         if self._in_targeting_mode:
             self._draw_targeting_hint(surface)
@@ -415,7 +423,7 @@ class CombatScene:
 
         # End turn
         if self._end_turn_rect and self._end_turn_rect.collidepoint(pos):
-            end_player_turn(self._state)
+            self._do_end_turn()
             return
 
         # Targeting mode: click enemy → play card; click card → switch; click blank → cancel
@@ -423,7 +431,7 @@ class CombatScene:
             for i, rect in enumerate(self._enemy_rects):
                 if rect.collidepoint(pos):
                     if i < len(self._state.enemies) and self._state.enemies[i].is_alive:
-                        play_card(self._state, self._state.selected_card_index, i)  # type: ignore[arg-type]
+                        self._do_play_card(self._state.selected_card_index, i)  # type: ignore[arg-type]
                     return
             for i, rect in enumerate(self._card_rects):
                 if _card_hover_rect(rect).collidepoint(pos):
@@ -431,7 +439,7 @@ class CombatScene:
                     if card.total_damage() > 0:
                         self._state.selected_card_index = i
                     elif self._state.mana.can_afford(card.cost):
-                        play_card(self._state, i, None)
+                        self._do_play_card(i, None)
                     return
             self._state.selected_card_index = None
             return
@@ -439,7 +447,7 @@ class CombatScene:
         # Normal card click
         for i, rect in enumerate(self._card_rects):
             if _card_hover_rect(rect).collidepoint(pos):
-                card       = self._state.hand.cards[i]
+                card         = self._state.hand.cards[i]
                 needs_target = card.total_damage() > 0
                 can_afford   = self._state.mana.can_afford(card.cost)
 
@@ -448,11 +456,49 @@ class CombatScene:
                         None if self._state.selected_card_index == i else i
                     )
                 elif can_afford:
-                    play_card(self._state, i, None)
+                    self._do_play_card(i, None)
                 return
 
         # Click on empty space clears selection
         self._state.selected_card_index = None
+
+    # ------------------------------------------------------------------
+    # Feedback helpers
+    # ------------------------------------------------------------------
+
+    def _do_play_card(self, card_idx: int, target_idx: int | None) -> None:
+        state         = self._state
+        old_enemy_hps = [e.current_hp for e in state.enemies]
+        old_block     = state.player.block
+
+        self._sound.play_card()
+        play_card(state, card_idx, target_idx)
+
+        block_gained = state.player.block - old_block
+        if block_gained > 0 and self._player_rect:
+            self._fx.add_block_flash(self._player_rect, block_gained)
+            self._sound.play_block()
+
+        for i, (old_hp, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
+            dmg = old_hp - enemy.current_hp
+            if dmg > 0 and i < len(self._enemy_rects):
+                self._fx.add_hit_flash(self._enemy_rects[i], dmg)
+                self._sound.play_attack()
+                if not enemy.is_alive:
+                    self._fx.add_death_flash(self._enemy_rects[i])
+                    self._sound.play_death()
+
+    def _do_end_turn(self) -> None:
+        state  = self._state
+        old_hp = state.player.current_hp
+
+        self._sound.play_end_turn()
+        end_player_turn(state)
+
+        dmg = old_hp - state.player.current_hp
+        if dmg > 0 and self._player_rect:
+            self._fx.add_hit_flash(self._player_rect, dmg)
+            self._sound.play_hit()
 
 
 # ---------------------------------------------------------------------------

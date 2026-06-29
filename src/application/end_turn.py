@@ -4,7 +4,7 @@ import random
 
 from src.application import relic_effects
 from src.domain.combat import CombatState
-from src.domain.entities import Enemy, Intent, IntentType
+from src.domain.entities import Enemy, Intent, IntentType, StatusEffect
 
 _HAND_DRAW_SIZE: int = 5
 
@@ -47,7 +47,10 @@ def _discard_hand(state: CombatState) -> None:
 def _run_enemy_turn(state: CombatState) -> None:
     for enemy in state.enemies:
         if enemy.is_alive:
-            enemy.block = 0         # reset block at the START of each enemy's action
+            _tick_status_effects(enemy)   # poison/burn deal damage before acting
+            if not enemy.is_alive:        # killed by status? skip action
+                continue
+            enemy.block = 0              # reset block at the START of each enemy's action
             _execute_intent(state, enemy)
 
     # Remove defeated enemies before rolling new intents
@@ -78,6 +81,15 @@ def _execute_intent(state: CombatState, enemy: Enemy) -> None:
 
         case IntentType.UNKNOWN:
             pass
+
+
+def _tick_status_effects(enemy: Enemy) -> None:
+    """Apply per-turn status effects and reduce their stacks by 1."""
+    for se in enemy.status_effects:
+        if se.name == "Veneno":
+            enemy.current_hp = max(0, enemy.current_hp - se.stacks)
+            se.stacks -= 1
+    enemy.status_effects = [se for se in enemy.status_effects if se.stacks > 0]
 
 
 def _roll_intent(enemy: Enemy) -> Intent:

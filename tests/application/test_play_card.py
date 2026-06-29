@@ -364,3 +364,194 @@ class TestAttackBonus:
         state = _make_state([_attack_card(1)], player_attack_bonus=10**9, enemy_hp=10**9 + 2)
         play_card(state, 0, 0)
         assert state.enemies[0].current_hp == 1  # 10^9+2 - (1+10^9)
+
+
+# ---------------------------------------------------------------------------
+# on_play callback
+# ---------------------------------------------------------------------------
+
+class TestOnPlay:
+    def _card_with_on_play(self, fn, *, cost=0, needs_target=False) -> Card:
+        return Card(
+            id="custom", name="Custom", card_type=CardType.SKILL, cost=cost,
+            base_effect=CardEffect("Custom", needs_target=needs_target, on_play=fn),
+        )
+
+    def test_on_play_called_when_card_played(self):
+        called = []
+        card = self._card_with_on_play(lambda state: called.append(True))
+        state = _make_state([card])
+        play_card(state, 0, None)
+        assert called == [True]
+
+    def test_on_play_not_called_on_failed_play(self):
+        called = []
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=5,
+            base_effect=CardEffect("X", on_play=lambda state: called.append(True)),
+        )
+        state = _make_state([card], mana_current=1)
+        play_card(state, 0, None)
+        assert called == []
+
+    def test_on_play_sees_correct_targeted_enemy_index(self):
+        captured = []
+        card = self._card_with_on_play(
+            lambda state: captured.append(state.targeted_enemy_index),
+            needs_target=True,
+        )
+        state = _make_state([card])
+        play_card(state, 0, 0)
+        assert captured == [0]
+
+    def test_on_play_can_deal_damage_to_enemy(self):
+        def hurt(state):
+            state.enemies[0].current_hp = max(0, state.enemies[0].current_hp - 10)
+
+        card = self._card_with_on_play(hurt)
+        state = _make_state([card], enemy_hp=50)
+        play_card(state, 0, None)
+        assert state.enemies[0].current_hp == 40
+
+    def test_on_play_can_heal_player(self):
+        def heal(state):
+            state.player.current_hp = min(state.player.max_hp, state.player.current_hp + 5)
+
+        card = self._card_with_on_play(heal)
+        state = _make_state([card], player_hp=70)
+        play_card(state, 0, None)
+        assert state.player.current_hp == 75
+
+    def test_on_play_sees_mana_already_spent(self):
+        captured = []
+        card = self._card_with_on_play(
+            lambda state: captured.append(state.mana.current), cost=1
+        )
+        state = _make_state([card], mana_current=3)
+        play_card(state, 0, None)
+        assert captured == [2]  # 3 - 1 spent
+
+    def test_on_play_sees_card_already_in_discard(self):
+        captured = []
+        card = self._card_with_on_play(lambda state: captured.append(state.discard_pile.count))
+        state = _make_state([card])
+        play_card(state, 0, None)
+        assert captured == [1]  # played card went to discard first
+
+    def test_on_play_sees_card_not_in_hand_anymore(self):
+        captured = []
+        card = self._card_with_on_play(lambda state: captured.append(state.hand.count))
+        state = _make_state([card])
+        play_card(state, 0, None)
+        assert captured == [0]
+
+    def test_on_play_reads_draw_pile(self):
+        draw_cards = [_draw_card(), _draw_card(), _draw_card()]
+        captured = []
+        card = self._card_with_on_play(lambda state: captured.append(state.draw_pile.count))
+        state = _make_state([card], draw_cards=draw_cards)
+        play_card(state, 0, None)
+        assert captured == [3]
+
+    def test_targeted_enemy_index_reset_after_play(self):
+        card = self._card_with_on_play(lambda state: None, needs_target=True)
+        state = _make_state([card])
+        play_card(state, 0, 0)
+        assert state.targeted_enemy_index is None
+
+    def test_on_play_damages_all_enemies(self):
+        def aoe(state):
+            for e in state.enemies:
+                e.current_hp = max(0, e.current_hp - 5)
+
+        card = self._card_with_on_play(aoe)
+        state = _make_state([card], enemy_hp=20)
+        # add a second enemy
+        from src.domain.entities import Intent, IntentType
+        state.enemies.append(
+            Enemy(id="e2", name="Otro", max_hp=20, current_hp=20,
+                  intent=Intent(IntentType.ATTACK, 5))
+        )
+        play_card(state, 0, None)
+        assert state.enemies[0].current_hp == 15
+        assert state.enemies[1].current_hp == 15
+
+    def test_on_play_stacked_effect_also_called(self):
+        called = []
+        base_fn  = lambda state: called.append("base")
+        stack_fn = lambda state: called.append("stack")
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=0,
+            base_effect=CardEffect("X", on_play=base_fn),
+            stacked_effects=[CardEffect("X2", on_play=stack_fn)],
+        )
+        state = _make_state([card])
+        play_card(state, 0, None)
+        assert called == ["base", "stack"]
+
+
+# ---------------------------------------------------------------------------
+# needs_target flag
+# ---------------------------------------------------------------------------
+
+class TestNeedsTarget:
+    def test_needs_target_true_requires_target(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=0,
+            base_effect=CardEffect("X", needs_target=True),
+        )
+        state = _make_state([card])
+        result = play_card(state, 0, None)
+        assert not result.success
+
+    def test_needs_target_true_with_target_succeeds(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=0,
+            base_effect=CardEffect("X", needs_target=True),
+        )
+        state = _make_state([card])
+        result = play_card(state, 0, 0)
+        assert result.success
+
+    def test_needs_target_false_no_target_succeeds(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=0,
+            base_effect=CardEffect("X", needs_target=False),
+        )
+        state = _make_state([card])
+        result = play_card(state, 0, None)
+        assert result.success
+
+
+# ---------------------------------------------------------------------------
+# mana_gain field
+# ---------------------------------------------------------------------------
+
+class TestManaGain:
+    def test_mana_gain_restores_mana(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=0,
+            base_effect=CardEffect("X", mana_gain=2),
+        )
+        state = _make_state([card], mana_current=1, mana_max=4)
+        play_card(state, 0, None)
+        assert state.mana.current == 3  # 1 + 2
+
+    def test_mana_gain_capped_at_maximum(self):
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=0,
+            base_effect=CardEffect("X", mana_gain=10),
+        )
+        state = _make_state([card], mana_current=2, mana_max=3)
+        play_card(state, 0, None)
+        assert state.mana.current == 3  # capped at max
+
+    def test_mana_gain_after_cost_paid(self):
+        # cost=2, mana_gain=1 → net: -1 mana
+        card = Card(
+            id="x", name="X", card_type=CardType.SKILL, cost=2,
+            base_effect=CardEffect("X", mana_gain=1),
+        )
+        state = _make_state([card], mana_current=3, mana_max=3)
+        play_card(state, 0, None)
+        assert state.mana.current == 2  # 3 - 2 + 1

@@ -6,7 +6,7 @@ import pytest
 from src.application.end_turn import draw_opening_hand, end_player_turn
 from src.domain.card import Card, CardEffect, CardType
 from src.domain.combat import CombatState
-from src.domain.entities import Enemy, Intent, IntentType, Player
+from src.domain.entities import Enemy, Intent, IntentType, Player, StatusEffect
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
 from src.domain.pile import DiscardPile, DrawPile, Hand
@@ -305,3 +305,70 @@ class TestEnemyBlock:
         # Both values are valid (random new intent), but neither can be negative
         assert first_block >= 0
         assert second_block >= 0
+
+
+# ---------------------------------------------------------------------------
+# Poison status effect processing
+# ---------------------------------------------------------------------------
+
+class TestPoisonStatusEffect:
+    def _make_poison_state(self, enemy_hp: int, stacks: int, player_hp: int = 80) -> CombatState:
+        state = _make_state(
+            draw_count=20,
+            player_hp=player_hp,
+            enemy_hp=enemy_hp,
+            enemy_intent=Intent(IntentType.UNKNOWN, 0),
+        )
+        state.enemies[0].status_effects = [StatusEffect("Veneno", stacks, is_buff=False)]
+        return state
+
+    def test_poison_deals_stacks_damage(self):
+        state = self._make_poison_state(enemy_hp=30, stacks=5)
+        end_player_turn(state)
+        assert state.enemies[0].current_hp == 25  # 30 - 5
+
+    def test_poison_stacks_decrease_by_one_each_turn(self):
+        state = self._make_poison_state(enemy_hp=100, stacks=4)
+        end_player_turn(state)
+        assert state.enemies[0].status_effects[0].stacks == 3
+
+    def test_poison_removed_when_stacks_reach_zero(self):
+        state = self._make_poison_state(enemy_hp=100, stacks=1)
+        end_player_turn(state)
+        assert state.enemies[0].status_effects == []
+
+    def test_poison_can_kill_enemy(self):
+        state = self._make_poison_state(enemy_hp=3, stacks=10)
+        enemy = state.enemies[0]  # keep reference — dead enemies are removed from list
+        end_player_turn(state)
+        assert enemy.current_hp == 0
+
+    def test_enemy_killed_by_poison_is_removed(self):
+        state = self._make_poison_state(enemy_hp=2, stacks=5)
+        end_player_turn(state)
+        assert len(state.enemies) == 0
+
+    def test_enemy_killed_by_poison_does_not_attack(self):
+        # Enemy would deal 999 damage but dies to poison first
+        state = _make_state(draw_count=20, player_hp=80, enemy_hp=1,
+                            enemy_intent=Intent(IntentType.ATTACK, 999))
+        state.enemies[0].status_effects = [StatusEffect("Veneno", 5, is_buff=False)]
+        end_player_turn(state)
+        assert state.player.current_hp == 80  # not attacked
+
+    def test_poison_accumulates_over_multiple_turns(self):
+        # stacks=3 → turn1: 3 dmg (stacks→2), turn2: 2 dmg (stacks→1), turn3: 1 dmg (gone)
+        state = self._make_poison_state(enemy_hp=100, stacks=3)
+        end_player_turn(state)
+        assert state.enemies[0].current_hp == 97
+        end_player_turn(state)
+        assert state.enemies[0].current_hp == 95
+        end_player_turn(state)
+        assert state.enemies[0].current_hp == 94
+        assert state.enemies[0].status_effects == []
+
+    def test_no_status_no_damage(self):
+        state = _make_state(draw_count=20, enemy_hp=50,
+                            enemy_intent=Intent(IntentType.UNKNOWN, 0))
+        end_player_turn(state)
+        assert state.enemies[0].current_hp == 50

@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from typing import TYPE_CHECKING, Callable
 
 from src.domain.numbers import BigValue
+
+if TYPE_CHECKING:
+    from src.domain.combat import CombatState
 
 
 class CardType(Enum):
@@ -44,12 +48,22 @@ class CardEffect:
 
     Cards accumulate effects via stacking / breaking-and-merging.
     Each effect contributes independently to the resolved totals.
+
+    on_play: optional callable that receives the full CombatState after
+    damage/block/mana have been applied.  Use it for any effect that
+    cannot be expressed as a plain damage/block value: AoE, status
+    application, deck-reading, conditional damage, etc.
+
+    needs_target: set True when on_play requires a target enemy but the
+    card deals no base damage (which would otherwise force targeting).
     """
     name: str
     damage: BigValue = field(default_factory=lambda: BigValue(0))
     block: BigValue = field(default_factory=lambda: BigValue(0))
     draw: int = 0
     mana_gain: int = 0
+    needs_target: bool = False
+    on_play: Callable[[CombatState], None] | None = None
 
 
 @dataclass

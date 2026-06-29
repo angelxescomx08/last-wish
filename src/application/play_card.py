@@ -31,16 +31,21 @@ def play_card(
     dmg = card.total_damage()
     blk = card.total_block()
 
-    if dmg > 0 and target_enemy_index is None:
+    # A card needs a target if it deals base damage OR any effect declares it.
+    needs_target = dmg > 0 or any(fx.needs_target for fx in card.all_effects())
+
+    if needs_target and target_enemy_index is None:
         return PlayResult(False, "Esta carta necesita un objetivo")
+
+    if needs_target and target_enemy_index is not None:
+        if target_enemy_index >= len(state.enemies):
+            return PlayResult(False, "Objetivo inválido")
+        if not state.enemies[target_enemy_index].is_alive:
+            return PlayResult(False, "Ese enemigo ya está derrotado")
 
     # Apply damage to target enemy (relic bonus + character attack_bonus)
     if dmg > 0 and target_enemy_index is not None:
-        if target_enemy_index >= len(state.enemies):
-            return PlayResult(False, "Objetivo inválido")
         enemy = state.enemies[target_enemy_index]
-        if not enemy.is_alive:
-            return PlayResult(False, "Ese enemigo ya está derrotado")
         effective_dmg = (
             dmg
             + relic_effects.extra_attack_damage(state.relics)
@@ -57,15 +62,26 @@ def play_card(
     # Compute extra draws before mutating the hand
     draw_count = sum(fx.draw for fx in card.all_effects())
 
-    # Spend mana and move card out of hand
+    # Spend mana, then apply any mana refund from the card
     state.mana.spend(card.cost)
-    played = state.hand.cards.pop(card_index)
+    mana_gain = sum(fx.mana_gain for fx in card.all_effects())
+    if mana_gain > 0:
+        state.mana.gain(mana_gain)
 
-    # Powers stay on the field; everything else goes to discard
+    # Move card out of hand (powers stay on field; everything else goes to discard)
+    played = state.hand.cards.pop(card_index)
     if played.card_type == CardType.POWER:
         state.active_powers.append(played)
     else:
         state.discard_pile.cards.append(played)
+
+    # Run custom on_play logic — state is fully updated at this point:
+    # card is out of hand, mana spent, base damage/block applied.
+    # targeted_enemy_index is set so callbacks can read it.
+    state.targeted_enemy_index = target_enemy_index
+    for fx in card.all_effects():
+        if fx.on_play is not None:
+            fx.on_play(state)
 
     # Draw bonus cards
     for _ in range(draw_count):
