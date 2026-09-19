@@ -1,46 +1,37 @@
-"""Shop scene — buys thematic card packs.
-
-Shows four packs with their name, description, and cost.
-The player clicks one they can afford to open it (→ PackOpeningScene).
-The selected_pack flag is consumed by SceneManager.
-
-Public flags:
-  selected_pack: PackTheme | None — set when player clicks an affordable pack.
-  cleared: bool                   — True when player clicks "Salir".
-"""
+"""Shop with three single-stock relics and three single-stock packs."""
 from __future__ import annotations
 
 import pygame
 
-from src.domain.card_pool import ALL_PACKS, PackDef, PackTheme
+from src.application import relic_effects
+from src.application.run_manager import pick_shop_stock
+from src.domain.card_pool import PackTheme
 from src.domain.run import Run
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
+from src.presentation.ui.card_widget import _wrap
 
-_BG      = pygame.Color(10, 14, 18)
-_PACK_W  = 260
-_PACK_H  = 160
-_PACK_GAP = 20
+_RELIC_COST = 150
+_TILE_W = 330
+_TILE_H = 190
+_GAP = 24
 
 
 class ShopScene:
-    """Shop: four pack tiles + exit button."""
-
     def __init__(self, run: Run, fonts: FontRegistry) -> None:
-        self._run          = run
-        self._fonts        = fonts
-        self._sprites      = SpriteLoader()
-        self._pack_rects:  list[pygame.Rect] = []
-        self._hovered:     int | None = None
-        self._exit_rect:   pygame.Rect | None = None
-
+        self._run = run
+        self._fonts = fonts
+        self._sprites = SpriteLoader()
+        self._packs, self._relics = pick_shop_stock(run)
+        self._sold_packs: set[int] = set()
+        self._sold_relics: set[int] = set()
+        self._pack_rects: list[pygame.Rect] = []
+        self._relic_rects: list[pygame.Rect] = []
+        self._hovered: tuple[str, int] | None = None
+        self._exit_rect: pygame.Rect | None = None
         self.selected_pack: PackTheme | None = None
-        self.cleared:       bool = False
-
-    # ------------------------------------------------------------------
-    # Protocol
-    # ------------------------------------------------------------------
+        self.cleared = False
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.MOUSEMOTION:
@@ -52,106 +43,87 @@ class ShopScene:
         pass
 
     def draw(self, surface: pygame.Surface) -> None:
-        surface.fill(_BG)
+        surface.fill(pygame.Color(10, 14, 18))
         cx = surface.get_width() // 2
-
-        # Title
-        t = self._fonts.get(26).render("Tienda del Viajero", True, colors.TEXT_ACCENT)
-        surface.blit(t, t.get_rect(centerx=cx, centery=50))
-
-        # Gold
-        g = self._fonts.get(14).render(
-            f"Oro disponible: {self._run.gold}", True, pygame.Color(220, 190, 50)
-        )
-        surface.blit(g, g.get_rect(centerx=cx, centery=88))
-
-        # Pack tiles — 2×2 grid centred
-        cols    = 2
-        total_w = cols * _PACK_W + (cols - 1) * _PACK_GAP
-        start_x = cx - total_w // 2
-        start_y = 120
-
+        self._label(surface, 'Tienda del Viajero', (cx, 45), 26, colors.TEXT_ACCENT)
+        self._label(surface, f'Oro disponible: {self._run.gold}', (cx, 85), 16, colors.TEXT_ACCENT)
+        start_x = cx - (3 * _TILE_W + 2 * _GAP) // 2
+        self._relic_rects = []
         self._pack_rects = []
-        for idx, pack in enumerate(ALL_PACKS):
-            row  = idx // cols
-            col  = idx % cols
-            px   = start_x + col * (_PACK_W + _PACK_GAP)
-            py   = start_y + row * (_PACK_H + _PACK_GAP)
-            rect = pygame.Rect(px, py, _PACK_W, _PACK_H)
-            self._pack_rects.append(rect)
-            self._draw_pack_tile(surface, pack, rect, idx, self._sprites)
+        for kind, items, sold, rects, top in (
+            ('Reliquias', self._relics, self._sold_relics, self._relic_rects, 140),
+            ('Sobres', self._packs, self._sold_packs, self._pack_rects, 385),
+        ):
+            self._label(surface, kind, (cx, top - 20), 16, colors.TEXT_SECONDARY)
+            for i, item in enumerate(items):
+                rect = pygame.Rect(start_x + i * (_TILE_W + _GAP), top, _TILE_W, _TILE_H)
+                rects.append(rect)
+                is_pack = kind == 'Sobres'
+                cost = item.cost if is_pack else _RELIC_COST
+                sprite = (self._sprites.get_pack_sprite(item.theme.value, 90) if is_pack
+                          else self._sprites.get_relic_sprite(item.name, 64))
+                self._draw_tile(surface, item, cost, sprite, rect, i in sold,
+                                self._hovered == (kind, i))
+        self._exit_rect = pygame.Rect(cx - 80, 625, 160, 42)
+        pygame.draw.rect(surface, colors.BG_PANEL, self._exit_rect, border_radius=6)
+        self._label(surface, 'Salir', self._exit_rect.center, 16, colors.TEXT_PRIMARY)
 
-        # Exit
-        es = self._fonts.get(14).render("Salir", True, colors.TEXT_SECONDARY)
-        er = es.get_rect(centerx=cx, centery=500)
-        self._exit_rect = pygame.Rect(er.x - 16, er.y - 8, er.width + 32, er.height + 16)
-        pygame.draw.rect(surface, colors.BG_PANEL,     self._exit_rect, border_radius=6)
-        pygame.draw.rect(surface, colors.PANEL_BORDER, self._exit_rect, 1, border_radius=6)
-        surface.blit(es, er)
+    def _label(self, surface, text, center, size, color):
+        rendered = self._fonts.get(size).render(text, True, color)
+        surface.blit(rendered, rendered.get_rect(center=center))
 
-    def _draw_pack_tile(
-        self,
-        surface: pygame.Surface,
-        pack: PackDef,
-        rect: pygame.Rect,
-        idx: int,
-        sprites: SpriteLoader,
-    ) -> None:
-        can_afford = self._run.gold >= pack.cost
-        hovered    = self._hovered == idx
-
-        bg_col   = pygame.Color(30, 40, 55)      if can_afford else pygame.Color(28, 28, 35)
-        border_c = colors.TEXT_ACCENT             if hovered and can_afford else \
-                   pygame.Color(80, 120, 160)     if can_afford else \
-                   pygame.Color(50, 50, 60)
-
-        pygame.draw.rect(surface, bg_col,   rect, border_radius=8)
-
-        # Booster art on the left side of the tile
-        booster = sprites.get_pack_sprite(pack.theme.value, size=100)
-        if booster is not None:
-            br = booster.get_rect(left=rect.x + 10, centery=rect.centery)
-            surface.blit(booster, br)
-            text_cx = rect.x + 120 + (rect.width - 120) // 2
-        else:
-            text_cx = rect.centerx
-
-        pygame.draw.rect(surface, border_c, rect, 2, border_radius=8)
-
-        name_col = colors.TEXT_ACCENT if can_afford else pygame.Color(80, 80, 80)
-        ns = self._fonts.get(15).render(pack.name, True, name_col)
-        surface.blit(ns, ns.get_rect(centerx=text_cx, centery=rect.top + 38))
-
-        desc_col = colors.TEXT_SECONDARY if can_afford else pygame.Color(60, 60, 60)
-        ds = self._fonts.get(11).render(pack.description, True, desc_col)
-        surface.blit(ds, ds.get_rect(centerx=text_cx, centery=rect.top + 70))
-
-        cost_col = pygame.Color(220, 190, 50) if can_afford else pygame.Color(150, 80, 80)
-        cs = self._fonts.get(14).render(f"{pack.cost} oro", True, cost_col)
-        surface.blit(cs, cs.get_rect(centerx=text_cx, centery=rect.top + 104))
-
-        if not can_afford:
-            na = self._fonts.get(10).render("Sin fondos", True, pygame.Color(150, 80, 80))
-            surface.blit(na, na.get_rect(centerx=text_cx, centery=rect.top + 132))
-
-    # ------------------------------------------------------------------
-    # Input
-    # ------------------------------------------------------------------
+    def _draw_tile(self, surface, item, cost, sprite, rect, sold, hovered):
+        available = not sold and self._run.gold >= cost
+        border = colors.TEXT_ACCENT if hovered and available else colors.PANEL_BORDER
+        pygame.draw.rect(surface, colors.BG_PANEL, rect, border_radius=8)
+        pygame.draw.rect(surface, border, rect, 2, border_radius=8)
+        if sprite is not None:
+            art = sprite.copy()
+            if sold:
+                art.set_alpha(60)
+            surface.blit(art, art.get_rect(center=(rect.x + 55, rect.y + 90)))
+        color = colors.TEXT_SECONDARY if sold else colors.TEXT_PRIMARY
+        text_x = rect.x + 215
+        self._label(surface, item.name, (rect.centerx, rect.y + 25), 16, color)
+        lines = _wrap(item.description, self._fonts.get(13), 205)
+        for i, line in enumerate(lines):
+            self._label(surface, line, (text_x, rect.y + 65 + i * 19), 13, color)
+        label = 'Agotado' if sold else f'{cost} oro'
+        self._label(surface, label, (rect.centerx, rect.bottom - 40), 16,
+                    colors.TEXT_SECONDARY if sold else colors.TEXT_ACCENT)
+        if not sold and not available:
+            self._label(surface, 'Sin fondos', (rect.centerx, rect.bottom - 18), 12,
+                        pygame.Color(180, 90, 90))
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
         self._hovered = None
-        for i, rect in enumerate(self._pack_rects):
-            if rect.collidepoint(pos):
-                self._hovered = i
-                return
+        for kind, rects in (('Sobres', self._pack_rects), ('Reliquias', self._relic_rects)):
+            for i, rect in enumerate(rects):
+                if rect.collidepoint(pos):
+                    self._hovered = (kind, i)
+                    return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.selected_pack is not None or self.cleared:
+            return
         for i, rect in enumerate(self._pack_rects):
             if rect.collidepoint(pos):
-                pack = ALL_PACKS[i]
-                if self._run.gold >= pack.cost:
-                    self._run.gold  -= pack.cost
+                pack = self._packs[i]
+                if i not in self._sold_packs and self._run.gold >= pack.cost:
+                    self._run.gold -= pack.cost
+                    self._sold_packs.add(i)
                     self.selected_pack = pack.theme
+                return
+        for i, rect in enumerate(self._relic_rects):
+            if rect.collidepoint(pos):
+                if i not in self._sold_relics and self._run.gold >= _RELIC_COST:
+                    self._run.gold -= _RELIC_COST
+                    self._sold_relics.add(i)
+                    self._run.add_relic(self._relics[i])
+                    self._run.player_max_hp = (
+                        self._run.character.stats.max_hp
+                        + relic_effects.max_hp_bonus(self._run.relics)
+                    )
                 return
         if self._exit_rect and self._exit_rect.collidepoint(pos):
             self.cleared = True

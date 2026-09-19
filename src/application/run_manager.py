@@ -14,7 +14,7 @@ import random
 
 from src.application import relic_effects
 from src.application.map_generator import generate_map
-from src.domain.card_pool import starter_deck
+from src.domain.card_pool import ALL_PACKS, PackDef, starter_deck
 from src.domain.character import Character
 from src.domain.entities import Enemy, Intent, IntentType
 from src.domain.relic import Relic, RelicTag
@@ -189,3 +189,13 @@ def advance_floor(run: Run) -> None:
     # Update max HP in case IRON_HEART was picked up this floor
     bonus           = relic_effects.max_hp_bonus(run.relics)
     run.player_max_hp = run.character.stats.max_hp + bonus
+
+
+def pick_shop_stock(run: Run) -> tuple[list[PackDef], list[Relic]]:
+    """Choose three distinct offers of each kind, stable for this room."""
+    rng = random.Random(f"shop:{run.seed}:{run.floor}:{run.current_room_id}")
+    owned_tags = {relic.tag for relic in run.relics}
+    pool = [relic for relic in _all_relic_defs() if relic.tag not in owned_tags]
+    if len(pool) < 3:
+        pool = _all_relic_defs()
+    return rng.sample(ALL_PACKS, 3), rng.sample(pool, 3)

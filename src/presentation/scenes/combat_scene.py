@@ -51,7 +51,7 @@ _CARD_AREA_X0: int = 10    # 1260 px available; 8×140+7×5=1155 fits cleanly
 _CARD_AREA_X1: int = 1270
 
 _ENEMY_Y: int  = 125
-_PLAYER_X: int = 930
+_PLAYER_X: int = 195
 _PLAYER_Y: int = 90
 
 _MANA_CX: int   = 68
@@ -69,9 +69,9 @@ _END_TURN_W: int = 183
 _END_TURN_H: int = 38
 
 _ENEMY_SLOTS: list[tuple[int, int]] = [
-    (30,  _ENEMY_Y),
-    (210, _ENEMY_Y),
-    (390, _ENEMY_Y),
+    (762, _ENEMY_Y),
+    (942, _ENEMY_Y),
+    (1122, _ENEMY_Y),
 ]
 
 _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)

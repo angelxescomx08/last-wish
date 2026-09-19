@@ -1,7 +1,7 @@
 """Card widget — layered sprite card renderer.
 
 Layer order (back to front):
-  1. Card frame          Alternate (1/2/3) — full background by card type
+  1. Plain backing       coloured background by card type
   2. Portrait tint       coloured ellipse matching card type
   3. Portrait frame      minion (4) — oval border, transparent centre
   4. Name banner         minion (6) — ribbon overlapping portrait top
@@ -187,12 +187,11 @@ def draw_card(
     # ------------------------------------------------------------------
     # 1. Card frame  (Alternate 1/2/3)
     # ------------------------------------------------------------------
-    frame = sp.get_card_frame(card.card_type.name, CARD_W, CARD_H)
-    _blit(frame, rx, ry)
-    if frame is None:
-        tint = _TYPE_TINT.get(card.card_type, colors.BG_PANEL)
-        pygame.draw.rect(surface, tint, rect, border_radius=8)
-        pygame.draw.rect(surface, colors.CARD_BORDER, rect, 1, border_radius=8)
+    # The full Alternate frame already contains the portrait and ability box.
+    # Use a plain backing so the individual components are drawn only once.
+    tint = _TYPE_TINT.get(card.card_type, colors.BG_PANEL)
+    pygame.draw.rect(surface, tint, rect, border_radius=8)
+    pygame.draw.rect(surface, colors.CARD_BORDER, rect, 1, border_radius=8)
 
     # ------------------------------------------------------------------
     # 2. Portrait tint  (coloured ellipse inside oval frame)
