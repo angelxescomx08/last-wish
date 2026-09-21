@@ -219,17 +219,20 @@ def draw_player(
     fonts: FontRegistry,
     *,
     sprite: pygame.Surface | None = None,
+    framed: bool = True,
 ) -> pygame.Rect:
     rect = pygame.Rect(x, y, PLAYER_W, PLAYER_H)
 
     # Body background
-    pygame.draw.rect(surface, colors.PLAYER_BODY, rect, border_radius=_CORNER)
+    if framed:
+        pygame.draw.rect(surface, colors.PLAYER_BODY, rect, border_radius=_CORNER)
 
     # Sprite centred inside body (drawn before border)
     if sprite is not None:
         surface.blit(sprite, sprite.get_rect(center=rect.center))
 
-    pygame.draw.rect(surface, colors.PLAYER_ACCENT, rect, 2, border_radius=_CORNER)
+    if framed:
+        pygame.draw.rect(surface, colors.PLAYER_ACCENT, rect, 2, border_radius=_CORNER)
 
     # Name
     nf = fonts.get(12)

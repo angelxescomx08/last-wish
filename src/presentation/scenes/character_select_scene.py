@@ -21,6 +21,7 @@ from src.domain.character import ALL_CHARACTERS, Character, CharacterStats
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.sprite_loader import SpriteLoader, IDLE_CYCLE_SECONDS
 
 # ---------------------------------------------------------------------------
 # Layout (virtual 1280×720 canvas)
@@ -84,6 +85,8 @@ class CharacterSelectScene:
 
     def __init__(self, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
+        self._sprites = SpriteLoader()
+        self._idle_time = 0.0
         self._fonts          = fonts
         self._selected_index = 0
         self._panel_rects:   list[pygame.Rect] = []
@@ -123,7 +126,7 @@ class CharacterSelectScene:
             self._handle_click(event.pos)
 
     def update(self, dt: float) -> None:
-        pass
+        self._idle_time = (self._idle_time + max(0.0, dt)) % IDLE_CYCLE_SECONDS
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(_BG_COLOR)
@@ -196,16 +199,20 @@ class CharacterSelectScene:
         desc_surf = self._fonts.get(11).render(character.description, True, colors.TEXT_SECONDARY)
         surface.blit(desc_surf, desc_surf.get_rect(centerx=cx, centery=y + 68))
 
+        sprite = self._sprites.get_player_sprite(character.name, 96, elapsed=self._idle_time)
+        if sprite is not None:
+            surface.blit(sprite, sprite.get_rect(center=(cx, y + 137)))
+
         # Stats header
         stats_label = self._fonts.get(9).render("ESTADÍSTICAS", True, colors.TEXT_SECONDARY)
-        surface.blit(stats_label, (x + 14, y + 90))
+        surface.blit(stats_label, (x + 14, y + 200))
 
         # Stat rows
-        stat_y = y + 110
+        stat_y = y + 218
         for row in _STAT_ROWS:
             self._draw_stat_row(surface, row, getattr(character.stats, row.attr),
                                 x + 14, stat_y)
-            stat_y += 52
+            stat_y += 32
 
         # Selection indicator at bottom
         if selected:

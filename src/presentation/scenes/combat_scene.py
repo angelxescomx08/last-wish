@@ -9,7 +9,7 @@ from src.domain.combat import CombatState
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
-from src.infrastructure.sprite_loader import SpriteLoader
+from src.infrastructure.sprite_loader import SpriteLoader, IDLE_CYCLE_SECONDS
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.entity_widget import (
@@ -111,6 +111,7 @@ class CombatScene:
         self._state               = state
         self._fonts               = fonts
         self._sprites             = SpriteLoader()
+        self._idle_time = 0.0
         self._is_boss             = is_boss
         self._death_acknowledged  = False
         self._victory_acknowledged = False
@@ -168,6 +169,7 @@ class CombatScene:
             self._cancel_selection()
 
     def update(self, dt: float) -> None:
+        self._idle_time = (self._idle_time + max(0.0, dt)) % IDLE_CYCLE_SECONDS
         if self._overlay is not None and self._overlay.dismissed:
             self._overlay = None
             self._sound.play_cancel()
@@ -286,7 +288,10 @@ class CombatScene:
 
         self._player_rect = draw_player(
             surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
-            sprite=self._sprites.get_player_sprite(self._state.player.name),
+            sprite=self._sprites.get_player_sprite(self._state.player.name,
+                size=192 if self._state.player.name in ("La Guerrera", "El Guerrero") else 128,
+                elapsed=self._idle_time),
+            framed=self._state.player.name not in ("La Guerrera", "El Guerrero"),
         )
 
         if self._state.active_powers:

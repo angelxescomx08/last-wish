@@ -35,8 +35,8 @@ class Character:
 ALL_CHARACTERS: list[Character] = [
     Character(
         id=CharacterId.WARRIOR,
-        name="El Guerrero",
-        description="Luchador resistente que prefiere la defensa.",
+        name="La Guerrera",
+        description="Luchadora resistente que prefiere la defensa.",
         stats=CharacterStats(damage=4, max_hp=100, luck=2, max_mana=2, dexterity=4),
     ),
     Character(
