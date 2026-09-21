@@ -9,6 +9,11 @@ from src.domain.entities import Enemy, Intent, IntentType, StatusEffect
 _HAND_DRAW_SIZE: int = 5
 
 
+def cards_per_turn(state: CombatState) -> int:
+    """Nominal turn draw; actual draws are limited by deck and hand capacity."""
+    return _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics) + state.player.luck // 5
+
+
 def end_player_turn(state: CombatState) -> None:
     """Full end-of-turn pipeline: discard → enemies act → new player turn.
 
@@ -27,12 +32,7 @@ def draw_opening_hand(state: CombatState) -> None:
     if bonus_mana > 0:
         state.mana.maximum += bonus_mana
         state.mana.refill()
-    count = (
-        _HAND_DRAW_SIZE
-        + relic_effects.extra_draw_per_turn(state.relics)
-        + state.player.luck // 5
-    )
-    _draw_cards(state, count)
+    _draw_cards(state, cards_per_turn(state))
 
 
 # ---------------------------------------------------------------------------
@@ -111,12 +111,7 @@ def _begin_player_turn(state: CombatState) -> None:
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None
-    count = (
-        _HAND_DRAW_SIZE
-        + relic_effects.extra_draw_per_turn(state.relics)
-        + state.player.luck // 5
-    )
-    _draw_cards(state, count)
+    _draw_cards(state, cards_per_turn(state))
 
 
 def _draw_cards(state: CombatState, count: int) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pygame
 
 from src.application import relic_effects
-from src.application.end_turn import end_player_turn
+from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import play_card
 from src.domain.combat import CombatState
 from src.infrastructure import colors
@@ -28,6 +28,8 @@ from src.presentation.ui.hud_widget import (
     draw_turn_counter,
 )
 from src.presentation.ui.pile_viewer import PileViewer
+from src.presentation.ui.relic_viewer import RelicViewer
+from src.presentation.ui.collection_viewer import CollectionViewer
 from src.presentation.ui.tooltip import (
     TooltipContent,
     card_tooltip,
@@ -44,11 +46,11 @@ from src.presentation.ui.tooltip import (
 # ---------------------------------------------------------------------------
 
 _TOP_BAR_H: int    = 68
-_HAND_AREA_Y: int  = 500
+_HAND_AREA_Y: int  = 465
 _CARD_Y: int       = 524   # bottom = 524+194 = 718, within 720
-_CARD_GAP: int     = 5
-_CARD_AREA_X0: int = 10    # 1260 px available; 8×140+7×5=1155 fits cleanly
-_CARD_AREA_X1: int = 1270
+_CARD_GAP: int     = 28
+_CARD_AREA_X0: int = 180   # reserve left mana and right pile controls
+_CARD_AREA_X1: int = 1100
 
 _ENEMY_Y: int  = 125
 _PLAYER_X: int = 195
@@ -58,10 +60,10 @@ _MANA_CX: int   = 68
 _MANA_CY: int   = 595
 _MANA_R: int    = 42          # orb radius (for hover detection)
 
-_DRAW_X: int    = 1145
-_DRAW_Y: int    = 565
-_DISCARD_X: int = 1210
-_DISCARD_Y: int = 565
+_DRAW_X: int    = 1156
+_DRAW_Y: int    = 527
+_DISCARD_X: int = 1156
+_DISCARD_Y: int = 621
 
 _END_TURN_X: int = 1085
 _END_TURN_Y: int = 15
@@ -78,10 +80,13 @@ _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)
 
 
 def _card_positions(count: int) -> list[tuple[int, int]]:
-    total_w = count * CARD_W + max(0, count - 1) * _CARD_GAP
-    area_w  = _CARD_AREA_X1 - _CARD_AREA_X0
-    start_x = _CARD_AREA_X0 + (area_w - total_w) // 2
-    return [(start_x + i * (CARD_W + _CARD_GAP), _CARD_Y) for i in range(count)]
+    if count == 0:
+        return []
+    area_w = _CARD_AREA_X1 - _CARD_AREA_X0
+    step = min(CARD_W + _CARD_GAP, (area_w - CARD_W) / max(1, count - 1))
+    total_w = CARD_W + step * (count - 1)
+    start_x = _CARD_AREA_X0 + (area_w - total_w) / 2
+    return [(round(start_x + i * step), _CARD_Y) for i in range(count)]
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +130,10 @@ class CombatScene:
         self._end_turn_rect:  pygame.Rect | None = None
         self._draw_pile_rect: pygame.Rect | None = None
         self._disc_pile_rect: pygame.Rect | None = None
+        self._relic_collection_rect = pygame.Rect(10, 15, 164, 38)
+        self._hand_collection_rect = pygame.Rect(12, 662, 145, 34)
+        self._draw_info_rect = pygame.Rect(756, 10, 285, 48)
+        self._card_draw_order: list[int] = []
 
         # Hover state (which element index / flag is under cursor)
         self._hovered_card:      int | None = None
@@ -137,7 +146,7 @@ class CombatScene:
         self._hovered_disc_pile: bool = False
 
         # Overlay
-        self._overlay: PileViewer | None = None
+        self._overlay: CollectionViewer | None = None
         self._feedback_text = ""
         self._feedback_time = 0.0
 
@@ -236,10 +245,19 @@ class CombatScene:
                          (0, _TOP_BAR_H - 1), (surface.get_width(), _TOP_BAR_H - 1))
 
         self._relic_rects = draw_relics(
-            surface, self._state.relics, 10, 10, self._fonts,
+            surface, self._state.relics[:5], 184, 10, self._fonts,
             hovered_index=self._hovered_relic,
             sprites=self._sprites,
         )
+        pygame.draw.rect(surface, colors.BG_DARK, self._relic_collection_rect, border_radius=6)
+        text = self._fonts.get(14).render(f"Reliquias ({len(self._state.relics)}) · Ver", True, colors.TEXT_ACCENT)
+        surface.blit(text, text.get_rect(center=self._relic_collection_rect.center))
+        nominal_draw = cards_per_turn(self._state)
+        count = min(nominal_draw, self._state.hand.max_size)
+        label = self._fonts.get(15).render(f"ROBO POR TURNO: {count}", True, colors.TEXT_PRIMARY)
+        surface.blit(label, label.get_rect(center=(self._draw_info_rect.centerx, 25)))
+        hint = self._fonts.get(11).render(f"Base + bonos: {nominal_draw} · Mano máx.: {self._state.hand.max_size}", True, colors.TEXT_SECONDARY)
+        surface.blit(hint, hint.get_rect(center=(self._draw_info_rect.centerx, 47)))
         draw_turn_counter(surface, self._state.turn, surface.get_width() // 2, 34, self._fonts)
 
         self._end_turn_rect = draw_end_turn_button(
@@ -292,8 +310,15 @@ class CombatScene:
 
         cards     = self._state.hand.cards
         positions = _card_positions(len(cards))
-        self._card_rects = []
-        for i, (card, (cx, cy)) in enumerate(zip(cards, positions)):
+        self._card_rects = [pygame.Rect(x, y, CARD_W, CARD_H) for x, y in positions]
+        self._card_draw_order = list(range(len(cards)))
+        for lifted in (self._state.selected_card_index, self._hovered_card):
+            if lifted is not None and lifted in self._card_draw_order:
+                self._card_draw_order.remove(lifted)
+                self._card_draw_order.append(lifted)
+        for i in self._card_draw_order:
+            card = cards[i]
+            cx, cy = positions[i]
             bonus_dmg = (relic_atk_bonus + char_atk_bonus) if card.total_damage() > 0 else 0
             bonus_blk = char_blk_bonus if card.total_block() > 0 else 0
             rect = draw_card(
@@ -304,7 +329,7 @@ class CombatScene:
                 bonus_damage = bonus_dmg,
                 bonus_block  = bonus_blk,
             )
-            self._card_rects.append(rect)
+            self._card_rects[i] = rect
 
         self._draw_pile_rect = draw_pile_widget(
             surface, "ROBO", self._state.draw_pile.count,
@@ -315,11 +340,14 @@ class CombatScene:
             _DISCARD_X, _DISCARD_Y, self._fonts,
         )
 
-        hc_surf = self._fonts.get(11).render(
-            f"MANO  {self._state.hand.count}/{self._state.hand.max_size}",
-            True, colors.TEXT_SECONDARY,
-        )
-        surface.blit(hc_surf, (_MANA_CX + 52, _MANA_CY + 26))
+        pygame.draw.rect(surface, colors.BG_PANEL, self._hand_collection_rect, border_radius=6)
+        hc_surf = self._fonts.get(12).render(
+            f"Mano {self._state.hand.count}/{self._state.hand.max_size} · Ver", True, colors.TEXT_PRIMARY)
+        surface.blit(hc_surf, hc_surf.get_rect(center=self._hand_collection_rect.center))
+
+    def _card_hit_order(self) -> list[int]:
+        # Match actual stacking so the visible, raised card receives the click.
+        return [i for i in reversed(self._card_draw_order) if i < self._state.hand.count]
 
     def _draw_targeting_hint(self, surface: pygame.Surface) -> None:
         msg_surf = self._fonts.get(15).render(
@@ -348,6 +376,14 @@ class CombatScene:
         if self._hovered_relic is not None and self._hovered_relic < len(self._state.relics):
             return relic_tooltip(self._state.relics[self._hovered_relic])
 
+        if self._draw_info_rect.collidepoint(self._mouse):
+            return TooltipContent('Cartas por turno', [
+                '5 cartas base',
+                f'+{relic_effects.extra_draw_per_turn(self._state.relics)} por reliquias',
+                f'+{self._state.player.luck // 5} por suerte',
+                'El robo se limita al espacio libre en la mano',
+                'y a las cartas disponibles en robo y descarte.',
+            ])
         if self._hovered_player:
             return player_tooltip(self._state.player)
 
@@ -377,7 +413,8 @@ class CombatScene:
         self._hovered_disc_pile = False
         self._end_turn_hovered = False
 
-        for i, rect in enumerate(self._card_rects):
+        for i in self._card_hit_order():
+            rect = self._card_rects[i]
             if _card_hover_rect(rect).collidepoint(pos):
                 self._hovered_card = i
                 if i != previous_card:
@@ -419,6 +456,14 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self._relic_collection_rect.collidepoint(pos) or any(r.collidepoint(pos) for r in self._relic_rects):
+            self._overlay = RelicViewer(self._state.relics, self._fonts)
+            self._sound.play_confirm()
+            return
+        if self._hand_collection_rect.collidepoint(pos):
+            self._overlay = PileViewer('Tu mano', list(self._state.hand.cards), self._fonts)
+            self._sound.play_card()
+            return
         # Pile viewers
         if self._draw_pile_rect and self._draw_pile_rect.collidepoint(pos):
             self._overlay = PileViewer(
@@ -446,7 +491,8 @@ class CombatScene:
                     if i < len(self._state.enemies) and self._state.enemies[i].is_alive:
                         self._do_play_card(self._state.selected_card_index, i)  # type: ignore[arg-type]
                     return
-            for i, rect in enumerate(self._card_rects):
+            for i in self._card_hit_order():
+                rect = self._card_rects[i]
                 if _card_hover_rect(rect).collidepoint(pos):
                     card = self._state.hand.cards[i]
                     if not self._state.mana.can_afford(card.cost):
@@ -462,7 +508,8 @@ class CombatScene:
             return
 
         # Normal card click
-        for i, rect in enumerate(self._card_rects):
+        for i in self._card_hit_order():
+            rect = self._card_rects[i]
             if _card_hover_rect(rect).collidepoint(pos):
                 card         = self._state.hand.cards[i]
                 needs_target = card.total_damage() > 0
@@ -504,6 +551,7 @@ class CombatScene:
             self._show_error(result.message)
             return
         self._feedback_time = 0.0
+        self._hovered_card = None
         self._sound.play_card()
 
         block_gained = state.player.block - old_block
@@ -538,4 +586,4 @@ class CombatScene:
 # ---------------------------------------------------------------------------
 
 def _card_hover_rect(rect: pygame.Rect) -> pygame.Rect:
-    return pygame.Rect(rect.x, rect.y - 22, rect.width, rect.height + 22)
+    return pygame.Rect(rect.x, rect.y - 44, rect.width, rect.height + 44)

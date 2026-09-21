@@ -177,9 +177,8 @@ def draw_card(
             return
         if dim_alpha:
             s    = surf.copy()
-            dark = pygame.Surface(s.get_size(), pygame.SRCALPHA)
-            dark.fill((0, 0, 0, dim_alpha))
-            s.blit(dark, (0, 0))
+            shade = 255 - dim_alpha
+            s.fill((shade, shade, shade, 255), special_flags=pygame.BLEND_RGBA_MULT)
             surface.blit(s, (bx, by))
         else:
             surface.blit(surf, (bx, by))

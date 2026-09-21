@@ -18,6 +18,9 @@ from src.domain.run import Run
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
+from src.presentation.ui.pile_viewer import PileViewer
+from src.presentation.ui.relic_viewer import RelicViewer
+from src.presentation.ui.collection_viewer import CollectionViewer
 
 # ---------------------------------------------------------------------------
 # Color palette
@@ -113,12 +116,18 @@ class MapScene:
         self._hovered_id:  str | None = None
         self._mouse:       tuple[int, int] = (0, 0)
         self.selected_node: MapNode | None = None
+        self._overlay: CollectionViewer | None = None
+        self._relic_collection_rect = pygame.Rect(24, 16, 194, 36)
+        self._deck_collection_rect = pygame.Rect(1062, 16, 194, 36)
 
     # ------------------------------------------------------------------
     # Scene protocol
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self._overlay is not None:
+            self._overlay.handle_event(event)
+            return
         if event.type == pygame.MOUSEMOTION:
             self._mouse = event.pos
             self._update_hover(event.pos)
@@ -126,7 +135,9 @@ class MapScene:
             self._handle_click(event.pos)
 
     def update(self, dt: float) -> None:
-        pass
+        if self._overlay is not None and self._overlay.dismissed:
+            self._overlay = None
+            self._sound.play_cancel()
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(_BG)
@@ -140,6 +151,8 @@ class MapScene:
             self._draw_nodes(surface, gm, cell, org)
             self._draw_hover_tooltip(surface, gm)
         self._draw_footer(surface)
+        if self._overlay is not None:
+            self._overlay.draw(surface)
 
     # ------------------------------------------------------------------
     # Header / footer
@@ -155,12 +168,18 @@ class MapScene:
         info = "  |  ".join([
             f"HP: {run.player_current_hp}/{run.player_max_hp}",
             f"Oro: {run.gold}",
-            f"Reliquias: {len(run.relics)}",
-            f"Mazo: {len(run.deck)} cartas",
         ])
         s = self._fonts.get(13).render(info, True, colors.TEXT_PRIMARY)
         surface.blit(s, s.get_rect(centerx=cx, centery=52))
 
+        for rect, label in (
+            (self._relic_collection_rect, f"Ver reliquias ({len(run.relics)})"),
+            (self._deck_collection_rect, f"Ver mazo ({len(run.deck)})"),
+        ):
+            pygame.draw.rect(surface, colors.BG_PANEL, rect, border_radius=6)
+            pygame.draw.rect(surface, colors.PANEL_BORDER, rect, 1, border_radius=6)
+            text = self._fonts.get(15).render(label, True, colors.TEXT_ACCENT)
+            surface.blit(text, text.get_rect(center=rect.center))
         pygame.draw.line(surface, colors.PANEL_BORDER, (0, 66), (1280, 66))
 
     def _draw_footer(self, surface: pygame.Surface) -> None:
@@ -325,6 +344,14 @@ class MapScene:
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
         if self.selected_node is not None:
+            return
+        if self._relic_collection_rect.collidepoint(pos):
+            self._overlay = RelicViewer(self._run.relics, self._fonts)
+            self._sound.play_confirm()
+            return
+        if self._deck_collection_rect.collidepoint(pos):
+            self._overlay = PileViewer('Tu mazo', self._run.deck, self._fonts)
+            self._sound.play_card()
             return
         gm = self._run.current_map
         if gm is None:

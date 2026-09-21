@@ -12,7 +12,7 @@ from src.infrastructure.sprite_loader import SpriteLoader
 RELIC_SZ: int       = 48
 _RELIC_GAP: int     = 5
 _RELIC_ICON_SZ: int = 36   # sprite size inside the 48×48 box (6 px inset each side)
-_PILE_W: int = 56
+_PILE_W: int = 108
 _PILE_H: int = 76
 
 
@@ -78,16 +78,6 @@ def draw_mana(
     fonts: FontRegistry,
 ) -> None:
     radius = 40
-    # Outer ring segments to show current / max visually
-    for i in range(mana.maximum):
-        filled = i < mana.current
-        seg_col = colors.MANA_FILL if filled else colors.MANA_EMPTY
-        seg_rect = pygame.Rect(cx - radius + 2 + i * (radius * 2 - 4) // mana.maximum,
-                               cy - radius + 2,
-                               (radius * 2 - 4) // mana.maximum - 2,
-                               6)
-        pygame.draw.rect(surface, seg_col, seg_rect, border_radius=3)
-
     pygame.draw.circle(surface, colors.MANA_EMPTY, (cx, cy), radius)
     pygame.draw.circle(surface, colors.MANA_ORB_RING, (cx, cy), radius, 2)
 
@@ -123,9 +113,9 @@ def draw_pile_widget(
     count_surf = count_font.render(str(count), True, colors.TEXT_PRIMARY)
     surface.blit(count_surf, count_surf.get_rect(centerx=rect.centerx, centery=rect.centery - 5))
 
-    label_font = fonts.get(8)
-    label_surf = label_font.render(pile_type, True, colors.TEXT_SECONDARY)
-    surface.blit(label_surf, label_surf.get_rect(centerx=rect.centerx, bottom=rect.bottom - 3))
+    label_font = fonts.get(12)
+    label_surf = label_font.render(f"{pile_type} · Ver", True, colors.TEXT_SECONDARY)
+    surface.blit(label_surf, label_surf.get_rect(centerx=rect.centerx, bottom=rect.bottom - 7))
 
     return rect
 
