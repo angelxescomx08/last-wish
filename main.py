@@ -20,6 +20,7 @@ from src.application.run_manager import (
 from src.domain.card_pool import PackTheme
 from src.domain.map_node import RoomType
 from src.infrastructure.colors import TEXT_ACCENT, TEXT_PRIMARY
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.viewport import Viewport
 from src.infrastructure.preferences import UserPreferences, load_preferences, save_preferences
@@ -82,10 +83,14 @@ class SceneManager:
     scene needing to know about the next one.
     """
 
-    def __init__(self, initial: Scene, fonts: FontRegistry, prefs: UserPreferences) -> None:
+    def __init__(self, initial: Scene, fonts: FontRegistry, prefs: UserPreferences,
+                 *, sound: SoundPlayer | None = None) -> None:
         self._stack:         list[Scene] = [initial]
         self._fonts          = fonts
         self._prefs          = prefs
+        self._sound = sound if sound is not None else SoundPlayer(
+            sfx_volume=prefs.sfx_volume, music_volume=prefs.music_volume
+        )
         self._run            = None           # set when character is selected
         self.quit_requested: bool = False
 
@@ -115,6 +120,7 @@ class SceneManager:
         self._top().handle_event(event)
 
     def update(self, dt: float) -> None:
+        self._sound.update()
         top = self._top()
         top.update(dt)
         self._handle_transitions(top)
@@ -162,9 +168,9 @@ class SceneManager:
             return
         scene.requested_action = None
         if action == MenuAction.PLAY:
-            self.push(CharacterSelectScene(self._fonts))
+            self.push(CharacterSelectScene(self._fonts, sound=self._sound))
         elif action == MenuAction.SETTINGS:
-            self.push(SettingsScene(self._fonts, self._prefs))
+            self.push(SettingsScene(self._fonts, self._prefs, sound=self._sound))
         elif action == MenuAction.EXIT:
             self.quit_requested = True
 
@@ -173,7 +179,7 @@ class SceneManager:
             scene.confirmed = False
             self._run = create_run(scene.selected_character, scene.seed)
             self.pop()                      # remove CharacterSelectScene
-            self.push(MapScene(self._run, self._fonts))
+            self.push(MapScene(self._run, self._fonts, sound=self._sound))
 
         elif scene.back_to_menu:
             scene.back_to_menu = False
@@ -194,23 +200,23 @@ class SceneManager:
         if node.room_type == RoomType.COMBAT:
             enemies = generate_enemies(run, node.id)
             state   = create_combat_from_run(run, enemies)
-            self.push(CombatScene(state, self._fonts))
+            self.push(CombatScene(state, self._fonts, sound=self._sound))
 
         elif node.room_type == RoomType.BOSS:
             enemies = generate_boss(run)
             state   = create_combat_from_run(run, enemies)
-            self.push(CombatScene(state, self._fonts, is_boss=True))
+            self.push(CombatScene(state, self._fonts, is_boss=True, sound=self._sound))
 
         elif node.room_type == RoomType.TREASURE:
             relic = pick_treasure_relic(run, node.id)
-            self.push(TreasureScene(run, relic, self._fonts))
+            self.push(TreasureScene(run, relic, self._fonts, sound=self._sound))
 
         elif node.room_type == RoomType.SHOP:
-            self.push(ShopScene(run, self._fonts))
+            self.push(ShopScene(run, self._fonts, sound=self._sound))
 
         elif node.room_type == RoomType.EVENT:
             gold = generate_event_gold(run, node.id)
-            self.push(EventScene(run, gold, node.id, self._fonts))
+            self.push(EventScene(run, gold, node.id, self._fonts, sound=self._sound))
 
     def _t_combat(self, scene: CombatScene) -> None:
         run = self._run
@@ -218,22 +224,24 @@ class SceneManager:
         # Victory
         if scene.combat_won and not scene._victory_acknowledged:
             scene._victory_acknowledged = True
+            self._sound.play_win()
             enemies = scene.state.enemies   # already-dead list for gold calc
             if scene.is_boss:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
                                                 scene.state.enemies)
                 relics   = pick_boss_relics(run)
-                self.push(BossRewardScene(run, gold, relics, self._fonts))
+                self.push(BossRewardScene(run, gold, relics, self._fonts, sound=self._sound))
             else:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
                                                 scene.state.enemies)
                 cards    = pick_reward_cards(run, run.current_room_id or "unknown")
-                self.push(CombatRewardScene(run, gold, cards, self._fonts))
+                self.push(CombatRewardScene(run, gold, cards, self._fonts, sound=self._sound))
 
         # Death
         elif scene.death_occurred and not scene._death_acknowledged:
             scene._death_acknowledged = True
-            self.push(DeathScene(self._fonts, scene.turn_reached))
+            self._sound.play_death()
+            self.push(DeathScene(self._fonts, scene.turn_reached, sound=self._sound))
 
     def _t_combat_reward(self, scene: CombatRewardScene) -> None:
         if not scene.cleared:
@@ -267,7 +275,7 @@ class SceneManager:
             cards            = pick_pack_cards(run, theme)
             from src.domain.card_pool import pack_def_for_theme
             pack_name        = pack_def_for_theme(theme).name
-            self.push(PackOpeningScene(cards, pack_name, self._fonts))
+            self.push(PackOpeningScene(cards, pack_name, self._fonts, sound=self._sound))
 
         elif scene.cleared:
             scene.cleared = False
@@ -301,7 +309,7 @@ class SceneManager:
             cards  = pick_pack_cards(run, PackTheme.EPICO)
             from src.domain.card_pool import pack_def_for_theme
             name   = pack_def_for_theme(PackTheme.EPICO).name
-            self.push(PackOpeningScene(cards, name, self._fonts))
+            self.push(PackOpeningScene(cards, name, self._fonts, sound=self._sound))
 
         elif scene.cleared:
             scene.cleared = False
@@ -316,7 +324,7 @@ class SceneManager:
             self.pop()              # pop BossRewardScene
             self.pop()              # pop CombatScene
             advance_floor(run)
-            self.push(MapScene(run, self._fonts))
+            self.push(MapScene(run, self._fonts, sound=self._sound))
 
     def _t_settings(self, scene: SettingsScene) -> None:
         if scene.cleared:
@@ -333,7 +341,7 @@ class SceneManager:
 
         if action == DeathAction.NEW_GAME:
             self._pop_all_except_first()
-            self.push(CharacterSelectScene(self._fonts))
+            self.push(CharacterSelectScene(self._fonts, sound=self._sound))
         elif action == DeathAction.MAIN_MENU:
             self._pop_all_except_first()
 
@@ -359,6 +367,7 @@ def _transform_mouse(event: pygame.event.Event, viewport: Viewport) -> pygame.ev
 # ---------------------------------------------------------------------------
 
 def run(settings: GameSettings) -> None:
+    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
     pygame.init()
 
     screen = pygame.display.set_mode(
@@ -370,7 +379,9 @@ def run(settings: GameSettings) -> None:
     viewport      = Viewport(settings.width, settings.height)
     fonts         = FontRegistry()
     prefs         = load_preferences()
-    scene_manager = SceneManager(MainMenuScene(fonts), fonts, prefs)
+    sound = SoundPlayer(sfx_volume=prefs.sfx_volume, music_volume=prefs.music_volume)
+    sound.start_music()
+    scene_manager = SceneManager(MainMenuScene(fonts, sound=sound), fonts, prefs, sound=sound)
     clock         = pygame.time.Clock()
 
     running = True
@@ -406,6 +417,7 @@ def run(settings: GameSettings) -> None:
         viewport.present(screen)
         pygame.display.flip()
 
+    sound.stop_music()
     pygame.quit()
 
 

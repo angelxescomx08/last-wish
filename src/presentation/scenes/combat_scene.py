@@ -101,6 +101,7 @@ class CombatScene:
         fonts: FontRegistry,
         *,
         is_boss: bool = False,
+        sound: SoundPlayer | None = None,
     ) -> None:
         self._state               = state
         self._fonts               = fonts
@@ -110,7 +111,7 @@ class CombatScene:
         self._victory_acknowledged = False
         self._initial_enemy_count = len(state.enemies)
 
-        self._sound = SoundPlayer()
+        self._sound = sound if sound is not None else SoundPlayer()
         self._fx    = FxLayer(fonts.get(16))
 
         # Mouse
@@ -137,6 +138,8 @@ class CombatScene:
 
         # Overlay
         self._overlay: PileViewer | None = None
+        self._feedback_text = ""
+        self._feedback_time = 0.0
 
     # ------------------------------------------------------------------
     # Protocol
@@ -153,11 +156,13 @@ class CombatScene:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_click(event.pos)
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self._state.selected_card_index = None
+            self._cancel_selection()
 
     def update(self, dt: float) -> None:
         if self._overlay is not None and self._overlay.dismissed:
             self._overlay = None
+            self._sound.play_cancel()
+        self._feedback_time = max(0.0, self._feedback_time - dt)
         self._fx.update(dt)
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -167,6 +172,9 @@ class CombatScene:
         self._draw_hand_area(surface)
 
         self._fx.draw(surface)
+        if self._feedback_time > 0:
+            message = self._fonts.get(16).render(self._feedback_text, True, (245, 165, 125))
+            surface.blit(message, message.get_rect(center=(640, _HAND_AREA_Y - 48)))
 
         if self._in_targeting_mode:
             self._draw_targeting_hint(surface)
@@ -359,6 +367,7 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
+        previous_card = self._hovered_card
         self._hovered_card     = None
         self._hovered_enemy    = None
         self._hovered_relic    = None
@@ -371,6 +380,8 @@ class CombatScene:
         for i, rect in enumerate(self._card_rects):
             if _card_hover_rect(rect).collidepoint(pos):
                 self._hovered_card = i
+                if i != previous_card:
+                    self._sound.play_nav()
                 return
 
         for i, rect in enumerate(self._enemy_rects):
@@ -413,12 +424,14 @@ class CombatScene:
             self._overlay = PileViewer(
                 "Pila de Robo", list(self._state.draw_pile.cards), self._fonts
             )
+            self._sound.play_card()
             return
 
         if self._disc_pile_rect and self._disc_pile_rect.collidepoint(pos):
             self._overlay = PileViewer(
                 "Pila de Descarte", list(self._state.discard_pile.cards), self._fonts
             )
+            self._sound.play_card()
             return
 
         # End turn
@@ -436,12 +449,16 @@ class CombatScene:
             for i, rect in enumerate(self._card_rects):
                 if _card_hover_rect(rect).collidepoint(pos):
                     card = self._state.hand.cards[i]
-                    if card.total_damage() > 0:
-                        self._state.selected_card_index = i
-                    elif self._state.mana.can_afford(card.cost):
+                    if not self._state.mana.can_afford(card.cost):
+                        self._show_error("Maná insuficiente")
+                    elif card.total_damage() > 0:
+                        if self._state.selected_card_index != i:
+                            self._state.selected_card_index = i
+                            self._sound.play_confirm()
+                    else:
                         self._do_play_card(i, None)
                     return
-            self._state.selected_card_index = None
+            self._cancel_selection()
             return
 
         # Normal card click
@@ -451,28 +468,43 @@ class CombatScene:
                 needs_target = card.total_damage() > 0
                 can_afford   = self._state.mana.can_afford(card.cost)
 
-                if needs_target:
-                    self._state.selected_card_index = (
-                        None if self._state.selected_card_index == i else i
-                    )
-                elif can_afford:
+                if not can_afford:
+                    self._show_error("Maná insuficiente")
+                elif needs_target:
+                    self._state.selected_card_index = i
+                    self._sound.play_confirm()
+                else:
                     self._do_play_card(i, None)
                 return
 
         # Click on empty space clears selection
-        self._state.selected_card_index = None
+        self._cancel_selection()
 
     # ------------------------------------------------------------------
     # Feedback helpers
     # ------------------------------------------------------------------
+
+    def _cancel_selection(self) -> None:
+        if self._state.selected_card_index is not None:
+            self._state.selected_card_index = None
+            self._sound.play_cancel()
+
+    def _show_error(self, message: str) -> None:
+        self._feedback_text = message
+        self._feedback_time = 1.8
+        self._sound.play_error()
 
     def _do_play_card(self, card_idx: int, target_idx: int | None) -> None:
         state         = self._state
         old_enemy_hps = [e.current_hp for e in state.enemies]
         old_block     = state.player.block
 
+        result = play_card(state, card_idx, target_idx)
+        if not result.success:
+            self._show_error(result.message)
+            return
+        self._feedback_time = 0.0
         self._sound.play_card()
-        play_card(state, card_idx, target_idx)
 
         block_gained = state.player.block - old_block
         if block_gained > 0 and self._player_rect:

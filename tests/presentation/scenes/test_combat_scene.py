@@ -131,3 +131,11 @@ class TestCombatSceneUpdate:
         scene._overlay.dismissed = True
         scene.update(1 / 60)
         assert scene._overlay is None
+
+
+def test_rejected_card_does_not_play_success_sound():
+    from unittest.mock import Mock
+    scene = _scene()
+    scene._sound = Mock()
+    scene._do_play_card(-1, None)
+    scene._sound.play_card.assert_not_called()

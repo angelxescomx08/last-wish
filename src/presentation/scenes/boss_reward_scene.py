@@ -19,6 +19,7 @@ import pygame
 from src.domain.relic import Relic
 from src.domain.run import Run
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.tooltip import draw_tooltip, relic_tooltip
 
@@ -47,7 +48,10 @@ class BossRewardScene:
         gold_earned: int,
         relics: list[Relic],
         fonts: FontRegistry,
+        *,
+        sound: SoundPlayer | None = None,
     ) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._run          = run
         self._gold_earned  = gold_earned
         self._relics       = relics
@@ -171,21 +175,26 @@ class BossRewardScene:
     # ------------------------------------------------------------------
 
     def _update_relic_hover(self, pos: tuple[int, int]) -> None:
+        previous = self._hovered_rel
         self._hovered_rel = None
         for i, rect in enumerate(self._relic_rects):
             if rect.collidepoint(pos):
                 self._hovered_rel = i
+                if i != previous:
+                    self._sound.play_nav()
                 return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
         if self._phase == _Phase.GOLD:
             if self._btn_rect and self._btn_rect.collidepoint(pos):
+                self._sound.play_confirm()
                 self._phase = _Phase.PACK
                 self.open_pack_requested = True
 
         elif self._phase == _Phase.RELICS:
             for i, rect in enumerate(self._relic_rects):
                 if rect.collidepoint(pos):
+                    self._sound.play_reward()
                     self.chosen_relic = self._relics[i]
                     self._phase       = _Phase.DONE
                     self.cleared      = True

@@ -16,6 +16,7 @@ from src.domain.game_map import GameMap
 from src.domain.map_node import MapNode, RoomType
 from src.domain.run import Run
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 
 # ---------------------------------------------------------------------------
@@ -104,7 +105,8 @@ def _cell_rect(node: MapNode, org: tuple[int, int], cell: int, rows: int) -> pyg
 class MapScene:
     """Crossword-grid dungeon floor map."""
 
-    def __init__(self, run: Run, fonts: FontRegistry) -> None:
+    def __init__(self, run: Run, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._run          = run
         self._fonts        = fonts
         self._node_rects:  dict[str, pygame.Rect] = {}
@@ -307,6 +309,7 @@ class MapScene:
     # ------------------------------------------------------------------
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
+        previous = self._hovered_id
         self._hovered_id = None
         gm = self._run.current_map
         if gm is None:
@@ -316,9 +319,13 @@ class MapScene:
                 node = gm.nodes.get(nid)
                 if node and node.available and not node.visited:
                     self._hovered_id = nid
+                    if nid != previous:
+                        self._sound.play_nav()
                 return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.selected_node is not None:
+            return
         gm = self._run.current_map
         if gm is None:
             return
@@ -326,5 +333,6 @@ class MapScene:
             if rect.collidepoint(pos):
                 node = gm.nodes.get(nid)
                 if node and node.available and not node.visited:
+                    self._sound.play_travel()
                     self.selected_node = node
                 return

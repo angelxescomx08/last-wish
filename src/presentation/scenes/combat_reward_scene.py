@@ -14,6 +14,7 @@ import pygame
 from src.domain.card import Card
 from src.domain.run import Run
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.tooltip import TooltipContent, card_tooltip, draw_tooltip
@@ -31,7 +32,10 @@ class CombatRewardScene:
         gold_earned: int,
         cards: list[Card],
         fonts: FontRegistry,
+        *,
+        sound: SoundPlayer | None = None,
     ) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._run          = run
         self._gold_earned  = gold_earned
         self._cards        = cards
@@ -112,18 +116,25 @@ class CombatRewardScene:
     # ------------------------------------------------------------------
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
+        previous = self._hovered
         self._hovered = None
         for i, rect in enumerate(self._card_rects):
             if rect.collidepoint(pos):
                 self._hovered = i
+                if i != previous:
+                    self._sound.play_nav()
                 return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.cleared:
+            return
         for i, rect in enumerate(self._card_rects):
             if rect.collidepoint(pos):
+                self._sound.play_reward()
                 self.chosen_card = self._cards[i]
                 self.cleared     = True
                 return
         if self._skip_rect and self._skip_rect.collidepoint(pos):
+            self._sound.play_cancel()
             self.chosen_card = None
             self.cleared     = True

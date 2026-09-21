@@ -13,6 +13,7 @@ import pygame
 from src.domain.relic import Relic
 from src.domain.run import Run
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.tooltip import draw_tooltip, relic_tooltip
 
@@ -25,7 +26,8 @@ _BTN_H: int = 40
 class TreasureScene:
     """Treasure room: show a relic, let player take or skip."""
 
-    def __init__(self, run: Run, relic: Relic, fonts: FontRegistry) -> None:
+    def __init__(self, run: Run, relic: Relic, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._run         = run
         self._relic       = relic
         self._fonts       = fonts
@@ -101,9 +103,13 @@ class TreasureScene:
     # ------------------------------------------------------------------
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.cleared:
+            return
         if self._take_rect and self._take_rect.collidepoint(pos):
+            self._sound.play_reward()
             self.took_relic = True
             self.cleared    = True
         elif self._skip_rect and self._skip_rect.collidepoint(pos):
+            self._sound.play_cancel()
             self.took_relic = False
             self.cleared    = True

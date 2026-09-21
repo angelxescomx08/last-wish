@@ -10,6 +10,7 @@ import pygame
 
 from src.domain.card import Card
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.tooltip import card_tooltip, draw_tooltip
@@ -26,7 +27,11 @@ class PackOpeningScene:
         cards: list[Card],
         pack_name: str,
         fonts: FontRegistry,
+        *,
+        sound: SoundPlayer | None = None,
     ) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
+        self._reveal_pending = True
         self._cards      = cards
         self._pack_name  = pack_name
         self._fonts      = fonts
@@ -50,7 +55,9 @@ class PackOpeningScene:
             self._handle_click(event.pos)
 
     def update(self, dt: float) -> None:
-        pass
+        if self._reveal_pending and not self.cleared:
+            self._reveal_pending = False
+            self._sound.play_open_pack()
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(_BG)
@@ -96,18 +103,25 @@ class PackOpeningScene:
     # ------------------------------------------------------------------
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
+        previous = self._hovered
         self._hovered = None
         for i, rect in enumerate(self._card_rects):
             if rect.collidepoint(pos):
                 self._hovered = i
+                if i != previous:
+                    self._sound.play_nav()
                 return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.cleared:
+            return
         for i, rect in enumerate(self._card_rects):
             if rect.collidepoint(pos):
+                self._sound.play_reward()
                 self.chosen_card = self._cards[i]
                 self.cleared     = True
                 return
         if self._skip_rect and self._skip_rect.collidepoint(pos):
+            self._sound.play_cancel()
             self.chosen_card = None
             self.cleared     = True

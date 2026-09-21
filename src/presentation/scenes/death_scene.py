@@ -15,6 +15,7 @@ from enum import Enum, auto
 import pygame
 
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 
 # ---------------------------------------------------------------------------
@@ -46,7 +47,8 @@ class DeathScene:
     _TITLE    = "HAS MUERTO"
     _NAV_HINT = "↑ ↓ para navegar  |  ENTER para confirmar"
 
-    def __init__(self, fonts: FontRegistry, turn_reached: int) -> None:
+    def __init__(self, fonts: FontRegistry, turn_reached: int, *, sound: SoundPlayer | None = None) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._fonts          = fonts
         self._turn_reached   = turn_reached
         self._selected_index = 0
@@ -62,6 +64,8 @@ class DeathScene:
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self.requested_action is not None:
+            return
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
                 self._move_selection(-1)
@@ -123,15 +127,22 @@ class DeathScene:
         return rect
 
     def _move_selection(self, delta: int) -> None:
+        previous = self._selected_index
         n = len(self._options)
         self._selected_index = (self._selected_index + delta) % n
+        if self._selected_index != previous:
+            self._sound.play_nav()
 
     def _confirm_selection(self) -> None:
-        self.requested_action = self._options[self._selected_index].action
+        if self.requested_action is None:
+            self.requested_action = self._options[self._selected_index].action
+            self._sound.play_confirm()
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
         for i, rect in enumerate(self._option_rects):
             if rect.collidepoint(pos):
+                if self._selected_index != i:
+                    self._sound.play_nav()
                 self._selected_index = i
                 return
 

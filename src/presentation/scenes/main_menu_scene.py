@@ -17,6 +17,7 @@ from enum import Enum, auto
 import pygame
 
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 
 
@@ -52,7 +53,8 @@ class MainMenuScene:
     _SUBTITLE = "Un juego de cartas"
     _NAV_HINT = "↑ ↓ para navegar  |  ENTER para confirmar"
 
-    def __init__(self, fonts: FontRegistry, *, has_active_game: bool = False) -> None:
+    def __init__(self, fonts: FontRegistry, *, has_active_game: bool = False, sound: SoundPlayer | None = None) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._fonts          = fonts
         self._options        = self._build_options(has_active_game)
         self._selected_index = 0
@@ -64,6 +66,8 @@ class MainMenuScene:
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self.requested_action is not None:
+            return
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
                 self._move_selection(-1)
@@ -138,20 +142,26 @@ class MainMenuScene:
         return rect
 
     def _move_selection(self, delta: int) -> None:
+        previous = self._selected_index
         n = len(self._options)
         for _ in range(n):
             self._selected_index = (self._selected_index + delta) % n
             if self._options[self._selected_index].enabled:
+                if self._selected_index != previous:
+                    self._sound.play_nav()
                 return
 
     def _confirm_selection(self) -> None:
         opt = self._options[self._selected_index]
-        if opt.enabled:
+        if opt.enabled and self.requested_action is None:
             self.requested_action = opt.action
+            self._sound.play_confirm()
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
         for i, rect in enumerate(self._option_rects):
             if rect.collidepoint(pos) and self._options[i].enabled:
+                if self._selected_index != i:
+                    self._sound.play_nav()
                 self._selected_index = i
                 return
 

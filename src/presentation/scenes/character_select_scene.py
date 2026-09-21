@@ -19,6 +19,7 @@ import pygame
 
 from src.domain.character import ALL_CHARACTERS, Character, CharacterStats
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 
 # ---------------------------------------------------------------------------
@@ -81,7 +82,8 @@ class CharacterSelectScene:
     _TITLE    = "SELECCIÓN DE PERSONAJE"
     _NAV_HINT = "← → para navegar  |  ENTER para confirmar  |  ESC para volver"
 
-    def __init__(self, fonts: FontRegistry) -> None:
+    def __init__(self, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._fonts          = fonts
         self._selected_index = 0
         self._panel_rects:   list[pygame.Rect] = []
@@ -99,6 +101,8 @@ class CharacterSelectScene:
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self.confirmed or self.back_to_menu:
+            return
         if event.type == pygame.KEYDOWN:
             if self._seed_active:
                 self._handle_seed_key(event)
@@ -109,8 +113,10 @@ class CharacterSelectScene:
                     self._move_selection(1)
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     self.confirmed = True
+                    self._sound.play_confirm()
                 elif event.key == pygame.K_ESCAPE:
                     self.back_to_menu = True
+                    self._sound.play_cancel()
         elif event.type == pygame.MOUSEMOTION:
             self._update_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -273,16 +279,23 @@ class CharacterSelectScene:
 
     def _move_selection(self, delta: int) -> None:
         n = len(ALL_CHARACTERS)
-        self._selected_index = (self._selected_index + delta) % n
+        selected = (self._selected_index + delta) % n
+        if selected != self._selected_index:
+            self._sound.play_nav()
+        self._selected_index = selected
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
         for i, rect in enumerate(self._panel_rects):
             if rect.collidepoint(pos):
+                if self._selected_index != i:
+                    self._sound.play_nav()
                 self._selected_index = i
                 return
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
         if self._seed_rect.collidepoint(pos):
+            if not self._seed_active:
+                self._sound.play_confirm()
             self._seed_active = True
             return
 
@@ -292,6 +305,8 @@ class CharacterSelectScene:
             if rect.collidepoint(pos):
                 if self._selected_index == i:
                     self.confirmed = True
+                    self._sound.play_confirm()
                 else:
                     self._selected_index = i
+                    self._sound.play_nav()
                 return

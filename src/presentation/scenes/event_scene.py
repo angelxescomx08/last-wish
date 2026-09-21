@@ -9,6 +9,7 @@ import pygame
 
 from src.domain.run import Run
 from src.infrastructure import colors
+from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 
 _BG = pygame.Color(10, 10, 20)
@@ -33,7 +34,8 @@ def _event_text(room_id: str) -> tuple[str, str]:
 class EventScene:
     """Mysterious event: narrative text + gold reward."""
 
-    def __init__(self, run: Run, gold: int, room_id: str, fonts: FontRegistry) -> None:
+    def __init__(self, run: Run, gold: int, room_id: str, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:
+        self._sound = sound if sound is not None else SoundPlayer()
         self._run        = run
         self._gold       = gold
         self._fonts      = fonts
@@ -49,8 +51,11 @@ class EventScene:
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if self.cleared:
+            return
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._btn_rect and self._btn_rect.collidepoint(event.pos):
+                self._sound.play_reward()
                 self.cleared = True
 
     def update(self, dt: float) -> None:
