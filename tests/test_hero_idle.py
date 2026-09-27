@@ -5,7 +5,7 @@ from src.infrastructure.sprite_loader import SpriteLoader
 
 def test_idle_frames_are_transparent_and_feet_stay_aligned():
     frames = SpriteLoader().get_player_idle_frames(192)
-    assert len(frames) == 8
+    assert len(frames) == 96
     assert len({pygame.image.tobytes(frame, 'RGBA') for frame in frames}) > 1
     bottoms = []
     for frame in frames:
@@ -18,14 +18,29 @@ def test_idle_frames_are_transparent_and_feet_stay_aligned():
     assert max(bottoms) - min(bottoms) <= 2
 
 
-def test_idle_timing_is_a_gentle_seamless_ping_pong():
+def test_idle_timing_is_a_gentle_complete_cycle():
     from src.infrastructure.sprite_loader import IDLE_FRAME_SECONDS, IDLE_SEQUENCE, IDLE_CYCLE_SECONDS
     loader = SpriteLoader()
     frames = loader.get_player_idle_frames(192)
-    assert 2.3 <= IDLE_CYCLE_SECONDS <= 3.0
+    assert 3.0 <= IDLE_CYCLE_SECONDS <= 3.4
     for i, frame_index in enumerate(IDLE_SEQUENCE):
         assert loader.get_player_sprite('La Guerrera', 192, elapsed=(i + 0.5) * IDLE_FRAME_SECONDS) is frames[frame_index]
     assert loader.get_player_sprite('La Guerrera', 192, elapsed=0) is loader.get_player_sprite('La Guerrera', 192, elapsed=IDLE_CYCLE_SECONDS)
+
+
+def test_idle_boots_are_identical_throughout_cycle():
+    frames = SpriteLoader().get_player_idle_frames(96)
+    assert len({pygame.image.tobytes(frame.subsurface((0, 79, 96, 17)), 'RGBA')
+                for frame in frames}) == 1
+
+
+def test_idle_loop_seam_has_no_larger_jump_than_other_frames():
+    frames = SpriteLoader().get_player_idle_frames(96)
+    def difference(a, b):
+        return sum(a.get_at((x, y)) != b.get_at((x, y))
+                   for y in range(96) for x in range(96))
+    changes = [difference(a, b) for a, b in zip(frames, frames[1:])]
+    assert difference(frames[-1], frames[0]) <= max(changes)
 
 
 def test_missing_idle_asset_uses_existing_character_fallback(monkeypatch):
@@ -72,3 +87,11 @@ def test_scene_renders_a_different_idle_pose_after_time_passes(screen_name):
     scene.update(1.26)
     scene.draw(surface)
     assert pygame.image.tobytes(surface.subsurface(area), 'RGBA') != before
+
+
+def test_combat_idle_has_no_long_frozen_segment():
+    frames = SpriteLoader().get_player_idle_frames(192)
+    pixels = [pygame.image.tobytes(frame, 'RGBA') for frame in frames]
+    # Brief pixel-grid holds at a direction change are valid; a visible freeze is not.
+    doubled = pixels + pixels
+    assert all(len(set(doubled[i:i+5])) > 1 for i in range(len(pixels)))

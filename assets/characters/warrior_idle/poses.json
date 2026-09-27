@@ -1,0 +1,401 @@
+{
+  "source": "warrior-source-v2.png",
+  "method": "layered-joint-rig",
+  "frame_size": [
+    256,
+    256
+  ],
+  "columns": 8,
+  "rows": 12,
+  "frame_seconds": 0.03333333333333333,
+  "anchor": [
+    128,
+    246
+  ],
+  "frames": [
+    {
+      "file": "idle_00.png",
+      "phase": 0.0
+    },
+    {
+      "file": "idle_01.png",
+      "phase": 0.06545
+    },
+    {
+      "file": "idle_02.png",
+      "phase": 0.1309
+    },
+    {
+      "file": "idle_03.png",
+      "phase": 0.19635
+    },
+    {
+      "file": "idle_04.png",
+      "phase": 0.261799
+    },
+    {
+      "file": "idle_05.png",
+      "phase": 0.327249
+    },
+    {
+      "file": "idle_06.png",
+      "phase": 0.392699
+    },
+    {
+      "file": "idle_07.png",
+      "phase": 0.458149
+    },
+    {
+      "file": "idle_08.png",
+      "phase": 0.523599
+    },
+    {
+      "file": "idle_09.png",
+      "phase": 0.589049
+    },
+    {
+      "file": "idle_10.png",
+      "phase": 0.654498
+    },
+    {
+      "file": "idle_11.png",
+      "phase": 0.719948
+    },
+    {
+      "file": "idle_12.png",
+      "phase": 0.785398
+    },
+    {
+      "file": "idle_13.png",
+      "phase": 0.850848
+    },
+    {
+      "file": "idle_14.png",
+      "phase": 0.916298
+    },
+    {
+      "file": "idle_15.png",
+      "phase": 0.981748
+    },
+    {
+      "file": "idle_16.png",
+      "phase": 1.047198
+    },
+    {
+      "file": "idle_17.png",
+      "phase": 1.112647
+    },
+    {
+      "file": "idle_18.png",
+      "phase": 1.178097
+    },
+    {
+      "file": "idle_19.png",
+      "phase": 1.243547
+    },
+    {
+      "file": "idle_20.png",
+      "phase": 1.308997
+    },
+    {
+      "file": "idle_21.png",
+      "phase": 1.374447
+    },
+    {
+      "file": "idle_22.png",
+      "phase": 1.439897
+    },
+    {
+      "file": "idle_23.png",
+      "phase": 1.505346
+    },
+    {
+      "file": "idle_24.png",
+      "phase": 1.570796
+    },
+    {
+      "file": "idle_25.png",
+      "phase": 1.636246
+    },
+    {
+      "file": "idle_26.png",
+      "phase": 1.701696
+    },
+    {
+      "file": "idle_27.png",
+      "phase": 1.767146
+    },
+    {
+      "file": "idle_28.png",
+      "phase": 1.832596
+    },
+    {
+      "file": "idle_29.png",
+      "phase": 1.898046
+    },
+    {
+      "file": "idle_30.png",
+      "phase": 1.963495
+    },
+    {
+      "file": "idle_31.png",
+      "phase": 2.028945
+    },
+    {
+      "file": "idle_32.png",
+      "phase": 2.094395
+    },
+    {
+      "file": "idle_33.png",
+      "phase": 2.159845
+    },
+    {
+      "file": "idle_34.png",
+      "phase": 2.225295
+    },
+    {
+      "file": "idle_35.png",
+      "phase": 2.290745
+    },
+    {
+      "file": "idle_36.png",
+      "phase": 2.356194
+    },
+    {
+      "file": "idle_37.png",
+      "phase": 2.421644
+    },
+    {
+      "file": "idle_38.png",
+      "phase": 2.487094
+    },
+    {
+      "file": "idle_39.png",
+      "phase": 2.552544
+    },
+    {
+      "file": "idle_40.png",
+      "phase": 2.617994
+    },
+    {
+      "file": "idle_41.png",
+      "phase": 2.683444
+    },
+    {
+      "file": "idle_42.png",
+      "phase": 2.748894
+    },
+    {
+      "file": "idle_43.png",
+      "phase": 2.814343
+    },
+    {
+      "file": "idle_44.png",
+      "phase": 2.879793
+    },
+    {
+      "file": "idle_45.png",
+      "phase": 2.945243
+    },
+    {
+      "file": "idle_46.png",
+      "phase": 3.010693
+    },
+    {
+      "file": "idle_47.png",
+      "phase": 3.076143
+    },
+    {
+      "file": "idle_48.png",
+      "phase": 3.141593
+    },
+    {
+      "file": "idle_49.png",
+      "phase": 3.207043
+    },
+    {
+      "file": "idle_50.png",
+      "phase": 3.272492
+    },
+    {
+      "file": "idle_51.png",
+      "phase": 3.337942
+    },
+    {
+      "file": "idle_52.png",
+      "phase": 3.403392
+    },
+    {
+      "file": "idle_53.png",
+      "phase": 3.468842
+    },
+    {
+      "file": "idle_54.png",
+      "phase": 3.534292
+    },
+    {
+      "file": "idle_55.png",
+      "phase": 3.599742
+    },
+    {
+      "file": "idle_56.png",
+      "phase": 3.665191
+    },
+    {
+      "file": "idle_57.png",
+      "phase": 3.730641
+    },
+    {
+      "file": "idle_58.png",
+      "phase": 3.796091
+    },
+    {
+      "file": "idle_59.png",
+      "phase": 3.861541
+    },
+    {
+      "file": "idle_60.png",
+      "phase": 3.926991
+    },
+    {
+      "file": "idle_61.png",
+      "phase": 3.992441
+    },
+    {
+      "file": "idle_62.png",
+      "phase": 4.057891
+    },
+    {
+      "file": "idle_63.png",
+      "phase": 4.12334
+    },
+    {
+      "file": "idle_64.png",
+      "phase": 4.18879
+    },
+    {
+      "file": "idle_65.png",
+      "phase": 4.25424
+    },
+    {
+      "file": "idle_66.png",
+      "phase": 4.31969
+    },
+    {
+      "file": "idle_67.png",
+      "phase": 4.38514
+    },
+    {
+      "file": "idle_68.png",
+      "phase": 4.45059
+    },
+    {
+      "file": "idle_69.png",
+      "phase": 4.516039
+    },
+    {
+      "file": "idle_70.png",
+      "phase": 4.581489
+    },
+    {
+      "file": "idle_71.png",
+      "phase": 4.646939
+    },
+    {
+      "file": "idle_72.png",
+      "phase": 4.712389
+    },
+    {
+      "file": "idle_73.png",
+      "phase": 4.777839
+    },
+    {
+      "file": "idle_74.png",
+      "phase": 4.843289
+    },
+    {
+      "file": "idle_75.png",
+      "phase": 4.908739
+    },
+    {
+      "file": "idle_76.png",
+      "phase": 4.974188
+    },
+    {
+      "file": "idle_77.png",
+      "phase": 5.039638
+    },
+    {
+      "file": "idle_78.png",
+      "phase": 5.105088
+    },
+    {
+      "file": "idle_79.png",
+      "phase": 5.170538
+    },
+    {
+      "file": "idle_80.png",
+      "phase": 5.235988
+    },
+    {
+      "file": "idle_81.png",
+      "phase": 5.301438
+    },
+    {
+      "file": "idle_82.png",
+      "phase": 5.366887
+    },
+    {
+      "file": "idle_83.png",
+      "phase": 5.432337
+    },
+    {
+      "file": "idle_84.png",
+      "phase": 5.497787
+    },
+    {
+      "file": "idle_85.png",
+      "phase": 5.563237
+    },
+    {
+      "file": "idle_86.png",
+      "phase": 5.628687
+    },
+    {
+      "file": "idle_87.png",
+      "phase": 5.694137
+    },
+    {
+      "file": "idle_88.png",
+      "phase": 5.759587
+    },
+    {
+      "file": "idle_89.png",
+      "phase": 5.825036
+    },
+    {
+      "file": "idle_90.png",
+      "phase": 5.890486
+    },
+    {
+      "file": "idle_91.png",
+      "phase": 5.955936
+    },
+    {
+      "file": "idle_92.png",
+      "phase": 6.021386
+    },
+    {
+      "file": "idle_93.png",
+      "phase": 6.086836
+    },
+    {
+      "file": "idle_94.png",
+      "phase": 6.152286
+    },
+    {
+      "file": "idle_95.png",
+      "phase": 6.217735
+    }
+  ]
+}

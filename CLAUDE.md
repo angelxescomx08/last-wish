@@ -442,3 +442,23 @@ One test file per source module. All test files follow the same structure:
 - **No pygame**: domain and application layers are pygame-free; tests must import without errors.
 - **Concrete assertions**: assert exact values, not just `assert result.success`.
 - **Stress tests**: include at least one test per file that operates at large scale (100+ iterations, 10^100+ values).
+
+## Visual art and animation — required
+
+Read [docs/visual-design.md](docs/visual-design.md) before visual changes. Last Wish
+uses **pixel art, dungeon fantasy and clear anime character design**. Preserve the
+approved red-haired anime swordswoman in `assets/characters/warrior-source-v2.png`:
+emerald eyes, silver/gold armour, long ponytail and dark teal cloth.
+
+Idle is articulated using `scripts/warrior_rig.py` and exported with
+`scripts/generate_warrior_idle.py`: 96 frames, 256 × 256 cells, 8 × 12 sheet,
+30 FPS, 3.2 s. Nine layers maintain shoulder/elbow attachments and rigid sword,
+fixed boots and delayed hair/cape. AI backing art only fills hidden patches.
+Runtime slices/scales with nearest neighbour; no per-frame recentering or reverse
+playback. Do not restore the archived polygon design or global sinusoidal warp.
+
+Regenerate assets and inspect `output/hero-idle-preview.html`; the optional Pillow
+script `scripts/export_warrior_preview.py` exports animated GIFs including an
+old/new comparison. Check at 96 and 192 px and run the full tests. Tests cover
+attachments, blade rigidity, periodic motion, soles and runtime integration;
+they do not imply user approval of the new animation.

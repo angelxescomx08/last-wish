@@ -18,8 +18,11 @@ _ASSETS = (
 )
 
 _HERO_IDLE_PATH = _ASSETS.parent / "characters" / "redhead_idle.png"
-IDLE_FRAME_SECONDS = 0.18
-IDLE_SEQUENCE = tuple(range(8)) + tuple(range(6, 0, -1))
+IDLE_FRAME_SIZE = 256
+IDLE_COLUMNS = 8
+IDLE_ROWS = 12
+IDLE_FRAME_SECONDS = 1 / 30
+IDLE_SEQUENCE = tuple(range(IDLE_COLUMNS * IDLE_ROWS))
 IDLE_CYCLE_SECONDS = len(IDLE_SEQUENCE) * IDLE_FRAME_SECONDS
 
 _CARD_ASSETS = (
@@ -129,12 +132,12 @@ class SpriteLoader:
     # ------------------------------------------------------------------
 
     def get_player_idle_frames(self, size: int = 192) -> tuple[pygame.Surface, ...]:
-        """Slice once, align boot anchors, and cache transparent idle frames."""
+        """Slice authored fixed-anchor poses and cache transparent idle frames."""
         if size in self._idle_frames:
             return self._idle_frames[size]
-        if size != 96:
+        if size != IDLE_FRAME_SIZE:
             frames = tuple(pygame.transform.scale(frame, (size, size))
-                           for frame in self.get_player_idle_frames(96))
+                           for frame in self.get_player_idle_frames(IDLE_FRAME_SIZE))
             self._idle_frames[size] = frames
             return frames
         try:
@@ -142,31 +145,16 @@ class SpriteLoader:
         except (pygame.error, OSError):
             self._idle_frames[size] = ()
             return ()
-        cells = []
-        for row in range(2):
-            for col in range(4):
-                left, right = (round(c * sheet.get_width() / 4) for c in (col, col + 1))
-                top, bottom = (round(r * sheet.get_height() / 2) for r in (row, row + 1))
-                cell = sheet.subsurface((left, top, right - left, bottom - top))
-                cells.append((cell, cell.get_bounding_rect(min_alpha=32)))
-        scale = 86 / max(bounds.height for _, bounds in cells)
-        frames = []
-        for index, (cell, bounds) in enumerate(cells):
-            # Boots remain fixed; breathing lifts only the upper body by 0–2 pixels.
-            boots = cell.subsurface((0, bounds.bottom - 60, cell.get_width(), 60))
-            anchor = boots.get_bounding_rect(min_alpha=32).centerx
-            art = pygame.transform.scale(cell.subsurface(bounds),
-                                         (round(bounds.width * scale), round(bounds.height * scale)))
-            frame = pygame.Surface((96, 96), pygame.SRCALPHA)
-            x = 48 - round((anchor - bounds.x) * scale)
-            y = 92 - art.get_height()
-            split = round(art.get_height() * 0.65)
-            lift = round(2 * index / 7)
-            upper = pygame.transform.scale(art.subsurface((0, 0, art.get_width(), split)),
-                                           (art.get_width(), split + lift))
-            frame.blit(upper, (x, y - lift))
-            frame.blit(art, (x, y + split), (0, split, art.get_width(), art.get_height() - split))
-            frames.append(frame)
+        if sheet.get_size() != (IDLE_COLUMNS * IDLE_FRAME_SIZE, IDLE_ROWS * IDLE_FRAME_SIZE):
+            self._idle_frames[size] = ()
+            return ()
+        # Each authored cell already shares a fixed ground anchor. Never crop,
+        # stretch or re-align individual poses: that introduces foot sliding.
+        frames = [sheet.subsurface((
+            index % IDLE_COLUMNS * IDLE_FRAME_SIZE,
+            index // IDLE_COLUMNS * IDLE_FRAME_SIZE,
+            IDLE_FRAME_SIZE, IDLE_FRAME_SIZE,
+        )).copy() for index in IDLE_SEQUENCE]
         self._idle_frames[size] = tuple(frames)
         return self._idle_frames[size]
 

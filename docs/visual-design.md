@@ -1,0 +1,157 @@
+# Visual design — Last Wish
+
+## Required direction for Codex and Claude
+
+**Pixel-art dungeon fantasy with clearly anime character design.** Character art
+must have intentional facial anatomy, expressive eyes, coherent equipment and an
+attractive readable silhouette. An anime label alone is insufficient: do not return
+to the rejected polygon-doll face or square, featureless head of the first version.
+Environments use dark stone, blue/purple shadows and warm torchlight. Preserve
+crisp pixels, coloured outlines and consistent upper-left lighting. UI is Spanish;
+code identifiers and comments are English.
+
+## Warrior v2 — current direction, subject to user art review
+
+Adult red-haired anime swordswoman, facing right in three-quarter view. Long
+crimson/copper ponytail and face-framing bangs, large emerald eyes, small nose and
+mouth, refined silver armour with gold trim, charcoal fitted clothing, dark teal
+cape and skirt panels, brown leather belt and tall boots. Her sword points down
+across the front, in the near hand. Both feet stay planted in a relaxed guard.
+The face is delicate and recognizably anime, with stable features throughout idle.
+
+`assets/characters/warrior-source-v2.png` is the immutable source artwork generated
+with the built-in image-generation tool. `warrior-concept-v2.png` is its earlier
+concept, not a runtime asset. Do not replace the source with the old procedural
+polygon drawing. `scripts/warrior_idle_v1_archive.py` preserves the rejected old
+implementation for reference only; do not run it against current assets.
+
+## Animation implementation — articulated revision
+
+The approved face and costume remain in `warrior-source-v2.png`. A built-in AI
+image edit created `warrior-rig-backing.png`, used only to fill small regions behind
+removed arms, hair and sword. Its head and boots never replace the approved art.
+The edit requested identical placement and design, removing the ponytail and both
+arms/sword and reconstructing hidden cape, tunic, armour and leg material.
+
+`scripts/warrior_rig.py` owns the joint hierarchy, silhouette masks, layer order
+and periodic Catmull-Rom pose curves. Nine exported layers live in
+`assets/characters/warrior_rig/`: legs, torso, head, upper_arm, forearm, weapon,
+far_arm, hair and cape. Torso rotates around the waist; head and shoulders inherit
+its transform; forearm rotates around the transformed elbow. The weapon uses
+exactly the forearm transform, so it cannot slide or bend independently.
+Hair and cape inherit their attachment transforms plus delayed angular motion.
+Feet are a stationary layer. Rotation sampling uses nearest pixels, never blur.
+
+`scripts/generate_warrior_idle.py` assembles **96 frames**, **30 FPS**, **3.2 s**.
+Cells are **256 × 256**, anchor **(128,246)**; sheet is **8 × 12**, **2048 × 3072**.
+Runtime only slices and scales; it does not deform artwork. The cycle is forward,
+without ping-pong or duplicated endpoint. Short pixel-grid holds at a turnaround
+are acceptable: forcing every frame to differ can introduce artificial shimmer.
+The tests check attachment, blade rigidity, periodic joint position/velocity,
+stationary boots, timing, no long frozen segment and scene rendering.
+
+This replaces the old global sinusoidal displacement. It is a local articulated
+animation of AI-assisted artwork, not an AI-generated video or a Spine/Live2D file.
+Only idle is implemented; no blink has been added to the approved face.
+
+## Files and reproduction
+
+- `assets/characters/redhead_idle.png`: runtime sheet.
+- `assets/characters/warrior_idle/idle_00.png` … `idle_95.png`: individual frames.
+- `assets/characters/warrior_idle/poses.json`: generated metadata, not editable input.
+- `output/hero-idle-preview.html`: play/pause, frame stepping, speed and size controls.
+- `output/hero-frames.png`: full contact sheet.
+- `output/warrior-v2-preview.png`: enlarged still of the new design.
+
+```powershell
+.venv/Scripts/python.exe scripts/generate_warrior_idle.py
+.venv/Scripts/python.exe -m pytest tests/ -q -p no:cacheprovider
+```
+
+Review the face at 96 px selection and 192 px combat, all transitions and the loop
+seam. Check stable soles, connected shoulders/waist, straight blade, fixed grip,
+no flickering features or aura, and restrained breathing. The automated tests
+check timing, stable lower legs, transparent margins, the seam and scene playback;
+they cannot establish that the user likes the design or perceived fluidity.
+Only idle is in scope. Walking, attacking and hit reactions need their own art.
+
+## Artwork provenance and final edit prompt
+
+Built-in image generation was used, not the API/CLI fallback. The initial concept
+requested an adult copper/red-haired anime dungeon swordswoman with emerald eyes,
+silver/gold armour, teal cape, planted stance and a downward sword. The final edit
+prompt applied to that concept was:
+
+> Edit target: the provided red-haired anime swordswoman. Preserve her attractive anime face, red ponytail, green eyes, costume and pose. Convert into clean production PIXEL ART GAME SPRITE, as if drawn on a 192 by 256 pixel grid enlarged with nearest-neighbor. Simplify fine detail into deliberate sharp solid pixel clusters, limited ~40 colour palette. CRITICAL remove ALL glow, aura, haze, shadows and semi-transparent fringe outside the actual body, hair, cape and sword: entire background must be perfectly transparent, crisp solid silhouette with zero atmosphere. Keep full body centered including both boots and entire sword. Shorten sword moderately so tip ends at knee height, not ankle, preserve rigid straight blade and hand grip. Make face slightly larger and anime eyes clear, gentle determined expression with small natural mouth. No text, grid, additional characters or poses.
+
+## Animation research — historical diagnosis before articulated revision
+
+The user approved the v2 design and rejected the previous displacement animation.
+The findings below motivated the articulated revision described above. They describe
+the previous generator; art approval does not imply approval of the new motion.
+
+### Diagnosis from source inspection
+
+The generator samples a single image through sine/cosine displacement fields and
+rounds source coordinates to integers. It has no joint hierarchy, new anatomical
+poses, independent hand/weapon attachment or reconstructed surfaces behind moving
+parts. Its 64 distinct frames prove changing pixels, not convincing acting or
+smooth motion. At 256-to-192 nearest-neighbour scaling, quantized movement may
+also become uneven. These are implementation findings and likely contributors;
+they are not a substitute for watching the actual animation.
+
+### Recommended next experiment
+
+Use the existing source as identity reference and author an actual relaxed-guard
+motion. Compare two routes without replacing the current asset until reviewed:
+
+1. AI motion generation: use a specialist sprite animator with first/middle/final
+   pose control or motion transfer from a short, stationary-camera reference.
+   Use the approved pose at the start and end, with a restrained inhalation pose
+   in the middle. Preserve face, armour, sword length, direction and planted feet.
+   Generate the motion first; choose export FPS/frame count afterwards. Inspect
+   identity drift, sliding grip, bent blade, limb proportions and loop velocity.
+2. Local controlled rig: separate ponytail, cape, head, torso, upper arms,
+   forearms, hand+sword, pelvis and legs. Use AI editing only to reconstruct hidden
+   artwork or make compatible pose corrections. Animate a bone hierarchy with
+   deliberate keys and easing; use delayed spring motion for hair/cape. Preserve
+   rigid face/metal shapes and fixed soles. Sample the rig into PNGs for pygame.
+
+The second route offers more direct control over the approved design; the first
+is the more direct way to use AI to generate actual motion. Neither was implemented
+by the previous sinusoidal image warp. Do not claim otherwise. Do not solve this
+by merely raising the frame count or globally blending/blur-filtering frames.
+
+Candidate motion brief (proposal, not a tested generation):
+"Seamless relaxed guard idle of the exact reference swordswoman. Locked camera,
+full body, fixed scale. Gentle ribcage breathing and small shoulder/elbow motion;
+head settles slightly after the torso. Both soles planted, no stepping. Sword
+rigidly attached to the same hand. Ponytail and cape follow with restrained inertia.
+Preserve face, red hair, costume, anatomy and pixel-art style. No attack, camera
+motion, effects, morphing or costume changes. Return smoothly to the starting pose."
+
+### Primary sources consulted
+
+- [Live2D: material separation](https://docs.live2d.com/en/cubism-editor-manual/divide-the-material/): prepare separate artwork parts for modelling.
+- [Spine: graph editor](https://en.esotericsoftware.com/spine-graph): author timing/value curves rather than uniform pose changes.
+- [Spine: physics constraints](https://en.esotericsoftware.com/spine-physics-constraints): secondary motion, inertia and damping for hair/clothing; warm up simulations before loop export.
+- [Spine: weights](https://en.esotericsoftware.com/spine-weights): mesh topology and smoothing weights for controlled deformation.
+- [Ludo: sprite generator](https://ludo.ai/docs/sprite-generator): first/middle/final keyframes and motion transfer. Its documentation explicitly says a seamless loop is not guaranteed.
+- [Ludo: pixel-art workflow](https://ludo.ai/docs/sprite-generator/pixel-art-sprites): native-grid input, suitable animation model, nearest-neighbour export. Detailed art that lacks a strict grid may require a different model from Forge Pixel.
+
+Ludo features are vendor-documented, not tested on this character. No Ludo account,
+paid generation or video service was used. No callable specialist animation tool
+was found in this session. The built-in image tool was used previously for still
+artwork, not for AI video motion. The subsequent articulated revision implements the second route locally.
+
+
+## Animated review
+
+`output/warrior-idle.gif` plays the new animation directly. The optional
+`output/warrior-idle-comparison.gif` shows the saved previous displacement cycle
+beside the new rig at the same wall-clock phase. Both use one fixed GIF palette
+and exactly 3200 ms per loop. Re-export with `scripts/export_warrior_preview.py`
+using a Python environment with Pillow; Pillow is needed only for review GIFs,
+not for sprite generation or the game. `output/warrior-idle-before.png` is the
+comparison baseline, not a runtime asset. Inspect the animation at its real
+96/192 px display sizes as well as enlarged. Automated checks cannot judge taste.
