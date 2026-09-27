@@ -141,7 +141,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fonts.py` | `FontRegistry` — lazy font cache, keyed by point size |
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
-| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128)` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None` |
+| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size): `get_player_animation_frames(anim, size)`, `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` (from `warrior_sheet.json`), `hero_animation_seconds(anim)`, `IDLE_CYCLE_SECONDS` |
 
 ### Presentation layer — `src/presentation/`
 
@@ -432,6 +432,7 @@ One test file per source module. All test files follow the same structure:
 | `test_card_rewards.py` | `application/card_rewards.py` | pick_reward_cards count, pick_pack_cards theme filtering, seeded determinism |
 | `test_preferences.py` | `infrastructure/preferences.py` | defaults, load (present/missing/invalid JSON), save, round-trip, unknown keys ignored |
 | `test_sprite_loader.py` | `infrastructure/sprite_loader.py` | mapping completeness, all asset files exist on disk, unknown-name → None, cache empty on unknown |
+| `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
 
 ### Testing rules
 
@@ -446,19 +447,20 @@ One test file per source module. All test files follow the same structure:
 ## Visual art and animation — required
 
 Read [docs/visual-design.md](docs/visual-design.md) before visual changes. Last Wish
-uses **pixel art, dungeon fantasy and clear anime character design**. Preserve the
-approved red-haired anime swordswoman in `assets/characters/warrior-source-v2.png`:
-emerald eyes, silver/gold armour, long ponytail and dark teal cloth.
+uses **detailed pixel art and dungeon fantasy** with strong warm/cold lighting. The
+heroine keeps the approved design of `warrior-source-v2.png`: red ponytail,
+silver/gold armour, dark teal cape. Characters drawn by code were rejected.
 
-Idle is articulated using `scripts/warrior_rig.py` and exported with
-`scripts/generate_warrior_idle.py`: 96 frames, 256 × 256 cells, 8 × 12 sheet,
-30 FPS, 3.2 s. Nine layers maintain shoulder/elbow attachments and rigid sword,
-fixed boots and delayed hair/cape. AI backing art only fills hidden patches.
-Runtime slices/scales with nearest neighbour; no per-frame recentering or reverse
-playback. Do not restore the archived polygon design or global sinusoidal warp.
-
-Regenerate assets and inspect `output/hero-idle-preview.html`; the optional Pillow
-script `scripts/export_warrior_preview.py` exports animated GIFs including an
-old/new comparison. Check at 96 and 192 px and run the full tests. Tests cover
-attachments, blade rigidity, periodic motion, soles and runtime integration;
-they do not imply user approval of the new animation.
+The runtime hero is the **approved illustration** (`warrior-source-v2.png`)
+reduced to native pixel art (`assets/characters/warrior_base.png`, via the
+one-time `scripts/make_warrior_base.py`) and animated by
+`scripts/generate_warrior_sprites.py` (stdlib) into `warrior_sheet.png` (192 px,
+combat 1:1), `warrior_sheet_96.png` (selection) and `warrior_sheet.json`
+(`idle` loop, `attack`, `guard`, `hurt`). The drawing is never cut into limbs,
+rotated or resampled: idle moves whole pixel rows (breath, ponytail/cape sway,
+blink); actions move the whole figure and add pixel effects. **Code must not
+draw new characters** — get a drawing first (artist, CC0 pack, pixel-art tool);
+code may animate it and make environments/effects. `CombatScene` plays `attack`
+for damage cards, `guard` when block is gained, `hurt` when HP is lost
+(`hero_action`). Regenerate, inspect `output/warrior-animations.gif`, and run
+`tests/test_hero_idle.py` with the full suite.

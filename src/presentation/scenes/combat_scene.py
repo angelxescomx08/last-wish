@@ -9,7 +9,7 @@ from src.domain.combat import CombatState
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
-from src.infrastructure.sprite_loader import SpriteLoader, IDLE_CYCLE_SECONDS
+from src.infrastructure.sprite_loader import SpriteLoader, IDLE_CYCLE_SECONDS, hero_animation_seconds
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.entity_widget import (
@@ -112,6 +112,8 @@ class CombatScene:
         self._fonts               = fonts
         self._sprites             = SpriteLoader()
         self._idle_time = 0.0
+        self._hero_action: str | None = None   # attack | guard | hurt
+        self._hero_action_time = 0.0
         self._is_boss             = is_boss
         self._death_acknowledged  = False
         self._victory_acknowledged = False
@@ -169,7 +171,7 @@ class CombatScene:
             self._cancel_selection()
 
     def update(self, dt: float) -> None:
-        self._idle_time = (self._idle_time + max(0.0, dt)) % IDLE_CYCLE_SECONDS
+        self._advance_hero_animation(max(0.0, dt))
         if self._overlay is not None and self._overlay.dismissed:
             self._overlay = None
             self._sound.play_cancel()
@@ -290,7 +292,8 @@ class CombatScene:
             surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
             sprite=self._sprites.get_player_sprite(self._state.player.name,
                 size=192 if self._state.player.name in ("La Guerrera", "El Guerrero") else 128,
-                elapsed=self._idle_time),
+                elapsed=self._hero_action_time if self._hero_action else self._idle_time,
+                animation=self._hero_action or "idle"),
             framed=self._state.player.name not in ("La Guerrera", "El Guerrero"),
         )
 
@@ -550,6 +553,8 @@ class CombatScene:
         state         = self._state
         old_enemy_hps = [e.current_hp for e in state.enemies]
         old_block     = state.player.block
+        is_attack     = (0 <= card_idx < state.hand.count
+                         and state.hand.cards[card_idx].total_damage() > 0)
 
         result = play_card(state, card_idx, target_idx)
         if not result.success:
@@ -560,6 +565,10 @@ class CombatScene:
         self._sound.play_card()
 
         block_gained = state.player.block - old_block
+        if is_attack:
+            self._play_hero_action("attack")
+        elif block_gained > 0:
+            self._play_hero_action("guard")
         if block_gained > 0 and self._player_rect:
             self._fx.add_block_flash(self._player_rect, block_gained)
             self._sound.play_block()
@@ -573,6 +582,27 @@ class CombatScene:
                     self._fx.add_death_flash(self._enemy_rects[i])
                     self._sound.play_death()
 
+    @property
+    def hero_action(self) -> str | None:
+        """Hero action animation currently playing (attack/guard/hurt), else None."""
+        return self._hero_action
+
+    def _play_hero_action(self, name: str) -> None:
+        if hero_animation_seconds(name) > 0:
+            self._hero_action = name
+            self._hero_action_time = 0.0
+
+    def _advance_hero_animation(self, dt: float) -> None:
+        if self._hero_action is None:
+            self._idle_time = (self._idle_time + dt) % IDLE_CYCLE_SECONDS
+            return
+        self._hero_action_time += dt
+        if self._hero_action_time >= hero_animation_seconds(self._hero_action):
+            # every action ends on idle frame 0, so idle restarts without a pop
+            self._hero_action = None
+            self._hero_action_time = 0.0
+            self._idle_time = 0.0
+
     def _do_end_turn(self) -> None:
         state  = self._state
         old_hp = state.player.current_hp
@@ -581,6 +611,8 @@ class CombatScene:
         end_player_turn(state)
 
         dmg = old_hp - state.player.current_hp
+        if dmg > 0:
+            self._play_hero_action("hurt")
         if dmg > 0 and self._player_rect:
             self._fx.add_hit_flash(self._player_rect, dmg)
             self._sound.play_hit()

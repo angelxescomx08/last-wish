@@ -2,15 +2,58 @@
 
 ## Required direction for Codex and Claude
 
-**Pixel-art dungeon fantasy with clearly anime character design.** Character art
-must have intentional facial anatomy, expressive eyes, coherent equipment and an
-attractive readable silhouette. An anime label alone is insufficient: do not return
-to the rejected polygon-doll face or square, featureless head of the first version.
+**Pixel-art dungeon fantasy.** Characters follow the approved warrior design
+(`warrior-source-v2.png`, detailed pixel art). Faces and bodies drawn by code
+were rejected; see v7 below. Target mood for scenes: strong warm/cold contrast
+(cold night and rain vs. firelight and glowing windows), crisp and looping.
 Environments use dark stone, blue/purple shadows and warm torchlight. Preserve
 crisp pixels, coloured outlines and consistent upper-left lighting. UI is Spanish;
 code identifiers and comments are English.
 
-## Warrior v2 — current direction, subject to user art review
+## Warrior v7 — approved art, animated without deformation (current runtime asset)
+
+History: v2 rotated layers of the approved illustration (looked good, not
+fluid); v3–v6 were characters drawn by code or by hand in text grids (fluid,
+but faces and bodies looked wrong). Conclusion: **do not let code draw new
+characters.** Character art must come from a real drawing (the approved
+illustration, an artist, a CC0 pack or a pixel-art tool); code animates it and
+adds effects, which it does well.
+
+- `scripts/make_warrior_base.py` (one-time, Pillow + numpy) reduces
+  `warrior-source-v2.png` — generated as pixel art on a ~4 px grid — by 8 into
+  `assets/characters/warrior_base.png` (135 × 181): 64-colour palette, each 8×8
+  block takes its dominant colour, dark outlines win at 30 %.
+- `scripts/generate_warrior_sprites.py` (stdlib) animates that drawing without
+  cutting it into limbs or rotating/resampling anything:
+  - idle: rows above the chest line rise one pixel on the in-breath and the
+    head follows a beat later; ponytail and cape sway with per-row offsets that
+    grow away from where they attach; one blink per loop;
+  - attack / guard / hurt: the whole figure moves as one piece (anticipation,
+    lunge, recoil) and pixel effects carry the energy: slash crescent and
+    sparks, hexagonal guard ward with a gleam on the blade, white hit flash with
+    red tint and sparks.
+- Output: `warrior_sheet.png` (192 px cells, shown 1:1 in combat),
+  `warrior_sheet_96.png` (96 px cells for selection; each frame reduced by 2
+  with dominant-pixel blocks) and `warrior_sheet.json`.
+
+| Animation | Frames | Duration | Loop | Trigger in combat |
+|---|---|---|---|---|
+| `idle` | 16 | 1.6 s | yes | default |
+| `attack` | 8 | 0.59 s | no | playing a card with damage |
+| `guard` | 7 | 0.55 s | no | gaining block |
+| `hurt` | 5 | 0.48 s | no | taking damage |
+
+Every action ends on idle frame 0. Region landmarks (`HEAD_BOTTOM`,
+`CHEST_BOTTOM`, sway colour rules, eye and blade coordinates) live at the top of
+the generator; re-check them if `warrior_base.png` changes.
+`scripts/warrior_pixel_art.py` belongs to the abandoned v5/v6 attempt and is unused.
+
+**Future characters/poses:** obtain a drawing first (same pixel-art style as
+`warrior_base.png`), then reuse this generator's techniques. Environments and
+effects (rain, fire, smoke, flickering light, warm/cold contrast) can be made
+in code.
+
+## Warrior v2 — previous direction (superseded at runtime)
 
 Adult red-haired anime swordswoman, facing right in three-quarter view. Long
 crimson/copper ponytail and face-framing bangs, large emerald eyes, small nose and
