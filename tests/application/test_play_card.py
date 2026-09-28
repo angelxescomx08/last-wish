@@ -555,3 +555,67 @@ class TestManaGain:
         state = _make_state([card], mana_current=3, mana_max=3)
         play_card(state, 0, None)
         assert state.mana.current == 2  # 3 - 2 + 1
+
+
+# ---------------------------------------------------------------------------
+# Target kind — what the UI shows before a card is played
+# ---------------------------------------------------------------------------
+
+class TestTargetKind:
+    def test_attack_targets_one_enemy(self):
+        from src.application.play_card import TargetKind, target_kind
+        assert target_kind(_attack_card(6)) is TargetKind.ENEMY
+
+    def test_one_damage_is_enough_to_need_a_target(self):
+        from src.application.play_card import requires_target
+        assert requires_target(_attack_card(1))
+
+    def test_huge_damage_targets_one_enemy(self):
+        from src.application.play_card import TargetKind, target_kind
+        assert target_kind(_attack_card(10 ** 1000)) is TargetKind.ENEMY
+
+    def test_needs_target_effect_without_damage_targets_one_enemy(self):
+        from src.application.play_card import TargetKind, target_kind
+        card = Card(id="v", name="Veneno", card_type=CardType.SKILL, cost=1,
+                    base_effect=CardEffect("Veneno", needs_target=True))
+        assert target_kind(card) is TargetKind.ENEMY
+
+    def test_block_card_targets_the_hero(self):
+        from src.application.play_card import TargetKind, target_kind
+        assert target_kind(_skill_card(5)) is TargetKind.SELF
+
+    def test_power_targets_the_hero(self):
+        from src.application.play_card import TargetKind, target_kind
+        assert target_kind(_power_card()) is TargetKind.SELF
+
+    def test_area_effect_targets_all_enemies(self):
+        from src.application.play_card import TargetKind, target_kind
+        card = Card(id="a", name="Golpe Total", card_type=CardType.ATTACK, cost=2,
+                    base_effect=CardEffect("Golpe Total", hits_all_enemies=True))
+        assert target_kind(card) is TargetKind.ALL_ENEMIES
+
+    def test_stacked_area_effect_counts(self):
+        from src.application.play_card import TargetKind, target_kind
+        card = _skill_card(3)
+        card.stacked_effects.append(CardEffect("Área", hits_all_enemies=True))
+        assert target_kind(card) is TargetKind.ALL_ENEMIES
+
+    def test_damage_wins_over_area_flag(self):
+        from src.application.play_card import TargetKind, target_kind
+        card = _attack_card(4)
+        card.stacked_effects.append(CardEffect("Área", hits_all_enemies=True))
+        assert target_kind(card) is TargetKind.ENEMY
+
+    def test_pool_area_cards_are_flagged(self):
+        from src.application.play_card import TargetKind, target_kind
+        from src.domain.card_pool import PackTheme, card_factories_for_theme
+        area = {"Golpe Total", "Visión del Caos", "Lluvia de Golpes", "Tormenta de Veneno"}
+        found = {c.name for t in PackTheme for c in (f() for f in card_factories_for_theme(t))
+                 if target_kind(c) is TargetKind.ALL_ENEMIES}
+        assert found == area
+
+    def test_area_flag_changes_no_rule(self):
+        card = Card(id="a", name="Área", card_type=CardType.SKILL, cost=0,
+                    base_effect=CardEffect("Área", hits_all_enemies=True))
+        state = _make_state([card])
+        assert play_card(state, 0, None).success

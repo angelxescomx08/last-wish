@@ -133,7 +133,7 @@ _ACERO: list[Callable[[], Card]] = [
     # on_play cards
     lambda: Card(
         id="a_golpe_total", name="Golpe Total", card_type=CardType.ATTACK, cost=2,
-        base_effect=CardEffect(name="Golpe Total", on_play=_on_golpe_total),
+        base_effect=CardEffect(name="Golpe Total", hits_all_enemies=True, on_play=_on_golpe_total),
         rarity=CardRarity.RARE,
     ),
     lambda: Card(
@@ -196,7 +196,7 @@ _MAGIA: list[Callable[[], Card]] = [
     ),
     lambda: Card(
         id="m_vision_del_caos", name="Visión del Caos", card_type=CardType.SKILL, cost=0,
-        base_effect=CardEffect(name="Visión del Caos", on_play=_on_vision_del_caos),
+        base_effect=CardEffect(name="Visión del Caos", hits_all_enemies=True, on_play=_on_vision_del_caos),
         rarity=CardRarity.COMMON,
     ),
     lambda: Card(
@@ -223,7 +223,7 @@ _EPICO: list[Callable[[], Card]] = [
     # on_play cards
     lambda: Card(
         id="ep_lluvia_de_golpes", name="Lluvia de Golpes", card_type=CardType.ATTACK, cost=3,
-        base_effect=CardEffect(name="Lluvia de Golpes", on_play=_on_lluvia_de_golpes),
+        base_effect=CardEffect(name="Lluvia de Golpes", hits_all_enemies=True, on_play=_on_lluvia_de_golpes),
         rarity=CardRarity.LEGENDARY,
     ),
     lambda: Card(
@@ -233,7 +233,7 @@ _EPICO: list[Callable[[], Card]] = [
     ),
     lambda: Card(
         id="ep_tormenta_veneno", name="Tormenta de Veneno", card_type=CardType.SKILL, cost=3,
-        base_effect=CardEffect(name="Tormenta de Veneno", on_play=_on_tormenta_veneno),
+        base_effect=CardEffect(name="Tormenta de Veneno", hits_all_enemies=True, on_play=_on_tormenta_veneno),
         rarity=CardRarity.LEGENDARY,
     ),
 ]

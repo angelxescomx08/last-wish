@@ -48,7 +48,7 @@ def _load(path: Path) -> pygame.Surface | None:
     return surf
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=64)
 def card_frame(rarity: str, w: int, h: int) -> pygame.Surface | None:
     """Rarity frame scaled to (w, h), or None when the asset is missing."""
     layout = card_layout()
@@ -73,7 +73,7 @@ def pack_art(theme: str, height: int) -> pygame.Surface | None:
     return pygame.transform.smoothscale(src, (w, height))
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=128)
 def card_illustration(card_id: str, card_type: str, w: int, h: int) -> pygame.Surface | None:
     """Art for the illustration window, cropped to fill (w, h) without distortion.
 

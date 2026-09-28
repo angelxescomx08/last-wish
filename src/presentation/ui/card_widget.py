@@ -64,7 +64,7 @@ _DEF_INK = (150, 210, 255)
 _BONUS_INK = (140, 240, 140)
 _HOLE = (18, 16, 24)
 
-_CACHE_MAX = 160
+_CACHE_MAX = 256
 _cache: "OrderedDict[tuple, pygame.Surface]" = OrderedDict()
 
 
@@ -171,7 +171,8 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     block = card.total_block() + bonus_block if card.total_block() > 0 else 0
     rarity = (card.rarity or CardRarity.COMMON).name
     key = (card.id, card.name, card.card_type, rarity, card.cost, damage, block, bonus_damage > 0,
-           bonus_block > 0, tuple(_ability_lines(card, damage, block)), affordable, w, h, id(fonts))
+           bonus_block > 0, tuple(_ability_lines(card, damage, block)), affordable, card.is_broken,
+           w, h, id(fonts))
     cached = _cache.get(key)
     if cached is not None:
         _cache.move_to_end(key)
@@ -245,6 +246,9 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     if not affordable:
         surf.fill((150, 150, 150, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
+    if card.is_broken:   # baked in, so it tilts with the card
+        pygame.draw.line(surf, colors.CARD_BROKEN, (0, 0), (w - 1, h - 1), 2)
+
     _cache[key] = surf
     if len(_cache) > _CACHE_MAX:
         _cache.popitem(last=False)
@@ -280,7 +284,66 @@ def draw_card(
         col = colors.CARD_SELECTED if selected else glow
         pygame.draw.rect(surface, col, rect.inflate(4, 4), 2, border_radius=10)
 
-    if card.is_broken:
-        pygame.draw.line(surface, colors.CARD_BROKEN, rect.topleft, rect.bottomright, 2)
+    return rect
 
+
+# ---------------------------------------------------------------------------
+# Free placement (hand fan, held card, aiming) — scaled and rotated, cached
+# ---------------------------------------------------------------------------
+
+_SCALE_STEP = 0.05
+_ROT_MAX = 96
+_rot_cache: OrderedDict = OrderedDict()
+
+
+def quantize_scale(scale: float) -> float:
+    """Scales snap to 5 % steps so a hover tween reuses a handful of renders."""
+    return max(_SCALE_STEP, round(scale / _SCALE_STEP) * _SCALE_STEP)
+
+
+def card_size(scale: float) -> tuple[int, int]:
+    q = quantize_scale(scale)
+    return round(CARD_W * q), round(CARD_H * q)
+
+
+def draw_card_at(
+    surface: pygame.Surface,
+    card: Card,
+    center: tuple[float, float],
+    fonts: FontRegistry,
+    *,
+    scale: float = 1.0,
+    angle: float = 0.0,
+    affordable: bool = True,
+    bonus_damage: int = 0,
+    bonus_block: int = 0,
+    outline: tuple[int, int, int] | None = None,
+) -> pygame.Rect:
+    """Draw a card centred on ``center``; returns its (unrotated) rect.
+
+    The face is re-rendered at the quantised size (crisp text, never an
+    upscaled bitmap). A tilt of a whole degree or more is rotated once and
+    cached; ``outline`` draws a highlight (only on untilted cards).
+    A broken card's slash is part of the cached face.
+    """
+    w, h = card_size(scale)
+    body = render_card_surface(card, fonts, w=w, h=h, affordable=affordable,
+                               bonus_damage=bonus_damage, bonus_block=bonus_block)
+    tilt = int(round(angle))
+    if tilt:
+        key = (body, tilt)
+        rotated = _rot_cache.get(key)
+        if rotated is None:
+            rotated = pygame.transform.rotozoom(body, tilt, 1.0)
+            _rot_cache[key] = rotated
+            if len(_rot_cache) > _ROT_MAX:
+                _rot_cache.popitem(last=False)
+        else:
+            _rot_cache.move_to_end(key)
+        surface.blit(rotated, rotated.get_rect(center=(round(center[0]), round(center[1]))))
+    else:
+        surface.blit(body, body.get_rect(center=(round(center[0]), round(center[1]))))
+    rect = pygame.Rect(round(center[0]) - w // 2, round(center[1]) - h // 2, w, h)
+    if outline is not None and not tilt:
+        pygame.draw.rect(surface, outline, rect.inflate(6, 6), 3, border_radius=12)
     return rect

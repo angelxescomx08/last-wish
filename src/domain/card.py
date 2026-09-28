@@ -56,6 +56,10 @@ class CardEffect:
 
     needs_target: set True when on_play requires a target enemy but the
     card deals no base damage (which would otherwise force targeting).
+
+    hits_all_enemies: set True when on_play affects every enemy (area
+    effects). It changes no rule; the UI uses it to show every enemy as the
+    card's target instead of the hero.
     """
     name: str
     damage: BigValue = field(default_factory=lambda: BigValue(0))
@@ -63,6 +67,7 @@ class CardEffect:
     draw: int = 0
     mana_gain: int = 0
     needs_target: bool = False
+    hits_all_enemies: bool = False
     on_play: Callable[[CombatState], None] | None = None
 
 

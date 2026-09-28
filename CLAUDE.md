@@ -108,7 +108,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | File | Class / data | Responsibility |
 |---|---|---|
 | `numbers.py` | `BigValue`, `Operation` | Arbitrary-precision arithmetic: base + flat additions + multipliers |
-| `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list |
+| `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list. `CardEffect.needs_target` forces an enemy target; `CardEffect.hits_all_enemies` marks area effects (UI hint only) |
 | `relic.py` | `Relic`, `RelicTag` | Passive items with a tag identifying their mechanic (8 tags total) |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
 | `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck` |
@@ -125,7 +125,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | File | Public API | Responsibility |
 |---|---|---|
 | `relic_effects.py` | `extra_draw_per_turn`, `extra_attack_damage`, `bonus_starting_mana`, `try_spectral_shield`, `bonus_gold_reward`, `post_combat_heal`, `max_hp_bonus` | Pure query functions — read relics, return bonuses or mutate state |
-| `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult` | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block |
+| `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult`; `requires_target(card)`, `target_kind(card)` → `TargetKind` (`ENEMY` / `ALL_ENEMIES` / `SELF`) | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block. `target_kind` tells the UI what a card will act on |
 | `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus + `player.luck // 5` |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
@@ -152,7 +152,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/main_menu_scene.py` | Main menu: Jugar/Continuar, Ajustes, Salir. Sets `requested_action: MenuAction` |
 | `scenes/settings_scene.py` | Settings screen: toggle "Mostrar FPS" (Activado/Desactivado). Mutates `UserPreferences` in-place; sets `cleared: bool`. SceneManager saves to disk on exit |
 | `scenes/character_select_scene.py` | Character panel grid with stat bars; seed text input (click to focus, type digits). Sets `confirmed` / `back_to_menu`; exposes `seed: int` property |
-| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. `is_boss` constructor param; `combat_won` property; `state` property |
+| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. `is_boss` constructor param; `combat_won` property; `state` property. Hand fan (`_hand_layout`, `CardPose`) with tweened card motion, hover zoom, draw-pile fly-in and discard fly-out; card play through `CardPlayInput` (drag / click / keys), targeting arrow and reticles |
 | `scenes/death_scene.py` | Death screen: Nueva Partida / Menú Principal. Sets `requested_action: DeathAction` |
 | `scenes/map_scene.py` | STS-style node map. Signals `selected_node: MapNode \| None` |
 | `scenes/combat_reward_scene.py` | Gold display + 3 card choices after a non-boss combat. Signals `cleared: bool`, `chosen_card: Card \| None` |
@@ -161,13 +161,15 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/pack_opening_scene.py` | 5-card pick-1 overlay. Signals `cleared: bool`, `chosen_card: Card \| None` |
 | `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
-| `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 160) |
+| `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)`, `draw_card_at(surface, card, center, fonts, *, scale, angle, …, outline)` (free placement: scale quantised to 5 %, tilt rotated once and cached) and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 256) |
+| `ui/card_play.py` | `CardPlayInput`, `Mode`, `PlayRequest` — pygame-free Slay the Spire style card-play state machine: pick, drag, aim, release, sticky click, keyboard (1–9, ←/→/Tab, Enter), cancel (right click / ESC) |
+| `ui/targeting.py` | `draw_arrow(surface, start, end, *, hot, phase)` chevron arrow (pure curve helpers `control_point`, `sample_curve`, `segment_placements`, `head_placement`; cached pre-rotated pixel sprites) and `draw_reticle(surface, rect, color, t)` |
 | `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
-| `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc. |
+| `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc.; `draw_tooltip(…, beside=rect)` places it next to a hovered card |
 | `ui/pile_viewer.py` | Modal overlay for browsing a pile's cards |
 
 ---
@@ -384,6 +386,16 @@ Four pack themes are available in the shop. Each pack shows 5 cards; the player 
 
 ---
 
+## Playing Cards (Slay the Spire style)
+
+Input lives in `ui/card_play.py` (`CardPlayInput`, no pygame) and `CombatScene` executes the
+returned `PlayRequest`. What a card acts on comes from `target_kind(card)`:
+one **enemy** (damage or `needs_target`) → drag out of the hand to show the chevron arrow
+(`ui/targeting.py`) and release on an enemy; **all enemies** (`hits_all_enemies`) or the
+**hero** → release above the hand line (`_PLAY_LINE_Y`). A quick click holds the card for a
+second click; right click / ESC cancel; keys 1–9, ←/→/Tab, Enter/Space, E. Mark new area cards
+with `hits_all_enemies=True` so every enemy gets the reticle. See docs/visual-design.md.
+
 ## Card Rendering
 
 Cards use the **cards-v2** frames (`assets/cards-v2/frames/card_<rarity>.png`), chosen by
@@ -437,7 +449,7 @@ One test file per source module. All test files follow the same structure:
 | `test_run.py` | `domain/run.py` | Run creation, add_card, add_relic, apply_combat_result, field storage |
 | `test_card_pool.py` | `domain/card_pool.py` | PackTheme enum, ALL_PACKS count/costs, starter_deck size, card_factories_for_theme |
 | `test_relic_effects.py` | `application/relic_effects.py` | All 8 relic functions: active, inactive, two of same, relic without tag |
-| `test_play_card.py` | `application/play_card.py` | Validation, damage, Fire Orb, attack_bonus, block, dexterity bonus, mana, draw |
+| `test_play_card.py` | `application/play_card.py` | Validation, damage, Fire Orb, attack_bonus, block, dexterity bonus, mana, draw, target kind (enemy / all enemies / self, pool area cards) |
 | `test_end_turn.py` | `application/end_turn.py` | draw_opening_hand, end_player_turn, relic integration, STS block rule, luck draw |
 | `test_combat_manager.py` | `application/combat_manager.py` | Structural integrity, relic tags, mana=4/4, hand=6, card pool total |
 | `test_combat_factory.py` | `application/combat_factory.py` | Player stats from character, full HP enemies, mana setup, luck-based draw |
@@ -451,6 +463,8 @@ One test file per source module. All test files follow the same structure:
 | `infrastructure/test_dungeon_assets.py` | `infrastructure/dungeon_assets.py` | files exist, metadata anchors/palettes, pre-scaling, single load |
 | `presentation/ui/test_dungeon_backdrop.py` | `ui/dungeon_backdrop.py` | room drawn, torches animate, budget 0, fallback, cost bound, combat integration |
 | `infrastructure/test_card_assets.py` | `infrastructure/card_assets.py` | layout rarities/zones/packs, files exist, frame size & cache, pack aspect, placeholders |
+| `presentation/ui/test_card_play.py` | `ui/card_play.py` | pick, drag threshold, play line boundary, aim/target, release/click, sticky, keyboard cycle/confirm, cancel, 10 000-move stress |
+| `presentation/ui/test_targeting.py` | `ui/targeting.py` | curve ends, bend, spacing, growth, flow period, head, colours, blit count, sprite cache bound, reticle |
 | `test_hero_rogue.py` | rogue sheets in `sprite_loader.py` + `CombatScene` | same contract as the mage, both rogue names |
 | `test_hero_mage.py` | mage sheets in `sprite_loader.py` + `CombatScene` | name→hero mapping, 192/96 sheets, idle motion, planted boots, actions end on idle 0, shared idle clock, attack trigger |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |

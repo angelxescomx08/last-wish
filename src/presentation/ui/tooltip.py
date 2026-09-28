@@ -211,7 +211,10 @@ def draw_tooltip(
     content: TooltipContent,
     mouse_pos: tuple[int, int],
     fonts: FontRegistry,
+    *,
+    beside: pygame.Rect | None = None,
 ) -> None:
+    """Draw a tooltip near the cursor, or next to ``beside`` (e.g. a hovered card)."""
     title_font = fonts.get(14)
     body_font  = fonts.get(11)
 
@@ -241,6 +244,9 @@ def draw_tooltip(
         tx = mouse_pos[0] - _MAX_W - _OFF_X
     if ty + panel_h > sh - 4:
         ty = mouse_pos[1] - panel_h - 4
+    if beside is not None:
+        tx = beside.right + 8 if beside.right + 8 + _MAX_W <= sw - 4 else beside.left - _MAX_W - 8
+        ty = min(beside.top, sh - 4 - panel_h)
     tx = max(4, tx)
     ty = max(4, ty)
 

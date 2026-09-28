@@ -48,6 +48,37 @@ Illustrations are provisional Dungeon Crawl icons by type until real art is
 placed in `assets/cards-v2/art/<card id>.png` (any size, cropped to cover the
 window). Effect text is generated from card data with effective values.
 
+## Playing cards — Slay the Spire style hand and targeting arrow
+
+User found card play "raro" and asked for the Slay the Spire arrow. Behaviour
+(`src/presentation/ui/card_play.py`, pure state machine; `CombatScene` feeds it):
+
+- **Hand**: gentle fan (±2.5°/card, max 10°, slight arc). Hovering a card
+  straightens it, grows it ×1.3 until fully visible and pushes neighbours aside;
+  its tooltip sits beside it. Cards tween (exponential ease, frame-rate
+  independent), fly in from the draw pile and fly to the discard pile when played.
+- **Drag**: press a card to pick it up. Cards for the hero or for all enemies
+  are played by releasing them above the hand line (hero or all enemies get a
+  reticle while it would play). Cards for one enemy park at the aiming spot once
+  dragged out of the hand and a **chevron arrow** runs to the cursor; release on
+  an enemy to play it, anywhere else (or back into the hand) to put it back.
+- **Click**: a quick click keeps the card held (aimed cards show the arrow at
+  once); the next click on an enemy / above the hand plays it; empty space
+  drops it. Right click or ESC always cancels. Unaffordable cards cannot be
+  picked ("Maná insuficiente").
+- **Keyboard**: 1–9 pick a card (aimed at the first living enemy), ←/→/Tab change
+  target, Enter/Space play, E ends the turn.
+- **Target kind** comes from card data (`application.play_card.target_kind`):
+  damage or `needs_target` → one enemy; `CardEffect.hits_all_enemies` → all
+  enemies; otherwise the hero.
+- **Arrow** (`src/presentation/ui/targeting.py`): quadratic curve that leaves
+  the card upward and bends to the target; chevrons every 26 px growing toward
+  a big arrowhead, flowing at 70 px/s. Pale when pointing at nothing, red over a
+  valid target; yellow pulsing corner reticle on the target (blue on the hero).
+  Pixel-art sprites drawn at half resolution, doubled nearest-neighbour and
+  pre-rotated in 5° buckets (cached) — ~20 blits per frame.
+- Preview: `output/card-targeting.gif`, `output/card-targeting-preview.png`.
+
 ## Rogue ("La Pícara") — approved art, same pipeline
 
 - Source `assets/characters/rogue-source.png`; converted by

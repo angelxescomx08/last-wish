@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from enum import Enum
 
 from src.application import relic_effects
-from src.domain.card import CardType
+from src.domain.card import Card, CardType
 from src.domain.combat import CombatState
 
 
@@ -12,6 +13,26 @@ from src.domain.combat import CombatState
 class PlayResult:
     success: bool
     message: str = ""
+
+
+class TargetKind(Enum):
+    """What a card acts on, so the UI can show it before the card is played."""
+    ENEMY = "enemy"              # one enemy chosen by the player
+    ALL_ENEMIES = "all_enemies"  # every living enemy, no choice
+    SELF = "self"                # the hero (block, draw, mana, powers)
+
+
+def requires_target(card: Card) -> bool:
+    """True when the card must be played on one chosen enemy."""
+    return card.total_damage() > 0 or any(fx.needs_target for fx in card.all_effects())
+
+
+def target_kind(card: Card) -> TargetKind:
+    if requires_target(card):
+        return TargetKind.ENEMY
+    if any(fx.hits_all_enemies for fx in card.all_effects()):
+        return TargetKind.ALL_ENEMIES
+    return TargetKind.SELF
 
 
 def play_card(
@@ -32,7 +53,7 @@ def play_card(
     blk = card.total_block()
 
     # A card needs a target if it deals base damage OR any effect declares it.
-    needs_target = dmg > 0 or any(fx.needs_target for fx in card.all_effects())
+    needs_target = requires_target(card)
 
     if needs_target and target_enemy_index is None:
         return PlayResult(False, "Esta carta necesita un objetivo")

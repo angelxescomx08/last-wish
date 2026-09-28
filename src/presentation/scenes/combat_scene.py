@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
+
 import pygame
 
 from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
-from src.application.play_card import play_card
+from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
@@ -14,7 +17,9 @@ from src.infrastructure.sprite_loader import (
 )
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.ui.fx import FxLayer
-from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
+from src.presentation.ui.card_play import CardPlayInput, PlayRequest
+from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
+from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
 from src.presentation.ui.entity_widget import (
     ENEMY_W,
     PLAYER_W,
@@ -81,6 +86,30 @@ _ENEMY_SLOTS: list[tuple[int, int]] = [
 
 _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)
 
+# Hand fan and card play (Slay the Spire style)
+_PLAY_LINE_Y: int = _HAND_AREA_Y          # release above this line to play
+_HAND_BASE_Y: float = _CARD_Y + CARD_H / 2 - 12  # centre line of the resting hand
+_HOVER_SCALE: float = 1.3
+_AIM_SCALE: float = 1.1
+_AIM_CENTER: tuple[float, float] = (640.0, 500.0)
+_MAX_TILT: float = 10.0
+_TILT_STEP: float = 2.5                   # degrees per card away from the middle
+_NEIGHBOUR_PUSH: float = 46.0             # px the neighbours of a hovered card move away
+_EASE: float = 16.0                       # hand tween speed (1/s)
+_EASE_HELD: float = 32.0                  # held card follows the pointer faster
+_LEAVE_SECONDS: float = 0.3               # played card flies to the discard pile
+_ENEMY_HIT_PAD: tuple[int, int] = (40, 70)
+_PLAYABLE = (255, 212, 60)
+_HELD = (240, 232, 214)
+
+
+@dataclass
+class CardPose:
+    x: float
+    y: float
+    scale: float = 1.0
+    angle: float = 0.0
+
 
 def _card_positions(count: int) -> list[tuple[int, int]]:
     if count == 0:
@@ -90,6 +119,38 @@ def _card_positions(count: int) -> list[tuple[int, int]]:
     total_w = CARD_W + step * (count - 1)
     start_x = _CARD_AREA_X0 + (area_w - total_w) / 2
     return [(round(start_x + i * step), _CARD_Y) for i in range(count)]
+
+
+def _hand_layout(count: int, hovered: int | None = None, held: int | None = None) -> dict[int, CardPose]:
+    """Resting pose of every card in hand: a gentle fan (tilt + arc).
+
+    The hovered card grows, stands straight and rises until it is fully
+    visible; its neighbours slide away. The held card leaves the fan and the
+    others close the gap.
+    """
+    indices = [i for i in range(count) if i != held]
+    slots = _card_positions(len(indices))
+    mid = (len(indices) - 1) / 2
+    hovered_k = indices.index(hovered) if hovered in indices else None
+    poses: dict[int, CardPose] = {}
+    for k, (i, (x, _y)) in enumerate(zip(indices, slots)):
+        off = k - mid
+        cx = x + CARD_W / 2
+        if hovered_k is not None:
+            d = k - hovered_k
+            if d == 0:
+                poses[i] = CardPose(cx, 718 - CARD_H * _HOVER_SCALE / 2, _HOVER_SCALE, 0.0)
+                continue
+            if abs(d) <= 2:
+                cx += math.copysign(_NEIGHBOUR_PUSH / abs(d), d)
+        angle = max(-_MAX_TILT, min(_MAX_TILT, -off * _TILT_STEP))
+        poses[i] = CardPose(cx, _HAND_BASE_Y + min(14.0, off * off * 1.2), 1.0, angle)
+    return poses
+
+
+def _pose_rect(pose: CardPose) -> pygame.Rect:
+    w, h = card_size(pose.scale)
+    return pygame.Rect(round(pose.x) - w // 2, round(pose.y) - h // 2, w, h)
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +188,12 @@ class CombatScene:
         self._sound = sound if sound is not None else SoundPlayer()
         self._fx    = FxLayer(fonts.get(16))
 
-        # Mouse
+        # Mouse and card play
         self._mouse: tuple[int, int] = (0, 0)
+        self._play = CardPlayInput(_PLAY_LINE_Y)
+        self._motion: dict[tuple[int, int], CardPose] = {}
+        self._leaving: list[list] = []         # [card, pose, age, bonus_dmg, bonus_blk]
+        self._fx_time = 0.0
 
         # Hit-test rects (rebuilt each draw call)
         self._card_rects:     list[pygame.Rect]  = []
@@ -169,20 +234,32 @@ class CombatScene:
 
         if event.type == pygame.MOUSEMOTION:
             self._mouse = event.pos
-            self._update_hover(event.pos)
+            self._play.move(event.pos, self._enemy_at(event.pos))
+            if self._play.active:
+                self._clear_hover()
+            else:
+                self._update_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_click(event.pos)
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self._handle_release(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
             self._cancel_selection()
+        elif event.type == pygame.KEYDOWN:
+            self._handle_key(event.key)
 
     def update(self, dt: float) -> None:
         self._advance_hero_animation(max(0.0, dt))
         self._backdrop.update(max(0.0, dt))
+        if self._overlay is not None and self._play.cancel():
+            self._state.selected_card_index = None
         if self._overlay is not None and self._overlay.dismissed:
             self._overlay = None
             self._sound.play_cancel()
         self._feedback_time = max(0.0, self._feedback_time - dt)
         self._fx.update(dt)
+        self._fx_time += max(0.0, dt)
+        self._advance_cards(max(0.0, dt))
 
     def draw(self, surface: pygame.Surface) -> None:
         self._backdrop.draw(surface)
@@ -190,20 +267,26 @@ class CombatScene:
         self._draw_battlefield(surface)
         self._draw_hand_area(surface)
 
+        self._draw_leaving(surface)
         self._fx.draw(surface)
         if self._feedback_time > 0:
             message = self._fonts.get(16).render(self._feedback_text, True, (245, 165, 125))
             surface.blit(message, message.get_rect(center=(640, _HAND_AREA_Y - 48)))
 
-        if self._in_targeting_mode:
+        self._draw_targets(surface)
+        self._draw_held_card(surface)
+        if self._play.active:
             self._draw_targeting_hint(surface)
 
         if self._overlay is not None:
             self._overlay.draw(surface)
-        else:
+        elif not self._play.active:
             tooltip = self._get_tooltip()
             if tooltip is not None:
-                draw_tooltip(surface, tooltip, self._mouse, self._fonts)
+                hovered = self._hovered_card
+                beside = (self._card_rects[hovered]
+                          if hovered is not None and hovered < len(self._card_rects) else None)
+                draw_tooltip(surface, tooltip, self._mouse, self._fonts, beside=beside)
 
     # ------------------------------------------------------------------
     # Derived state
@@ -239,10 +322,8 @@ class CombatScene:
 
     @property
     def _in_targeting_mode(self) -> bool:
-        idx = self._state.selected_card_index
-        if idx is None or idx >= self._state.hand.count:
-            return False
-        return self._state.hand.cards[idx].total_damage() > 0
+        """True while an enemy card is aimed (arrow on screen)."""
+        return self._play.aiming
 
     # ------------------------------------------------------------------
     # Drawing sections
@@ -279,7 +360,6 @@ class CombatScene:
         pygame.draw.line(surface, colors.PANEL_BORDER,
                          (0, _HAND_AREA_Y), (surface.get_width(), _HAND_AREA_Y))
 
-        targeting = self._in_targeting_mode
         self._enemy_rects = []
 
         for i, enemy in enumerate(self._state.enemies):
@@ -289,7 +369,6 @@ class CombatScene:
             rect = draw_enemy(
                 surface, enemy, ex, ey, self._fonts,
                 targeted    = self._state.targeted_enemy_index == i,
-                highlighted = targeting and enemy.is_alive,
                 sprite      = self._sprites.get_enemy_sprite(enemy.name),
             )
             self._enemy_rects.append(rect)
@@ -322,28 +401,29 @@ class CombatScene:
         char_atk_bonus  = self._state.player.attack_bonus
         char_blk_bonus  = self._state.player.dexterity
 
-        cards     = self._state.hand.cards
-        positions = _card_positions(len(cards))
-        self._card_rects = [pygame.Rect(x, y, CARD_W, CARD_H) for x, y in positions]
-        self._card_draw_order = list(range(len(cards)))
-        for lifted in (self._state.selected_card_index, self._hovered_card):
-            if lifted is not None and lifted in self._card_draw_order:
-                self._card_draw_order.remove(lifted)
-                self._card_draw_order.append(lifted)
+        cards = self._state.hand.cards
+        poses = self._target_poses()
+        held = self._held_index()
+        self._card_rects = [_pose_rect(poses[i]) for i in range(len(cards))]
+        self._card_draw_order = [i for i in range(len(cards)) if i != held]
+        hovered = self._hovered_card if held is None else None
+        if hovered in self._card_draw_order:
+            self._card_draw_order.remove(hovered)
+            self._card_draw_order.append(hovered)
+        keys = self._card_keys()
         for i in self._card_draw_order:
             card = cards[i]
-            cx, cy = positions[i]
-            bonus_dmg = (relic_atk_bonus + char_atk_bonus) if card.total_damage() > 0 else 0
-            bonus_blk = char_blk_bonus if card.total_block() > 0 else 0
-            rect = draw_card(
-                surface, card, cx, cy, self._fonts,
-                selected     = self._state.selected_card_index == i,
-                hovered      = self._hovered_card == i,
+            pose = self._motion.get(keys[i]) or self._spawn_pose()
+            bonus_dmg, bonus_blk = self._bonuses(card)
+            draw_card_at(
+                surface, card, (pose.x, pose.y), self._fonts,
+                scale        = pose.scale,
+                angle        = pose.angle,
                 affordable   = self._state.mana.can_afford(card.cost),
                 bonus_damage = bonus_dmg,
                 bonus_block  = bonus_blk,
+                outline      = _RARITY_COLOR.get(card.rarity) if i == hovered else None,
             )
-            self._card_rects[i] = rect
 
         self._draw_pile_rect = draw_pile_widget(
             surface, "ROBO", self._state.draw_pile.count,
@@ -364,11 +444,160 @@ class CombatScene:
         return [i for i in reversed(self._card_draw_order) if i < self._state.hand.count]
 
     def _draw_targeting_hint(self, surface: pygame.Surface) -> None:
-        msg_surf = self._fonts.get(15).render(
-            "Selecciona un enemigo objetivo  ·  ESC para cancelar",
-            True, _TARGETING_COLOR,
-        )
-        surface.blit(msg_surf, msg_surf.get_rect(centerx=640, centery=_HAND_AREA_Y - 16))
+        play = self._play
+        if play.kind is TargetKind.ENEMY:
+            if play.keyboard_aim:
+                text = "←/→ cambia de objetivo  ·  Enter para jugar  ·  ESC para cancelar"
+            elif play.sticky:
+                text = "Haz clic en un enemigo  ·  Clic derecho para cancelar"
+            else:
+                text = "Suelta sobre un enemigo  ·  Vuelve a la mano para cancelar"
+        elif play.by_key:
+            text = "Enter para jugar  ·  ESC para cancelar"
+        elif play.armed:
+            text = "Suelta para jugar la carta" if not play.sticky else "Haz clic para jugar la carta"
+        else:
+            text = "Arrástrala fuera de la mano para jugarla  ·  Clic derecho para cancelar"
+        msg_surf = self._fonts.get(15).render(text, True, _TARGETING_COLOR)
+        surface.blit(msg_surf, msg_surf.get_rect(centerx=640, centery=_TOP_BAR_H + 16))
+
+    # ------------------------------------------------------------------
+    # Hand motion, held card, arrow
+    # ------------------------------------------------------------------
+
+    def _bonuses(self, card) -> tuple[int, int]:
+        dmg = (relic_effects.extra_attack_damage(self._state.relics)
+               + self._state.player.attack_bonus) if card.total_damage() > 0 else 0
+        blk = self._state.player.dexterity if card.total_block() > 0 else 0
+        return dmg, blk
+
+    def _held_index(self) -> int | None:
+        card = self._play.card if self._play.active else None
+        return card if card is not None and card < self._state.hand.count else None
+
+    def _card_keys(self) -> list[tuple[int, int]]:
+        """Stable identity per card in hand (the same Card object may repeat)."""
+        seen: dict[int, int] = {}
+        keys = []
+        for card in self._state.hand.cards:
+            n = seen.get(id(card), 0)
+            seen[id(card)] = n + 1
+            keys.append((id(card), n))
+        return keys
+
+    def _spawn_pose(self) -> CardPose:
+        """New cards fly in from the draw pile."""
+        if self._draw_pile_rect is not None:
+            x, y = self._draw_pile_rect.center
+        else:
+            x, y = _DRAW_X + 40, _DRAW_Y + 40
+        return CardPose(float(x), float(y), 0.3, 0.0)
+
+    def _target_poses(self) -> dict[int, CardPose]:
+        held = self._held_index()
+        hovered = self._hovered_card if held is None else None
+        poses = _hand_layout(self._state.hand.count, hovered=hovered, held=held)
+        if held is not None:
+            if self._play.aiming or self._play.by_key:
+                poses[held] = CardPose(*_AIM_CENTER, _AIM_SCALE, 0.0)
+            else:
+                px, py = self._play.pointer
+                poses[held] = CardPose(float(px), float(py), 1.0, 0.0)
+        return poses
+
+    def _advance_cards(self, dt: float) -> None:
+        poses = self._target_poses()
+        held = self._held_index()
+        keys = self._card_keys()
+        k = 1.0 - math.exp(-_EASE * dt)
+        k_held = 1.0 - math.exp(-_EASE_HELD * dt)
+        for i, key in enumerate(keys):
+            pose = self._motion.get(key)
+            if pose is None:
+                pose = self._motion[key] = self._spawn_pose()
+            goal = poses[i]
+            f = k_held if i == held else k
+            pose.x += (goal.x - pose.x) * f
+            pose.y += (goal.y - pose.y) * f
+            pose.scale += (goal.scale - pose.scale) * f
+            pose.angle += (goal.angle - pose.angle) * f
+        live = set(keys)
+        for key in [key for key in self._motion if key not in live]:
+            del self._motion[key]
+        if self._disc_pile_rect is not None:
+            dx, dy = self._disc_pile_rect.center
+        else:
+            dx, dy = _DISCARD_X + 40, _DISCARD_Y + 40
+        for ghost in self._leaving:
+            pose = ghost[1]
+            ghost[2] += dt
+            pose.x += (dx - pose.x) * k
+            pose.y += (dy - pose.y) * k
+            pose.scale += (0.25 - pose.scale) * k
+            pose.angle += (0.0 - pose.angle) * k
+        self._leaving = [g for g in self._leaving if g[2] < _LEAVE_SECONDS]
+
+    def _draw_leaving(self, surface: pygame.Surface) -> None:
+        for card, pose, _age, dmg, blk in self._leaving:
+            draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
+                         angle=pose.angle, bonus_damage=dmg, bonus_block=blk)
+
+    def _held_pose(self) -> CardPose | None:
+        held = self._held_index()
+        if held is None:
+            return None
+        return self._motion.get(self._card_keys()[held]) or self._target_poses()[held]
+
+    def _draw_held_card(self, surface: pygame.Surface) -> None:
+        held = self._held_index()
+        pose = self._held_pose()
+        if held is None or pose is None:
+            return
+        card = self._state.hand.cards[held]
+        ready = self._play.armed or (self._play.aiming and self._play.target is not None)
+        dmg, blk = self._bonuses(card)
+        rect = draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
+                            bonus_damage=dmg, bonus_block=blk,
+                            outline=_PLAYABLE if ready else _HELD)
+        if self._play.aiming:
+            draw_arrow(surface, (rect.centerx, rect.top + 6), self._arrow_end(),
+                       hot=self._play.target is not None, phase=self._fx_time)
+
+    def _arrow_end(self) -> tuple[float, float]:
+        target = self._play.target
+        if self._play.keyboard_aim and target is not None and target < len(self._enemy_rects):
+            return self._enemy_rects[target].center
+        return self._play.pointer
+
+    def _draw_targets(self, surface: pygame.Surface) -> None:
+        play = self._play
+        if not play.active:
+            return
+        t = self._fx_time
+        if play.kind is TargetKind.ENEMY:
+            target = play.target
+            if play.aiming and target is not None and target < len(self._enemy_rects):
+                draw_reticle(surface, self._enemy_rects[target], RETICLE_ENEMY, t)
+        elif play.armed:
+            if play.kind is TargetKind.ALL_ENEMIES:
+                for enemy, rect in zip(self._state.enemies, self._enemy_rects):
+                    if enemy.is_alive:
+                        draw_reticle(surface, rect, RETICLE_ENEMY, t)
+            elif self._player_rect is not None:
+                draw_reticle(surface, self._player_rect, RETICLE_SELF, t)
+
+    def _enemy_at(self, pos: tuple[int, int]) -> int | None:
+        for i, rect in enumerate(self._enemy_rects):
+            if (i < len(self._state.enemies) and self._state.enemies[i].is_alive
+                    and rect.inflate(*_ENEMY_HIT_PAD).collidepoint(pos)):
+                return i
+        return None
+
+    def _card_at(self, pos: tuple[int, int]) -> int | None:
+        for i in self._card_hit_order():
+            if self._card_rects[i].collidepoint(pos):
+                return i
+        return None
 
     # ------------------------------------------------------------------
     # Tooltip
@@ -416,6 +645,11 @@ class CombatScene:
     # Hover detection
     # ------------------------------------------------------------------
 
+    def _clear_hover(self) -> None:
+        self._hovered_card = self._hovered_enemy = self._hovered_relic = None
+        self._hovered_player = self._hovered_mana = False
+        self._hovered_draw_pile = self._hovered_disc_pile = self._end_turn_hovered = False
+
     def _update_hover(self, pos: tuple[int, int]) -> None:
         previous_card = self._hovered_card
         self._hovered_card     = None
@@ -427,13 +661,12 @@ class CombatScene:
         self._hovered_disc_pile = False
         self._end_turn_hovered = False
 
-        for i in self._card_hit_order():
-            rect = self._card_rects[i]
-            if _card_hover_rect(rect).collidepoint(pos):
-                self._hovered_card = i
-                if i != previous_card:
-                    self._sound.play_nav()
-                return
+        card = self._card_at(pos)
+        if card is not None:
+            self._hovered_card = card
+            if card != previous_card:
+                self._sound.play_nav()
+            return
 
         for i, rect in enumerate(self._enemy_rects):
             if rect.collidepoint(pos):
@@ -498,55 +731,69 @@ class CombatScene:
             self._do_end_turn()
             return
 
-        # Targeting mode: click enemy → play card; click card → switch; click blank → cancel
-        if self._in_targeting_mode:
-            for i, rect in enumerate(self._enemy_rects):
-                if rect.collidepoint(pos):
-                    if i < len(self._state.enemies) and self._state.enemies[i].is_alive:
-                        self._do_play_card(self._state.selected_card_index, i)  # type: ignore[arg-type]
-                    return
-            for i in self._card_hit_order():
-                rect = self._card_rects[i]
-                if _card_hover_rect(rect).collidepoint(pos):
-                    card = self._state.hand.cards[i]
-                    if not self._state.mana.can_afford(card.cost):
-                        self._show_error("Maná insuficiente")
-                    elif card.total_damage() > 0:
-                        if self._state.selected_card_index != i:
-                            self._state.selected_card_index = i
-                            self._sound.play_confirm()
-                    else:
-                        self._do_play_card(i, None)
-                    return
-            self._cancel_selection()
+        # A card under the pointer: pick it up (or switch to it)
+        card_index = self._card_at(pos)
+        if card_index is not None:
+            self._pick_card(card_index, pos)
             return
 
-        # Normal card click
-        for i in self._card_hit_order():
-            rect = self._card_rects[i]
-            if _card_hover_rect(rect).collidepoint(pos):
-                card         = self._state.hand.cards[i]
-                needs_target = card.total_damage() > 0
-                can_afford   = self._state.mana.can_afford(card.cost)
+        # A card held after a click: this click plays or drops it
+        if self._play.active:
+            self._finish(self._play.click(pos, self._enemy_at(pos)))
+            return
 
-                if not can_afford:
-                    self._show_error("Maná insuficiente")
-                elif needs_target:
-                    self._state.selected_card_index = i
-                    self._sound.play_confirm()
-                else:
-                    self._do_play_card(i, None)
-                return
-
-        # Click on empty space clears selection
         self._cancel_selection()
+
+    def _handle_release(self, pos: tuple[int, int]) -> None:
+        if self._play.active and not self._play.sticky:
+            self._finish(self._play.release(pos, self._enemy_at(pos)))
+
+    def _handle_key(self, key: int) -> None:
+        if key == pygame.K_ESCAPE:
+            self._cancel_selection()
+        elif pygame.K_1 <= key <= pygame.K_9:
+            index = key - pygame.K_1
+            if index < self._state.hand.count:
+                self._pick_card(index, None)
+        elif key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_TAB):
+            alive = [i for i, e in enumerate(self._state.enemies) if e.is_alive]
+            self._play.cycle_target(alive, -1 if key == pygame.K_LEFT else 1)
+        elif key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            if self._play.active:
+                self._finish(self._play.confirm())
+        elif key == pygame.K_e:
+            self._do_end_turn()
+
+    def _pick_card(self, index: int, pos: tuple[int, int] | None) -> None:
+        """Pick up a card with the mouse (``pos``) or with its number key."""
+        card = self._state.hand.cards[index]
+        if not self._state.mana.can_afford(card.cost):
+            self._show_error("Maná insuficiente")
+            return
+        kind = target_kind(card)
+        if pos is None:
+            alive = [i for i, e in enumerate(self._state.enemies) if e.is_alive]
+            self._play.pick_with_key(index, kind, alive[0] if alive else None)
+        else:
+            self._play.pick(index, kind, pos)
+        self._state.selected_card_index = index
+        self._hovered_card = None
+        self._sound.play_confirm()
+
+    def _finish(self, request: PlayRequest | None) -> None:
+        """Play the returned card, or put the card back when nothing was played."""
+        if request is not None:
+            self._do_play_card(request.card_index, request.target_index)
+        elif not self._play.active:
+            self._state.selected_card_index = None
 
     # ------------------------------------------------------------------
     # Feedback helpers
     # ------------------------------------------------------------------
 
     def _cancel_selection(self) -> None:
-        if self._state.selected_card_index is not None:
+        was_holding = self._play.cancel()
+        if was_holding or self._state.selected_card_index is not None:
             self._state.selected_card_index = None
             self._sound.play_cancel()
 
@@ -562,10 +809,19 @@ class CombatScene:
         is_attack     = (0 <= card_idx < state.hand.count
                          and state.hand.cards[card_idx].total_damage() > 0)
 
+        self._play.cancel()
+        played = state.hand.cards[card_idx] if 0 <= card_idx < state.hand.count else None
+        played_pose = self._motion.get(self._card_keys()[card_idx]) if played is not None else None
+        bonuses = self._bonuses(played) if played is not None else (0, 0)
+
         result = play_card(state, card_idx, target_idx)
         if not result.success:
+            state.selected_card_index = None
             self._show_error(result.message)
             return
+        if played is not None and played_pose is not None:
+            self._leaving.append([played, CardPose(played_pose.x, played_pose.y, played_pose.scale,
+                                                   played_pose.angle), 0.0, *bonuses])
         self._feedback_time = 0.0
         self._hovered_card = None
         self._sound.play_card()
@@ -613,6 +869,7 @@ class CombatScene:
         state  = self._state
         old_hp = state.player.current_hp
 
+        self._play.cancel()
         self._sound.play_end_turn()
         end_player_turn(state)
 
@@ -622,11 +879,3 @@ class CombatScene:
         if dmg > 0 and self._player_rect:
             self._fx.add_hit_flash(self._player_rect, dmg)
             self._sound.play_hit()
-
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
-
-def _card_hover_rect(rect: pygame.Rect) -> pygame.Rect:
-    return pygame.Rect(rect.x, rect.y - 44, rect.width, rect.height + 44)
