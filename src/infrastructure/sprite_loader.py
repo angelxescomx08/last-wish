@@ -22,12 +22,15 @@ _ASSETS = (
 _HERO_DIR = _ASSETS.parent / "characters"
 _HERO_SHEET_PATH = _HERO_DIR / "warrior_sheet.png"
 _HERO_META_PATH = _HERO_DIR / "warrior_sheet.json"
-HERO_NAMES = ("La Guerrera", "El Guerrero")
+
+# Player display name -> hero sprite set (files <id>_sheet*.png / <id>_sheet.json)
+HERO_IDS: dict[str, str] = {"La Guerrera": "warrior", "El Guerrero": "warrior", "El Mago": "mage"}
+HERO_NAMES = tuple(HERO_IDS)
 
 
 @dataclass(frozen=True)
 class HeroAnimation:
-    """One row of the native pixel-art sheet written by generate_warrior_sprites.py."""
+    """One row of a hero sheet written by generate_<hero>_sprites.py."""
     row: int
     durations: tuple[float, ...]   # seconds per frame
     loop: bool
@@ -50,28 +53,50 @@ class HeroAnimation:
         return len(self.durations) - 1
 
 
-def _load_hero_meta() -> tuple[int, dict[int, str], dict[str, HeroAnimation]]:
-    """Read cell size, per-size sheets and animations from generate_warrior_sprites.py."""
+@dataclass(frozen=True)
+class HeroSheets:
+    cell: int                                   # largest cell size (px)
+    sheets: dict[int, str]                      # cell size -> file name
+    animations: dict[str, HeroAnimation]
+
+
+def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
+    """Read cell size, per-size sheets and animations of one hero."""
+    path = _HERO_META_PATH if hero == "warrior" else _HERO_DIR / f"{hero}_sheet.json"
     try:
-        meta = json.loads(_HERO_META_PATH.read_text(encoding="utf-8"))
+        meta = json.loads(path.read_text(encoding="utf-8"))
         cell = int(meta["cell"])
-        sheets = {int(k): str(v) for k, v in meta.get("sheets", {str(cell): _HERO_SHEET_PATH.name}).items()}
-        return cell, sheets, {
+        sheets = {int(k): str(v) for k, v in meta.get("sheets", {str(cell): f"{hero}_sheet.png"}).items()}
+        return HeroSheets(cell, sheets, {
             name: HeroAnimation(int(a["row"]), tuple(ms / 1000 for ms in a["durations_ms"]), bool(a["loop"]))
             for name, a in meta["animations"].items()
-        }
+        })
     except (OSError, ValueError, KeyError, TypeError):
-        return 192, {192: _HERO_SHEET_PATH.name}, {"idle": HeroAnimation(0, (0.1,) * 16, True)}
+        return HeroSheets(192, {192: f"{hero}_sheet.png"}, {"idle": HeroAnimation(0, (0.1,) * 16, True)})
 
 
-HERO_CELL, HERO_SHEETS, _ANIMS = _load_hero_meta()
-HERO_ANIMATIONS: dict[str, HeroAnimation] = _ANIMS
+HEROES: dict[str, HeroSheets] = {hero: _load_hero_meta(hero) for hero in sorted(set(HERO_IDS.values()))}
+
+# Warrior aliases kept for existing callers
+HERO_CELL = HEROES["warrior"].cell
+HERO_SHEETS = HEROES["warrior"].sheets
+HERO_ANIMATIONS: dict[str, HeroAnimation] = HEROES["warrior"].animations
 IDLE_CYCLE_SECONDS = HERO_ANIMATIONS["idle"].total
 
 
-def hero_animation_seconds(name: str) -> float:
+def hero_id_for(player_name: str) -> str | None:
+    """Hero sprite set used by a player display name, or None for plain sprites."""
+    return HERO_IDS.get(player_name)
+
+
+def has_hero_sprites(player_name: str) -> bool:
+    return player_name in HERO_IDS
+
+
+def hero_animation_seconds(name: str, hero: str = "warrior") -> float:
     """Length of a hero animation in seconds (0.0 when unknown)."""
-    anim = HERO_ANIMATIONS.get(name)
+    sheets = HEROES.get(hero)
+    anim = sheets.animations.get(name) if sheets else None
     return anim.total if anim else 0.0
 
 
@@ -175,30 +200,31 @@ class SpriteLoader:
 
     def __init__(self) -> None:
         self._cache: dict[tuple[str, int], pygame.Surface | None] = {}
-        self._hero_frames: dict[tuple[str, int], tuple[pygame.Surface, ...]] = {}
-        self._hero_sheets: dict[int, pygame.Surface | None] = {}
+        self._hero_frames: dict[tuple[str, str, int], tuple[pygame.Surface, ...]] = {}
+        self._hero_sheets: dict[tuple[str, int], pygame.Surface | None] = {}
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def get_player_animation_frames(self, animation: str = "idle",
-                                    size: int = 192) -> tuple[pygame.Surface, ...]:
-        """Frames of one animation at ``size`` px.
+    def get_player_animation_frames(self, animation: str = "idle", size: int = 192,
+                                    hero: str = "warrior") -> tuple[pygame.Surface, ...]:
+        """Frames of one hero animation at ``size`` px.
 
         The sheet whose cell divides ``size`` is used (192 px for combat, 96 px
         for selection), so pixels are shown 1:1 or enlarged by whole numbers.
         Returns an empty tuple when the sheet or the animation is missing.
         """
-        key = (animation, size)
+        key = (hero, animation, size)
         if key in self._hero_frames:
             return self._hero_frames[key]
-        anim = HERO_ANIMATIONS.get(animation)
+        sheets = HEROES.get(hero)
+        anim = sheets.animations.get(animation) if sheets else None
         frames: tuple[pygame.Surface, ...] = ()
-        if anim is not None:
-            cells_fit = [c for c in HERO_SHEETS if size % c == 0]
-            cell = max(cells_fit) if cells_fit else HERO_CELL
-            sheet = self._hero_sheet(cell)
+        if sheets is not None and anim is not None:
+            cells_fit = [c for c in sheets.sheets if size % c == 0]
+            cell = max(cells_fit) if cells_fit else sheets.cell
+            sheet = self._hero_sheet(hero, cell)
             count = len(anim.durations)
             if sheet is not None and sheet.get_width() >= count * cell \
                     and sheet.get_height() >= (anim.row + 1) * cell:
@@ -210,9 +236,9 @@ class SpriteLoader:
         self._hero_frames[key] = frames
         return frames
 
-    def get_player_idle_frames(self, size: int = 192) -> tuple[pygame.Surface, ...]:
+    def get_player_idle_frames(self, size: int = 192, hero: str = "warrior") -> tuple[pygame.Surface, ...]:
         """Idle loop frames (kept for callers of the previous API)."""
-        return self.get_player_animation_frames("idle", size)
+        return self.get_player_animation_frames("idle", size, hero)
 
     def get_player_sprite(self, player_name: str, size: int = 128, *, elapsed: float = 0.0,
                           animation: str = "idle") -> pygame.Surface | None:
@@ -221,13 +247,15 @@ class SpriteLoader:
         Timing comes from elapsed time, never from the render frame rate.
         Non-looping actions hold their last frame (identical to idle frame 0).
         """
-        if player_name in HERO_NAMES:
-            anim = HERO_ANIMATIONS.get(animation) or HERO_ANIMATIONS.get("idle")
-            name = animation if animation in HERO_ANIMATIONS else "idle"
-            frames = self.get_player_animation_frames(name, size)
-            if frames and anim is not None:
-                return frames[anim.frame_at(elapsed)]
-            player_name = "El Guerrero"
+        hero = hero_id_for(player_name)
+        if hero is not None:
+            anims = HEROES[hero].animations
+            name = animation if animation in anims else "idle"
+            frames = self.get_player_animation_frames(name, size, hero)
+            if frames and name in anims:
+                return frames[anims[name].frame_at(elapsed)]
+            if hero == "warrior":
+                player_name = "El Guerrero"
         rel = PLAYER_SPRITE_PATHS.get(player_name)
         return self._load(rel, size) if rel else None
 
@@ -293,15 +321,17 @@ class SpriteLoader:
     # Internal
     # ------------------------------------------------------------------
 
-    def _hero_sheet(self, cell: int) -> pygame.Surface | None:
-        if cell not in self._hero_sheets:
-            name = HERO_SHEETS.get(cell)
-            path = _HERO_SHEET_PATH if cell == HERO_CELL else _HERO_DIR / (name or "")
+    def _hero_sheet(self, hero: str, cell: int) -> pygame.Surface | None:
+        key = (hero, cell)
+        if key not in self._hero_sheets:
+            sheets = HEROES.get(hero)
+            name = sheets.sheets.get(cell) if sheets else None
+            path = _HERO_SHEET_PATH if (hero == "warrior" and cell == HERO_CELL) else _HERO_DIR / (name or "")
             try:
-                self._hero_sheets[cell] = pygame.image.load(str(path)) if name else None
+                self._hero_sheets[key] = pygame.image.load(str(path)) if name else None
             except (pygame.error, OSError, FileNotFoundError):
-                self._hero_sheets[cell] = None
-        return self._hero_sheets[cell]
+                self._hero_sheets[key] = None
+        return self._hero_sheets[key]
 
     def _load_card(self, rel_path: str, size: int) -> pygame.Surface | None:
         """Load from _CARD_ASSETS (Card Sprites folder)."""

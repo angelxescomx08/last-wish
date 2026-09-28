@@ -37,6 +37,23 @@ rain made of particles, and low CPU use.
 - `scripts/generate_dungeon_background.py` and `assets/backgrounds/` were the first
   baked-GIF test (rain drawn into frames); they are superseded and unused.
 
+## Mage — approved art, same pipeline as the warrior
+
+- Source: `assets/characters/mage-source.png` (user-supplied, dark vignette with
+  a soft glow instead of transparency).
+- `scripts/make_mage_base.py` (one-time, Pillow + numpy): estimates the smooth
+  backdrop, keeps pixels that differ from it or are clearly coloured, protects
+  the thin dark staff shaft, closes 15 px gaps so boots stay solid, floods the
+  outside; then reduces ×8 to `mage_base.png` (128×192) with a light unsharp
+  mask, block averages snapped to a 64-colour palette (12 colours reserved for
+  glowing accents: eyes, crystal, gems) and peels grey halo pixels.
+  The mage source has a finer pixel grid than the warrior's, so the reduced art
+  is a little softer; a cleaner source at ~4 px per art pixel would help.
+- `scripts/generate_mage_sprites.py`: idle 16 × 100 ms (breath, head lag, robe
+  hem sway, crystal pulse, orbiting motes, blink); attack = crystal flare +
+  arcane bolt + burst; guard = rune circle; hurt = shared flash/recoil.
+  Landmarks (`HEAD_BOTTOM`, `CHEST_BOTTOM`, `CRYSTAL`, `EYES`) at the top.
+
 ## Warrior v7 — approved art, animated without deformation (current runtime asset)
 
 History: v2 rotated layers of the approved illustration (looked good, not

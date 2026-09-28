@@ -9,7 +9,9 @@ from src.domain.combat import CombatState
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
-from src.infrastructure.sprite_loader import SpriteLoader, IDLE_CYCLE_SECONDS, hero_animation_seconds
+from src.infrastructure.sprite_loader import (
+    IDLE_CYCLE_SECONDS, SpriteLoader, has_hero_sprites, hero_animation_seconds, hero_id_for,
+)
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
@@ -115,6 +117,7 @@ class CombatScene:
         self._backdrop            = DungeonBackdrop()
         self._idle_time = 0.0
         self._hero_action: str | None = None   # attack | guard | hurt
+        self._hero_id = hero_id_for(state.player.name) or "warrior"
         self._hero_action_time = 0.0
         self._is_boss             = is_boss
         self._death_acknowledged  = False
@@ -294,10 +297,10 @@ class CombatScene:
         self._player_rect = draw_player(
             surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
             sprite=self._sprites.get_player_sprite(self._state.player.name,
-                size=192 if self._state.player.name in ("La Guerrera", "El Guerrero") else 128,
+                size=192 if has_hero_sprites(self._state.player.name) else 128,
                 elapsed=self._hero_action_time if self._hero_action else self._idle_time,
                 animation=self._hero_action or "idle"),
-            framed=self._state.player.name not in ("La Guerrera", "El Guerrero"),
+            framed=not has_hero_sprites(self._state.player.name),
         )
 
         if self._state.active_powers:
@@ -591,7 +594,7 @@ class CombatScene:
         return self._hero_action
 
     def _play_hero_action(self, name: str) -> None:
-        if hero_animation_seconds(name) > 0:
+        if hero_animation_seconds(name, self._hero_id) > 0:
             self._hero_action = name
             self._hero_action_time = 0.0
 
@@ -600,7 +603,7 @@ class CombatScene:
             self._idle_time = (self._idle_time + dt) % IDLE_CYCLE_SECONDS
             return
         self._hero_action_time += dt
-        if self._hero_action_time >= hero_animation_seconds(self._hero_action):
+        if self._hero_action_time >= hero_animation_seconds(self._hero_action, self._hero_id):
             # every action ends on idle frame 0, so idle restarts without a pop
             self._hero_action = None
             self._hero_action_time = 0.0
