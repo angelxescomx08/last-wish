@@ -142,7 +142,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
-| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
+| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
 
@@ -290,7 +290,7 @@ Player fields and affect combat calculations:
 | `max_mana` | `mana.maximum` | Starting mana pool (before COMBAT_AMULET adds 1) |
 | `dexterity` | `dexterity` | Flat bonus added to every block card's effective block |
 
-The three characters (Guerrero / Mago / Pícaro) differ in these values so each offers a different playstyle.
+The three characters (La Guerrera / El Mago / La Pícara) differ in these values so each offers a different playstyle.
 
 ### Scene flow
 
@@ -440,6 +440,7 @@ One test file per source module. All test files follow the same structure:
 | `presentation/fx/test_sprite_animation.py` | `fx/sprite_animation.py` | frame timing, looping, hold, offsets, invalid input |
 | `infrastructure/test_dungeon_assets.py` | `infrastructure/dungeon_assets.py` | files exist, metadata anchors/palettes, pre-scaling, single load |
 | `presentation/ui/test_dungeon_backdrop.py` | `ui/dungeon_backdrop.py` | room drawn, torches animate, budget 0, fallback, cost bound, combat integration |
+| `test_hero_rogue.py` | rogue sheets in `sprite_loader.py` + `CombatScene` | same contract as the mage, both rogue names |
 | `test_hero_mage.py` | mage sheets in `sprite_loader.py` + `CombatScene` | name→hero mapping, 192/96 sheets, idle motion, planted boots, actions end on idle 0, shared idle clock, attack trigger |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
 
@@ -474,12 +475,13 @@ for damage cards, `guard` when block is gained, `hurt` when HP is lost
 (`hero_action`). Regenerate, inspect `output/warrior-animations.gif`, and run
 `tests/test_hero_idle.py` with the full suite.
 
-**El Mago** follows the same pipeline: `mage-source.png` → `scripts/make_mage_base.py`
-(one-time: background removal of the dark vignette, staff shaft protected, ×8
-reduction with accent-preserving palette) → `mage_base.png` (128×192) →
-`scripts/generate_mage_sprites.py` (stdlib) → `mage_sheet*.png/json`. Idle adds a
-pulsing staff crystal with orbiting motes; attack is an arcane bolt, guard a rune
-circle. New heroes: add a source drawing, a base conversion, a generator reusing
+**El Mago** and **La Pícara** follow the same pipeline: `<hero>-source.png` →
+`scripts/make_hero_base.py <hero>` (one-time: background removal of the dark
+vignette, per-hero protected thin parts and halo peeling, ×8 reduction with an
+accent-preserving palette) → `<hero>_base.png` (128×192) →
+`scripts/generate_<hero>_sprites.py` (stdlib) → `<hero>_sheet*.png/json`. Mage: pulsing
+crystal with motes, arcane bolt, rune circle. Rogue: dagger glints, shadow dash
+with after-images and crossed slash, smoky side-step. New heroes: add a source drawing, a base conversion, a generator reusing
 the shared helpers, and an entry in `HERO_IDS`.
 
 **Environments:** `scripts/generate_dungeon_assets.py` (stdlib) builds the dungeon

@@ -18,8 +18,8 @@ class TestRegistry:
     def test_mage_name_maps_to_mage_sheets(self):
         assert hero_id_for("El Mago") == "mage"
 
-    def test_rogue_has_no_hero_sheets(self):
-        assert has_hero_sprites("El Pícaro") is False
+    def test_unknown_name_has_no_hero_sheets(self):
+        assert has_hero_sprites("Nadie") is False
 
     def test_mage_has_the_four_animations(self):
         assert set(HEROES["mage"].animations) == {"idle", "attack", "guard", "hurt"}

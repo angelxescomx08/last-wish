@@ -47,8 +47,8 @@ ALL_CHARACTERS: list[Character] = [
     ),
     Character(
         id=CharacterId.ROGUE,
-        name="El Pícaro",
-        description="Ágil y astuto, con la suerte de su lado.",
+        name="La Pícara",
+        description="Ágil y astuta, con la suerte de su lado.",
         stats=CharacterStats(damage=6, max_hp=70, luck=8, max_mana=3, dexterity=2),
     ),
 ]

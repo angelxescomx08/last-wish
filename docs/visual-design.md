@@ -37,11 +37,23 @@ rain made of particles, and low CPU use.
 - `scripts/generate_dungeon_background.py` and `assets/backgrounds/` were the first
   baked-GIF test (rain drawn into frames); they are superseded and unused.
 
+## Rogue ("La Pícara") — approved art, same pipeline
+
+- Source `assets/characters/rogue-source.png`; converted by
+  `scripts/make_hero_base.py rogue` (3 halo-peel passes up to brightness 0.74
+  because the daggers carry a bright glow; polished steel counted as an accent so
+  blades stay crisp). The domain name changed from "El Pícaro" to "La Pícara";
+  both names map to the rogue sheets.
+- `scripts/generate_rogue_sprites.py`: idle 16 × 100 ms (breath, head lag,
+  coat-tail sway, a glint down each dagger); attack = anticipation, shadow dash
+  with dithered purple after-images, crossed double slash, sparks; guard = smoky
+  side-step with after-image and glinting daggers; hurt = shared flash/recoil.
+
 ## Mage — approved art, same pipeline as the warrior
 
 - Source: `assets/characters/mage-source.png` (user-supplied, dark vignette with
   a soft glow instead of transparency).
-- `scripts/make_mage_base.py` (one-time, Pillow + numpy): estimates the smooth
+- `scripts/make_hero_base.py mage` (one-time, Pillow + numpy; `make_mage_base.py` is a wrapper): estimates the smooth
   backdrop, keeps pixels that differ from it or are clearly coloured, protects
   the thin dark staff shaft, closes 15 px gaps so boots stay solid, floods the
   outside; then reduces ×8 to `mage_base.png` (128×192) with a light unsharp

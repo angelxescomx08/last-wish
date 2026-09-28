@@ -24,7 +24,11 @@ _HERO_SHEET_PATH = _HERO_DIR / "warrior_sheet.png"
 _HERO_META_PATH = _HERO_DIR / "warrior_sheet.json"
 
 # Player display name -> hero sprite set (files <id>_sheet*.png / <id>_sheet.json)
-HERO_IDS: dict[str, str] = {"La Guerrera": "warrior", "El Guerrero": "warrior", "El Mago": "mage"}
+HERO_IDS: dict[str, str] = {
+    "La Guerrera": "warrior", "El Guerrero": "warrior",
+    "El Mago": "mage",
+    "La Pícara": "rogue", "El Pícaro": "rogue",
+}
 HERO_NAMES = tuple(HERO_IDS)
 
 
@@ -254,8 +258,7 @@ class SpriteLoader:
             frames = self.get_player_animation_frames(name, size, hero)
             if frames and name in anims:
                 return frames[anims[name].frame_at(elapsed)]
-            if hero == "warrior":
-                player_name = "El Guerrero"
+            player_name = {"warrior": "El Guerrero", "rogue": "El Pícaro"}.get(hero, player_name)
         rel = PLAYER_SPRITE_PATHS.get(player_name)
         return self._load(rel, size) if rel else None
 
