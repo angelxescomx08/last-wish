@@ -141,6 +141,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fonts.py` | `FontRegistry` — lazy font cache, keyed by point size |
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
+| `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size): `get_player_animation_frames(anim, size)`, `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` (from `warrior_sheet.json`), `hero_animation_seconds(anim)`, `IDLE_CYCLE_SECONDS` |
 
 ### Presentation layer — `src/presentation/`
@@ -161,6 +162,9 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` — renders card with effective final values |
 | `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
+| `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
+| `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
+| `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
 | `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc. |
 | `ui/pile_viewer.py` | Modal overlay for browsing a pile's cards |
@@ -432,6 +436,10 @@ One test file per source module. All test files follow the same structure:
 | `test_card_rewards.py` | `application/card_rewards.py` | pick_reward_cards count, pick_pack_cards theme filtering, seeded determinism |
 | `test_preferences.py` | `infrastructure/preferences.py` | defaults, load (present/missing/invalid JSON), save, round-trip, unknown keys ignored |
 | `test_sprite_loader.py` | `infrastructure/sprite_loader.py` | mapping completeness, all asset files exist on disk, unknown-name → None, cache empty on unknown |
+| `presentation/fx/test_particles.py` | `fx/particles.py` | spawn rate, capacity, budget, lifetime, dt clamp (10^9), 10 000-step stress, gravity, landing bursts, determinism, clip, trails |
+| `presentation/fx/test_sprite_animation.py` | `fx/sprite_animation.py` | frame timing, looping, hold, offsets, invalid input |
+| `infrastructure/test_dungeon_assets.py` | `infrastructure/dungeon_assets.py` | files exist, metadata anchors/palettes, pre-scaling, single load |
+| `presentation/ui/test_dungeon_backdrop.py` | `ui/dungeon_backdrop.py` | room drawn, torches animate, budget 0, fallback, cost bound, combat integration |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
 
 ### Testing rules
@@ -464,3 +472,11 @@ code may animate it and make environments/effects. `CombatScene` plays `attack`
 for damage cards, `guard` when block is gained, `hurt` when HP is lost
 (`hero_action`). Regenerate, inspect `output/warrior-animations.gif`, and run
 `tests/test_hero_idle.py` with the full suite.
+
+**Environments:** `scripts/generate_dungeon_assets.py` (stdlib) builds the dungeon
+pack in `assets/dungeon/` — reusable wall/floor/ledge blocks, window, torch
+bracket, banner, chain, 6 flame frames, glow frames — and **bakes the lighting**
+of a room layout (`ROOMS`) into `room_combat.png` (640×360, shown ×2). Runtime
+never lights pixels: `DungeonBackdrop` blits the baked room once per frame and
+adds only moving things (flames, glow via `BLEND_RGB_ADD`, particles). Keep new
+effects in `fx/` reusable and pooled; measure with `scripts/bench_backdrop.py`.

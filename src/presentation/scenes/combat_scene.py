@@ -10,6 +10,7 @@ from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader, IDLE_CYCLE_SECONDS, hero_animation_seconds
+from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
 from src.presentation.ui.entity_widget import (
@@ -111,6 +112,7 @@ class CombatScene:
         self._state               = state
         self._fonts               = fonts
         self._sprites             = SpriteLoader()
+        self._backdrop            = DungeonBackdrop()
         self._idle_time = 0.0
         self._hero_action: str | None = None   # attack | guard | hurt
         self._hero_action_time = 0.0
@@ -172,6 +174,7 @@ class CombatScene:
 
     def update(self, dt: float) -> None:
         self._advance_hero_animation(max(0.0, dt))
+        self._backdrop.update(max(0.0, dt))
         if self._overlay is not None and self._overlay.dismissed:
             self._overlay = None
             self._sound.play_cancel()
@@ -179,7 +182,7 @@ class CombatScene:
         self._fx.update(dt)
 
     def draw(self, surface: pygame.Surface) -> None:
-        surface.fill(colors.BG_DARK)
+        self._backdrop.draw(surface)
         self._draw_top_bar(surface)
         self._draw_battlefield(surface)
         self._draw_hand_area(surface)

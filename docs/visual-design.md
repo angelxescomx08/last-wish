@@ -10,6 +10,33 @@ Environments use dark stone, blue/purple shadows and warm torchlight. Preserve
 crisp pixels, coloured outlines and consistent upper-left lighting. UI is Spanish;
 code identifiers and comments are English.
 
+## Dungeon environment pack (combat backdrop)
+
+User liked the cold/warm dungeon test and its torch; asked for reusable assets,
+rain made of particles, and low CPU use.
+
+- `scripts/generate_dungeon_assets.py` (stdlib) writes `assets/dungeon/`:
+  `tiles.png` (4 seamless 32×24 wall blocks: plain, cracked, mossy, chipped;
+  4 32×16 floor flagstones; a 32×6 ledge), `props.png` (torch bracket, banner,
+  chain), `flame.png` (6 frames, 14×22), `glow.png` (3 flicker levels),
+  `room_combat.png` and `dungeon.json` (anchors: torches, window interior,
+  sill, moonbeam, drips; particle palettes).
+- **Baked lighting**: moonlight, torchlight, vignette and colour banding with
+  ordered-dither seams are computed offline per room. Palette: cold blue ramp
+  vs warm ember ramp; moss has its own cold/warm ramps.
+- **Runtime** (`src/presentation/ui/dungeon_backdrop.py`): one full-screen blit
+  of the pre-scaled room; per torch a flame `SpriteAnimation` and a 3-level
+  additive glow chosen by layered sines; particles from
+  `src/presentation/fx/particles.py`: embers, window rain with slanted trails
+  (clipped to the window) that splash on the sill, ceiling drips that splash on
+  the floor, dust in the moonbeam. Python update ≈ 0.1 ms per frame, ~100
+  particles; no per-frame scaling or per-pixel work.
+- GPU rendering (pygame `_sdl2` renderer) was not needed: the frame cost is
+  dominated by one blit. Revisit only if profiling says so.
+- New rooms: add a layout to `ROOMS`, bake, and pass its anchors via JSON.
+- `scripts/generate_dungeon_background.py` and `assets/backgrounds/` were the first
+  baked-GIF test (rain drawn into frames); they are superseded and unused.
+
 ## Warrior v7 — approved art, animated without deformation (current runtime asset)
 
 History: v2 rotated layers of the approved illustration (looked good, not
