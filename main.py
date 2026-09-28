@@ -36,6 +36,7 @@ from src.presentation.scenes.pack_opening_scene import PackOpeningScene
 from src.presentation.scenes.settings_scene import SettingsScene
 from src.presentation.scenes.shop_scene import ShopScene
 from src.presentation.scenes.treasure_scene import TreasureScene
+from src.presentation.ui.pause_menu import PauseMenu, PauseAction, PAUSE_BUTTON, draw_pause_button
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -93,6 +94,7 @@ class SceneManager:
         )
         self._run            = None           # set when character is selected
         self.quit_requested: bool = False
+        self._pause: PauseMenu | None = None
 
     # ------------------------------------------------------------------
     # Stack operations
@@ -116,17 +118,55 @@ class SceneManager:
     # Game loop delegates
     # ------------------------------------------------------------------
 
+    def _can_pause(self) -> bool:
+        return self._run is not None and not isinstance(
+            self._top(), (MainMenuScene, CharacterSelectScene, SettingsScene, DeathScene)
+        )
+
     def handle_event(self, event: pygame.event.Event) -> None:
-        self._top().handle_event(event)
+        if self._pause is not None:
+            self._pause.handle_event(event)
+            action = self._pause.action
+            if action == PauseAction.ABANDON:
+                self._run = None
+                self._stack = [MainMenuScene(self._fonts, sound=self._sound)]
+            if action is not None:
+                self._pause = None
+                self._sound.play_confirm()
+            return
+        top = self._top()
+        escape = event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+        clicked = (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                   and PAUSE_BUTTON.collidepoint(event.pos))
+        if self._can_pause() and (escape or clicked):
+            # Escape first dismisses an existing collection or held card.
+            if escape and (getattr(top, '_overlay', None) is not None
+                           or isinstance(top, CombatScene) and top._play.active):
+                top.handle_event(event)
+                return
+            if escape and getattr(event, 'repeat', False):
+                return
+            if isinstance(top, CombatScene):
+                top._cancel_selection()
+            self._pause = PauseMenu(self._fonts)
+            self._sound.play_confirm()
+            return
+        top.handle_event(event)
 
     def update(self, dt: float) -> None:
         self._sound.update()
+        if self._pause is not None:
+            return
         top = self._top()
         top.update(dt)
         self._handle_transitions(top)
 
     def draw(self, surface: pygame.Surface) -> None:
         self._top().draw(surface)
+        if self._can_pause():
+            draw_pause_button(surface, self._fonts)
+        if self._pause is not None:
+            self._pause.draw(surface)
 
     # ------------------------------------------------------------------
     # Transition dispatcher

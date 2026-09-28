@@ -516,3 +516,18 @@ of a room layout (`ROOMS`) into `room_combat.png` (640×360, shown ×2). Runtime
 never lights pixels: `DungeonBackdrop` blits the baked room once per frame and
 adds only moving things (flames, glow via `BLEND_RGB_ADD`, particles). Keep new
 effects in `fx/` reusable and pooled; measure with `scripts/bench_backdrop.py`.
+
+## Run pause and abandonment
+
+`SceneManager` in `main.py` owns a `PauseMenu` overlay
+(`src/presentation/ui/pause_menu.py`). During a run, the visible `Pausa · Esc`
+button or Escape opens it in map, combat, shop, event and reward screens.
+Existing collections/held cards consume Escape first. The pause button cancels
+held combat input. While paused, room updates and transitions stop and all input
+goes to the overlay; shared audio still updates. Mouse and keyboard are supported.
+
+`Reanudar` keeps the exact run and scene stack. `Abandonar partida…` opens a
+confirmation with Cancel selected by default. Only explicit confirmation clears
+`_run` and replaces the stack with a fresh `MainMenuScene` using shared audio.
+This discards the current run; it is not a save/suspend feature. The existing main
+menu `Salir` action closes the application. Tests: `tests/test_pause_menu.py`.
