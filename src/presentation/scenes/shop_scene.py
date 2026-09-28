@@ -7,6 +7,7 @@ from src.application import relic_effects
 from src.application.run_manager import pick_shop_stock
 from src.domain.card_pool import PackTheme
 from src.domain.run import Run
+from src.infrastructure.card_assets import pack_art
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
@@ -65,7 +66,7 @@ class ShopScene:
                 rects.append(rect)
                 is_pack = kind == 'Sobres'
                 cost = item.cost if is_pack else _RELIC_COST
-                sprite = (self._sprites.get_pack_sprite(item.theme.value, 90) if is_pack
+                sprite = (pack_art(item.theme.value, 150) if is_pack
                           else self._sprites.get_relic_sprite(item.name, 64))
                 self._draw_tile(surface, item, cost, sprite, rect, i in sold,
                                 self._hovered == (kind, i))

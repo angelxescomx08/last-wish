@@ -1,0 +1,122 @@
+{
+  "status": "design_assets_not_runtime_integrated",
+  "assets": [
+    {
+      "file": "frames/card_common.png",
+      "width": 1064,
+      "height": 1479,
+      "mode": "RGBA",
+      "transparent_pixels": 776389,
+      "opaque_bounds": [
+        48,
+        55,
+        1009,
+        1397
+      ]
+    },
+    {
+      "file": "frames/card_epic.png",
+      "width": 1064,
+      "height": 1478,
+      "mode": "RGBA",
+      "transparent_pixels": 683126,
+      "opaque_bounds": [
+        26,
+        18,
+        1038,
+        1430
+      ]
+    },
+    {
+      "file": "frames/card_legendary.png",
+      "width": 1064,
+      "height": 1478,
+      "mode": "RGBA",
+      "transparent_pixels": 646966,
+      "opaque_bounds": [
+        13,
+        4,
+        1052,
+        1444
+      ]
+    },
+    {
+      "file": "frames/card_rare.png",
+      "width": 1064,
+      "height": 1478,
+      "mode": "RGBA",
+      "transparent_pixels": 699189,
+      "opaque_bounds": [
+        10,
+        17,
+        1055,
+        1412
+      ]
+    },
+    {
+      "file": "frames/card_uncommon.png",
+      "width": 1064,
+      "height": 1478,
+      "mode": "RGBA",
+      "transparent_pixels": 762463,
+      "opaque_bounds": [
+        48,
+        53,
+        1015,
+        1398
+      ]
+    },
+    {
+      "file": "packs/pack_acero.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent_pixels": 607890,
+      "opaque_bounds": [
+        140,
+        73,
+        885,
+        1418
+      ]
+    },
+    {
+      "file": "packs/pack_epico.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent_pixels": 596379,
+      "opaque_bounds": [
+        140,
+        69,
+        885,
+        1420
+      ]
+    },
+    {
+      "file": "packs/pack_escudo.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent_pixels": 603200,
+      "opaque_bounds": [
+        140,
+        72,
+        885,
+        1419
+      ]
+    },
+    {
+      "file": "packs/pack_magia.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent_pixels": 599095,
+      "opaque_bounds": [
+        138,
+        72,
+        887,
+        1419
+      ]
+    }
+  ]
+}

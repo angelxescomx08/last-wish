@@ -130,3 +130,66 @@ class TestDrawCardSmoke:
 
     def test_large_bonus_damage(self):
         draw_card(_surface(), _attack(10**9), 0, 0, _fonts(), bonus_damage=10**9)
+
+
+# ---------------------------------------------------------------------------
+# cards-v2 frames: dynamic content, rarity frames, caching
+# ---------------------------------------------------------------------------
+
+from src.domain.card import CardRarity  # noqa: E402
+from src.presentation.ui.card_widget import _ability_lines, render_card_surface  # noqa: E402
+
+
+def _bytes(surface):
+    return pygame.image.tobytes(surface, "RGBA")
+
+
+class TestDynamicContent:
+    def test_effect_text_uses_effective_damage(self):
+        assert _ability_lines(_attack(6), damage=8)[0] == "Inflige 8 de daño."
+
+    def test_effect_text_formats_huge_values(self):
+        assert _ability_lines(_attack(), damage=2 * 10**9)[0] == "Inflige 2.0B de daño."
+
+    def test_block_text(self):
+        assert _ability_lines(_skill(5), block=5) == ["Gana 5 de escudo."]
+
+    def test_power_text(self):
+        assert _ability_lines(_power()) == ["Poder permanente."]
+
+    def test_surface_is_cached_for_the_same_state(self):
+        fonts = _fonts()
+        assert render_card_surface(_attack(), fonts) is render_card_surface(_attack(), fonts)
+
+    def test_bonus_damage_redraws_the_card(self):
+        fonts = _fonts()
+        assert _bytes(render_card_surface(_attack(), fonts)) != _bytes(render_card_surface(_attack(), fonts, bonus_damage=2))
+
+    def test_cost_change_redraws_the_card(self):
+        fonts = _fonts()
+        cheap, pricey = _attack(), _attack()
+        pricey.cost = 3
+        assert _bytes(render_card_surface(cheap, fonts)) != _bytes(render_card_surface(pricey, fonts))
+
+    def test_rarity_changes_the_frame(self):
+        fonts = _fonts()
+        common, legendary = _attack(), _attack()
+        legendary.rarity = CardRarity.LEGENDARY
+        assert _bytes(render_card_surface(common, fonts)) != _bytes(render_card_surface(legendary, fonts))
+
+    def test_unaffordable_card_is_darker(self):
+        fonts = _fonts()
+        lit = render_card_surface(_attack(), fonts)
+        dim = render_card_surface(_attack(), fonts, affordable=False)
+        pt = (CARD_W // 2, CARD_H * 3 // 10)
+        assert sum(dim.get_at(pt)[:3]) < sum(lit.get_at(pt)[:3])
+
+    def test_card_surface_has_card_size(self):
+        assert render_card_surface(_skill(), _fonts()).get_size() == (CARD_W, CARD_H)
+
+    def test_stress_many_states_keep_cache_bounded(self):
+        from src.presentation.ui import card_widget
+        fonts = _fonts()
+        for bonus in range(400):
+            render_card_surface(_attack(), fonts, bonus_damage=bonus)
+        assert len(card_widget._cache) <= card_widget._CACHE_MAX

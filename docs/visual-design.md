@@ -37,6 +37,17 @@ rain made of particles, and low CPU use.
 - `scripts/generate_dungeon_background.py` and `assets/backgrounds/` were the first
   baked-GIF test (rain drawn into frames); they are superseded and unused.
 
+## Cards and packs (cards-v2)
+
+Assets supplied by the user in `assets/cards-v2/` (see its README): five rarity
+frames (common iron/leather, uncommon silver/emerald, rare silver/sapphire, epic
+amethyst/gothic, legendary gold/amber/wings) and four closed packs (acero,
+escudo, magia, epico). Frames are painted at ~1064×1478 and reduced with
+smoothscale to 140×194 once per size. Zones measured into `layout.json`.
+Illustrations are provisional Dungeon Crawl icons by type until real art is
+placed in `assets/cards-v2/art/<card id>.png` (any size, cropped to cover the
+window). Effect text is generated from card data with effective values.
+
 ## Rogue ("La Pícara") — approved art, same pipeline
 
 - Source `assets/characters/rogue-source.png`; converted by

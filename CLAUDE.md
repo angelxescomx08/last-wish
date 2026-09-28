@@ -142,6 +142,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
+| `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
@@ -160,7 +161,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/pack_opening_scene.py` | 5-card pick-1 overlay. Signals `cleared: bool`, `chosen_card: Card \| None` |
 | `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
-| `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` — renders card with effective final values |
+| `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)` and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 160) |
 | `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
@@ -385,6 +386,15 @@ Four pack themes are available in the shop. Each pack shows 5 cards; the player 
 
 ## Card Rendering
 
+Cards use the **cards-v2** frames (`assets/cards-v2/frames/card_<rarity>.png`), chosen by
+`card.rarity` (never by type). Layers: type-tinted backdrop + illustration clipped to the
+frame's transparent window → dark discs under the see-through circles → frame → text
+(mana top-left, name on the plate, effects on the dark panel, attack bottom-left, block
+bottom-right; boosted values in green). Zones come from `layout.json`
+(`scripts/measure_card_frames.py`). Real illustrations go in `assets/cards-v2/art/<card id>.png`.
+The shop shows `packs/pack_<theme>.png` via `pack_art()`.
+
+
 `draw_card()` in `card_widget.py` accepts `bonus_damage: int = 0`. The number shown in the card centre is always the **effective** value: `card.total_damage() + bonus_damage`.
 
 The combat scene computes `bonus_damage` via `relic_effects.extra_attack_damage(state.relics)` for any card with `total_damage() > 0`, then passes it to both `draw_card()` and `card_tooltip()`.
@@ -440,6 +450,7 @@ One test file per source module. All test files follow the same structure:
 | `presentation/fx/test_sprite_animation.py` | `fx/sprite_animation.py` | frame timing, looping, hold, offsets, invalid input |
 | `infrastructure/test_dungeon_assets.py` | `infrastructure/dungeon_assets.py` | files exist, metadata anchors/palettes, pre-scaling, single load |
 | `presentation/ui/test_dungeon_backdrop.py` | `ui/dungeon_backdrop.py` | room drawn, torches animate, budget 0, fallback, cost bound, combat integration |
+| `infrastructure/test_card_assets.py` | `infrastructure/card_assets.py` | layout rarities/zones/packs, files exist, frame size & cache, pack aspect, placeholders |
 | `test_hero_rogue.py` | rogue sheets in `sprite_loader.py` + `CombatScene` | same contract as the mage, both rogue names |
 | `test_hero_mage.py` | mage sheets in `sprite_loader.py` + `CombatScene` | name→hero mapping, 192/96 sheets, idle motion, planted boots, actions end on idle 0, shared idle clock, attack trigger |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
