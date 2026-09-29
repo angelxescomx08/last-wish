@@ -106,3 +106,39 @@ def test_escape_dismisses_collection_before_opening_pause():
     key(manager, pygame.K_ESCAPE)
     room.handle_event.assert_called_once()
     assert manager._pause is None
+
+
+# --- Pause button placement: never over relics or collection overlays -------
+
+def test_combat_pause_button_does_not_overlap_relic_bar_or_turn_counter():
+    from src.application.combat_manager import create_sample_combat
+    from src.presentation.scenes.combat_scene import CombatScene
+    from src.presentation.ui.hud_widget import RELIC_SZ, _RELIC_GAP
+    from src.presentation.ui.pause_menu import pause_button_rect
+    scene = CombatScene(create_sample_combat(), FontRegistry(), sound=Mock())
+    button = pause_button_rect(scene)
+    assert button == pygame.Rect(460, 16, 130, 36)
+    relic_slots = [pygame.Rect(184 + i * (RELIC_SZ + _RELIC_GAP), 10, RELIC_SZ, RELIC_SZ) for i in range(5)]
+    assert not any(button.colliderect(slot) for slot in relic_slots)
+    assert not button.colliderect(scene._relic_collection_rect)
+    assert not button.colliderect(scene._draw_info_rect)
+    assert button.right < 600          # "TURNO N" is centred at x = 640
+
+
+def test_pause_button_hidden_while_overlay_open_and_default_elsewhere():
+    from src.presentation.ui.pause_menu import pause_button_rect
+
+    class Room:
+        _overlay = None
+
+    room = Room()
+    assert pause_button_rect(room) == PAUSE_BUTTON
+    room._overlay = object()
+    assert pause_button_rect(room) is None
+
+
+def test_click_on_hidden_button_does_not_pause_while_overlay_open():
+    manager, room = setup_run()
+    room._overlay = object()
+    manager.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=PAUSE_BUTTON.center))
+    assert manager._pause is None

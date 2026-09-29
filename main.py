@@ -36,7 +36,7 @@ from src.presentation.scenes.pack_opening_scene import PackOpeningScene
 from src.presentation.scenes.settings_scene import SettingsScene
 from src.presentation.scenes.shop_scene import ShopScene
 from src.presentation.scenes.treasure_scene import TreasureScene
-from src.presentation.ui.pause_menu import PauseMenu, PauseAction, PAUSE_BUTTON, draw_pause_button
+from src.presentation.ui.pause_menu import PauseMenu, PauseAction, draw_pause_button, pause_button_rect
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -136,8 +136,9 @@ class SceneManager:
             return
         top = self._top()
         escape = event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+        button = pause_button_rect(top)
         clicked = (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
-                   and PAUSE_BUTTON.collidepoint(event.pos))
+                   and button is not None and button.collidepoint(event.pos))
         if self._can_pause() and (escape or clicked):
             # Escape first dismisses an existing collection or held card.
             if escape and (getattr(top, '_overlay', None) is not None
@@ -163,8 +164,9 @@ class SceneManager:
 
     def draw(self, surface: pygame.Surface) -> None:
         self._top().draw(surface)
-        if self._can_pause():
-            draw_pause_button(surface, self._fonts)
+        button = pause_button_rect(self._top()) if self._can_pause() else None
+        if button is not None:
+            draw_pause_button(surface, self._fonts, button)
         if self._pause is not None:
             self._pause.draw(surface)
 

@@ -206,6 +206,8 @@ class CombatScene:
         self._relic_collection_rect = pygame.Rect(10, 15, 164, 38)
         self._hand_collection_rect = pygame.Rect(12, 662, 145, 34)
         self._draw_info_rect = pygame.Rect(756, 10, 285, 48)
+        # Pause button in the free gap between the relic bar (184–449) and the turn counter.
+        self.pause_button_rect = pygame.Rect(460, 16, 130, 36)
         self._card_draw_order: list[int] = []
 
         # Hover state (which element index / flag is under cursor)

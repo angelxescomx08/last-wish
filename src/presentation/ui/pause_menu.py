@@ -77,8 +77,22 @@ class PauseMenu:
         surface.blit(rendered, rendered.get_rect(center=center))
 
 
-def draw_pause_button(surface, fonts):
-    pygame.draw.rect(surface, (25, 31, 43), PAUSE_BUTTON)
-    pygame.draw.rect(surface, (163, 137, 85), PAUSE_BUTTON, 1)
+def pause_button_rect(scene) -> pygame.Rect | None:
+    """Where the pause button goes for ``scene``, or None while it shows an overlay.
+
+    A scene whose top bar is busy (combat relics) declares its own
+    ``pause_button_rect``; the others use ``PAUSE_BUTTON``. The button is hidden
+    while a collection overlay is open so it never covers the overlay's title
+    (Escape still closes the overlay first).
+    """
+    if getattr(scene, '_overlay', None) is not None:
+        return None
+    rect = getattr(scene, 'pause_button_rect', None)
+    return rect if isinstance(rect, pygame.Rect) else PAUSE_BUTTON
+
+
+def draw_pause_button(surface, fonts, rect: pygame.Rect = PAUSE_BUTTON):
+    pygame.draw.rect(surface, (25, 31, 43), rect)
+    pygame.draw.rect(surface, (163, 137, 85), rect, 1)
     text = fonts.get(18).render('Pausa · Esc', True, (237, 227, 207))
-    surface.blit(text, text.get_rect(center=PAUSE_BUTTON.center))
+    surface.blit(text, text.get_rect(center=rect.center))

@@ -525,7 +525,7 @@ effects in `fx/` reusable and pooled; measure with `scripts/bench_backdrop.py`.
 `SceneManager` in `main.py` owns a `PauseMenu` overlay
 (`src/presentation/ui/pause_menu.py`). During a run, the visible `Pausa · Esc`
 button or Escape opens it in map, combat, shop, event and reward screens.
-Existing collections/held cards consume Escape first. The pause button cancels
+Existing collections/held cards consume Escape first. The button's place comes from `pause_button_rect(scene)` (`pause_menu.py`): `PAUSE_BUTTON` by default, a scene's own `pause_button_rect` when its top bar is busy (combat: `(460, 16, 130, 36)`, between the relic bar and the turn counter), and hidden while a collection overlay is open. The pause button cancels
 held combat input. While paused, room updates and transitions stop and all input
 goes to the overlay; shared audio still updates. Mouse and keyboard are supported.
 
