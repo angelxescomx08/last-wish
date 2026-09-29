@@ -78,6 +78,11 @@ class FxLayer:
             f"+{amount} BLQ", (100, 190, 255), self._font,
         ))
 
+    def add_text(self, x: float, y: float, text: str, color: tuple[int, int, int],
+                 lifetime: float = 1.0) -> None:
+        """Floating label, e.g. "¡COMBO!" over the hero."""
+        self._effects.append(_FloatingNumber(x, y, text, color, self._font, lifetime=lifetime))
+
     def add_death_flash(self, rect: pygame.Rect) -> None:
         self._effects.append(_HitFlash(rect, (255, 255, 255), lifetime=0.40))
 

@@ -6,6 +6,7 @@ from enum import Enum
 
 from src.application import relic_effects
 from src.domain.card import Card, CardType
+from src.domain.chroma import chroma_def
 from src.domain.combat import CombatState
 
 
@@ -13,6 +14,7 @@ from src.domain.combat import CombatState
 class PlayResult:
     success: bool
     message: str = ""
+    combo: bool = False     # a Combo layer resolved
 
 
 class TargetKind(Enum):
@@ -23,14 +25,14 @@ class TargetKind(Enum):
 
 
 def requires_target(card: Card) -> bool:
-    """True when the card must be played on one chosen enemy."""
-    return card.total_damage() > 0 or any(fx.needs_target for fx in card.all_effects())
+    """True when the card must be played on one chosen enemy (combo layers included)."""
+    return card.total_damage(combo=True) > 0 or any(fx.needs_target for fx in card.active_effects(True))
 
 
 def target_kind(card: Card) -> TargetKind:
     if requires_target(card):
         return TargetKind.ENEMY
-    if any(fx.hits_all_enemies for fx in card.all_effects()):
+    if any(fx.hits_all_enemies for fx in card.active_effects(True)):
         return TargetKind.ALL_ENEMIES
     return TargetKind.SELF
 
@@ -49,8 +51,10 @@ def play_card(
     if not state.mana.can_afford(card.cost):
         return PlayResult(False, "¡Sin maná suficiente!")
 
-    dmg = card.total_damage()
-    blk = card.total_block()
+    # Keyword COMBO: combo layers resolve if another card was played earlier this turn.
+    combo = state.combo_active and bool(card.combo_effects())
+    dmg = card.total_damage(combo)
+    blk = card.total_block(combo)
 
     # A card needs a target if it deals base damage OR any effect declares it.
     needs_target = requires_target(card)
@@ -81,11 +85,11 @@ def play_card(
         state.player.block += blk + state.player.dexterity
 
     # Compute extra draws before mutating the hand
-    draw_count = sum(fx.draw for fx in card.all_effects())
+    draw_count = card.total_draw(combo)     # chroma-scaled (golden x2)
 
     # Spend mana, then apply any mana refund from the card
     state.mana.spend(card.cost)
-    mana_gain = sum(fx.mana_gain for fx in card.all_effects())
+    mana_gain = card.total_mana_gain(combo)
     if mana_gain > 0:
         state.mana.gain(mana_gain)
 
@@ -99,10 +103,14 @@ def play_card(
     # Run custom on_play logic — state is fully updated at this point:
     # card is out of hand, mana spent, base damage/block applied.
     # targeted_enemy_index is set so callbacks can read it.
+    # A chroma multiplier repeats the special effects too (golden: twice).
     state.targeted_enemy_index = target_enemy_index
-    for fx in card.all_effects():
-        if fx.on_play is not None:
-            fx.on_play(state)
+    for _ in range(card.effect_multiplier()):
+        for fx in card.active_effects(combo):
+            if fx.on_play is not None:
+                fx.on_play(state)
+    if card.chroma is not None and chroma_def(card.chroma).on_card_played is not None:
+        chroma_def(card.chroma).on_card_played(state, played)
 
     # Draw bonus cards
     for _ in range(draw_count):
@@ -110,7 +118,8 @@ def play_card(
 
     state.selected_card_index = None
     state.targeted_enemy_index = None
-    return PlayResult(True, f"Jugaste {played.name}")
+    state.cards_played_this_turn += 1
+    return PlayResult(True, f"Jugaste {played.name}" + (" — ¡Combo!" if combo else ""), combo=combo)
 
 
 # ---------------------------------------------------------------------------

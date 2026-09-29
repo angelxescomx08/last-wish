@@ -6,12 +6,14 @@ import pygame
 from src.application import relic_effects
 from src.application.run_manager import pick_shop_stock
 from src.domain.card_pool import PackTheme
+from src.domain.chroma import chroma_def, chroma_title
 from src.domain.run import Run
 from src.infrastructure.card_assets import pack_art
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
+from src.presentation.fx import chroma_fx
 from src.presentation.ui.card_widget import _wrap
 
 _RELIC_COST = 150
@@ -34,6 +36,8 @@ class ShopScene:
         self._hovered: tuple[str, int] | None = None
         self._exit_rect: pygame.Rect | None = None
         self.selected_pack: PackTheme | None = None
+        self.selected_pack_chroma = None        # Chroma of the bought pack (golden: pick 2)
+        self._gilded: dict = {}
         self.cleared = False
         self._feedback_text = ""
         self._feedback_time = 0.0
@@ -68,6 +72,12 @@ class ShopScene:
                 cost = item.cost if is_pack else _RELIC_COST
                 sprite = (pack_art(item.theme.value, 150) if is_pack
                           else self._sprites.get_relic_sprite(item.name, 64))
+                if is_pack and item.chroma is not None and sprite is not None:
+                    key = (item.theme, item.chroma)
+                    if key not in self._gilded:
+                        self._gilded[key] = chroma_fx.gild_frame(sprite, item.chroma)
+                    sprite = chroma_fx.animate_card_face(self._gilded[key], item.chroma,
+                                                         chroma_fx.now(), base_w=110)
                 self._draw_tile(surface, item, cost, sprite, rect, i in sold,
                                 self._hovered == (kind, i))
         if self._feedback_time > 0:
@@ -92,8 +102,17 @@ class ShopScene:
             surface.blit(art, art.get_rect(center=(rect.x + 55, rect.y + 90)))
         color = colors.TEXT_SECONDARY if sold else colors.TEXT_PRIMARY
         text_x = rect.x + 215
-        self._label(surface, item.name, (rect.centerx, rect.y + 25), 16, color)
-        lines = _wrap(item.description, self._fonts.get(13), 205)
+        chroma = getattr(item, 'chroma', None)
+        is_pack = hasattr(item, 'theme')
+        self._label(surface, chroma_title(item.name, chroma, masculine=is_pack), (rect.centerx, rect.y + 25),
+                    16, color)
+        description = item.description
+        if chroma is not None:
+            note = chroma_def(chroma).pack_note if is_pack else chroma_def(chroma).short_note + '.'
+            description += ' ' + note
+            if not sold:
+                chroma_fx.draw_chroma_box(surface, rect, chroma, chroma_fx.now(), radius=8)
+        lines = _wrap(description, self._fonts.get(13), 205)
         for i, line in enumerate(lines):
             self._label(surface, line, (text_x, rect.y + 65 + i * 19), 13, color)
         label = 'Agotado' if sold else f'{cost} oro'
@@ -125,6 +144,7 @@ class ShopScene:
                 self._run.gold -= pack.cost
                 self._sold_packs.add(i)
                 self.selected_pack = pack.theme
+                self.selected_pack_chroma = pack.chroma
                 self._sound.play_purchase()
                 self._show_feedback(f"{pack.name} comprado")
                 return

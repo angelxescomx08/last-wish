@@ -11,14 +11,17 @@ Responsibilities:
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 
 from src.application import relic_effects
 from src.application.map_generator import generate_map
 from src.domain.card_pool import ALL_PACKS, PackDef, starter_deck
 from src.domain.character import Character
+from src.domain.chroma import roll_chroma
 from src.domain.entities import Enemy, Intent, IntentType
 from src.domain.relic import Relic, RelicTag
 from src.domain.run import Run
+from src.domain.tuning import TUNING
 
 # Large prime for enemy RNG seeding
 _ENEMY_PRIME: int = 2_654_435_761
@@ -34,9 +37,9 @@ def create_run(character: Character, seed: int) -> Run:
         character=character,
         seed=seed,
         floor=1,
-        gold=2000,
-        player_max_hp=character.stats.max_hp,
-        player_current_hp=character.stats.max_hp,
+        gold=TUNING.starting_gold,
+        player_max_hp=character.stats.max_hp + TUNING.extra_max_hp,
+        player_current_hp=character.stats.max_hp + TUNING.extra_max_hp,
         deck=starter_deck(),
         relics=[],
     )
@@ -111,7 +114,7 @@ def generate_boss(run: Run) -> list[Enemy]:
 def _combat_gold(run: Run, enemies: list[Enemy]) -> int:
     base = sum(max(1, e.max_hp // 8) for e in enemies)
     base += relic_effects.bonus_gold_reward(run.relics)
-    return base
+    return round(base * TUNING.gold_multiplier)
 
 
 def apply_combat_victory(run: Run, hp_after: int, enemies: list[Enemy]) -> int:
@@ -130,7 +133,7 @@ def apply_combat_victory(run: Run, hp_after: int, enemies: list[Enemy]) -> int:
 
 def generate_event_gold(run: Run, room_id: str) -> int:
     rng = random.Random(_enemy_seed(run, room_id) ^ 0xABCD)
-    return rng.randint(10 + run.floor * 2, 25 + run.floor * 3)
+    return round(rng.randint(10 + run.floor * 2, 25 + run.floor * 3) * TUNING.gold_multiplier)
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +161,13 @@ def _all_relic_defs() -> list[Relic]:
     ]
 
 
+def _with_chroma(relics: list[Relic], rng: random.Random) -> list[Relic]:
+    """Each offered relic may get a chroma (e.g. 8 % golden)."""
+    for relic in relics:
+        relic.chroma = roll_chroma(rng, for_relic=True)
+    return relics
+
+
 def pick_treasure_relic(run: Run, room_id: str) -> Relic:
     """Choose a relic not already owned by the player."""
     owned_tags = {r.tag for r in run.relics}
@@ -165,7 +175,8 @@ def pick_treasure_relic(run: Run, room_id: str) -> Relic:
     if not pool:
         pool = _all_relic_defs()   # fallback: duplicates allowed
     rng = random.Random(_enemy_seed(run, room_id) ^ 0x1234)
-    return rng.choice(pool)
+    relic = rng.choice(pool)
+    return _with_chroma([relic], rng)[0]
 
 
 def pick_boss_relics(run: Run, count: int = 3) -> list[Relic]:
@@ -175,7 +186,7 @@ def pick_boss_relics(run: Run, count: int = 3) -> list[Relic]:
     if len(pool) < count:
         pool = _all_relic_defs()
     rng = random.Random(run.seed * 37 + run.floor * 13)
-    return rng.sample(pool, min(count, len(pool)))
+    return _with_chroma(rng.sample(pool, min(count, len(pool))), rng)
 
 
 # ---------------------------------------------------------------------------
@@ -198,4 +209,7 @@ def pick_shop_stock(run: Run) -> tuple[list[PackDef], list[Relic]]:
     pool = [relic for relic in _all_relic_defs() if relic.tag not in owned_tags]
     if len(pool) < 3:
         pool = _all_relic_defs()
-    return rng.sample(ALL_PACKS, 3), rng.sample(pool, 3)
+    packs, relics = rng.sample(ALL_PACKS, 3), rng.sample(pool, 3)
+    relics = _with_chroma(relics, rng)
+    packs = [replace(p, chroma=roll_chroma(rng, kind="pack")) for p in packs]
+    return packs, relics

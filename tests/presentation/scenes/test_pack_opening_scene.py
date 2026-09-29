@@ -223,3 +223,57 @@ class TestRobustness:
         assert pos.ease_out_cubic(0) == 0.0 and pos.ease_out_cubic(1) == 1.0
         assert pos.ease_out_back(0) == pytest.approx(0.0) and pos.ease_out_back(1) == pytest.approx(1.0)
         assert pos.ease_out_back(0.7) > 1.0
+
+
+class TestGoldenCards:
+    def test_golden_card_gets_anticipation_and_reward_sound(self):
+        from src.domain.chroma import Chroma
+        sound = Sound()
+        cards = _cards()
+        cards[2].chroma = Chroma.GOLDEN
+        scene = _scene(cards=cards, sound=sound)
+        gaps = [b - a for a, b in zip(scene._flip_start, scene._flip_start[1:])]
+        assert gaps[1] == pytest.approx(pos.FLIP_STAGGER + pos.ANTICIPATION_T)
+        _click(scene)
+        _run(scene, 8.0, step=1 / 30, draw=True)
+        assert sound.calls.count('play_reward') == 1
+        assert scene.phase == 'pick'
+
+
+class TestGoldenPack:
+    def test_golden_pack_lets_you_pick_two(self):
+        from src.domain.chroma import Chroma
+        sound = Sound()
+        scene = PackOpeningScene(_cards(), 'Sobre de Acero · Dorado', FontRegistry(), sound=sound,
+                                 theme='acero', chroma=Chroma.GOLDEN)
+        scene.skip_animation()
+        scene.draw(pygame.Surface(SURF))
+        _click(scene, scene._card_rects[1].center)
+        assert scene.phase == 'pick' and scene.chosen_cards == [scene._cards[1]]
+        _click(scene, scene._card_rects[1].center)          # same card again: ignored
+        assert len(scene.chosen_cards) == 1
+        scene.draw(pygame.Surface(SURF))
+        _click(scene, scene._card_rects[3].center)
+        assert scene.phase == 'outro'
+        assert scene.chosen_cards == [scene._cards[1], scene._cards[3]]
+        _run(scene, pos.OUTRO_T + 0.05, draw=True)
+        assert scene.cleared and scene.chosen_card is scene._cards[1]
+
+    def test_finish_after_one_pick_keeps_it(self):
+        from src.domain.chroma import Chroma
+        scene = PackOpeningScene(_cards(), 'X', FontRegistry(), sound=Sound(), chroma=Chroma.GOLDEN)
+        scene.skip_animation()
+        scene.draw(pygame.Surface(SURF))
+        _click(scene, scene._card_rects[0].center)
+        scene.draw(pygame.Surface(SURF))
+        _click(scene, scene._skip_rect.center)
+        assert scene.cleared and [c.id for c in scene.chosen_cards] == [scene._cards[0].id]
+
+    def test_golden_pack_draws_every_phase(self):
+        from src.domain.chroma import Chroma
+        scene = PackOpeningScene(_cards(), 'X', FontRegistry(), sound=Sound(), theme='magia',
+                                 chroma=Chroma.GOLDEN)
+        _run(scene, 1.0, step=1 / 30, draw=True)
+        _click(scene)
+        _run(scene, 6.0, step=1 / 30, draw=True)
+        assert scene.phase == 'pick'

@@ -8,6 +8,7 @@ from src.domain.relic import Relic
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
+from src.presentation.fx import chroma_fx
 
 RELIC_SZ: int       = 48
 _RELIC_GAP: int     = 5
@@ -60,6 +61,9 @@ def draw_relics(
             sub_col  = colors.BG_DARK if hovered else colors.TEXT_SECONDARY
             sub_surf = fonts.get(7).render(relic.name[5:10], True, sub_col)
             surface.blit(sub_surf, sub_surf.get_rect(centerx=rect.centerx, centery=rect.centery + 9))
+
+        if relic.chroma is not None:
+            chroma_fx.draw_chroma_box(surface, rect, relic.chroma, chroma_fx.now(), radius=6)
 
         x += RELIC_SZ + _RELIC_GAP
 

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from src.domain.card import CardClass
+from src.domain.chroma import Chroma, effect_multiplier
 
 
 class RelicTag(Enum):
@@ -26,3 +27,8 @@ class Relic:
     is_active: bool = True
     # Class card pools this relic adds to rewards and packs (mixes pools).
     card_classes: frozenset[CardClass] = field(default_factory=frozenset)
+    chroma: Chroma | None = None   # special finish (golden = effects x2)
+    times_triggered: int = 0       # uses spent by one-shot relics (charges = multiplier)
+
+    def effect_multiplier(self) -> int:
+        return effect_multiplier(self.chroma)

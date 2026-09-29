@@ -385,6 +385,58 @@ Four pack themes are available in the shop. Each pack shows 5 cards; the player 
 `starter_deck()` returns the initial 10-card deck used when creating a new run.
 `card_factories_for_theme(theme)` returns a list of zero-argument callables that produce the cards belonging to that theme — used by `pick_pack_cards()`.
 
+### Chromas — golden cards and relics (`src/domain/chroma.py`)
+
+Generic system: `Chroma` enum + `ChromaDef` registry (`CHROMA_DEFS`). Only
+`GOLDEN` exists: `effect_multiplier=2`, `card_drop_chance=0.05`,
+`relic_drop_chance=0.08`, Spanish notes (`card_note`, `relic_note`,
+`short_note`) and an optional `on_card_played(state, card)` hook for future
+chromas with unusual behaviour. `Card.chroma` / `Relic.chroma` (None = normal).
+
+* Cards: `total_damage/total_block/total_draw/total_mana_gain` are multiplied;
+  `play_card` repeats every `on_play` `effect_multiplier()` times, then runs the
+  hook. Cost is not scaled; flat bonuses (attack bonus, relic damage, dexterity)
+  are added once.
+* Relics: every numeric `relic_effects` bonus is multiplied (`_sum`); the
+  Spectral Shield gets `effect_multiplier()` charges (`Relic.times_triggered`).
+* Drops: `roll_chroma(rng, for_relic=…)` on reward/pack cards (own rng, so the
+  offered cards do not change) and on treasure/boss/shop relics.
+* UI: `src/presentation/fx/chroma_fx.py` (`STYLES` per chroma) — gilded frame and
+  "DORADA" plate baked into the card face, sweeping sheen + twinkles + pulsing
+  halo on cards (`draw_card`, `draw_card_at`, pack reveal) and `draw_chroma_box`
+  for relic bar, relic viewer, shop, treasure and boss reward. Titles use
+  `chroma_title` ("Golpe · Dorada"); tooltips add the note. The legacy
+  `ModifierTag.CHROMA` placeholder is unrelated and unused by this system.
+
+### Golden packs
+
+`PackDef.chroma` (shop offers roll `roll_chroma(kind="pack")`). A pack's
+`effect_multiplier` is how many cards you keep: golden = pick 2
+(`PackOpeningScene(chroma=…)`, `chosen_cards`; "Terminar" keeps what was picked).
+The pack art is gilded with sheen and motes, titled "Sobre de X · Dorado".
+
+### Keywords (`src/domain/keywords.py`)
+
+Hearthstone-style named rules: `Keyword` + `KEYWORD_DEFS` (name, rule text).
+**Combo** (Rogue cards only): `CardEffect.combo` is an extra layer that resolves
+when `CombatState.cards_played_this_turn > 0` (`combo_active`; reset each player
+turn, incremented by every successful `play_card`). `Card.total_*(combo=True)`,
+`active_effects(combo)`, `keywords()`; `combo_text(card)` describes the layer.
+`play_card` returns `PlayResult.combo`. UI: card face line "Combo: +5 de daño." /
+"¡Combo activo!" (numbers in green), tooltip rule, teal pulsing silhouette aura on
+ready cards in hand and a floating "¡COMBO!" on the hero. 8 rogue cards have Combo
+(`_add_combo` in `card_pool.py`).
+
+### Pruebas / tuning (`src/domain/tuning.py`)
+
+`TUNING` (defaults = normal play) holds test knobs: chroma drop chances per kind
+(`chroma_chances["golden:card"|"golden:relic"|"golden:pack"]`, generic per
+chroma), `all_class_cards`, `starting_gold`, `gold_multiplier`, `invincible`,
+`extra_mana`, `extra_draw`, `extra_max_hp`. Edited in the **Pruebas** screen
+(main menu → `DevSettingsScene`, rows generated in `_rows()`), saved to
+`dev_settings.json` by `infrastructure/dev_settings.py` (loaded at startup,
+invalid values fall back). `tests/conftest.py` resets it for every test.
+
 ### Card classes (`CardClass` in `src/domain/card.py`)
 
 Every card has `card_class`: `NEUTRAL` (all classes), `WARRIOR`, `MAGE` or `ROGUE`

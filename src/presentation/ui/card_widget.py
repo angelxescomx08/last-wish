@@ -21,10 +21,13 @@ from collections import OrderedDict
 import pygame
 
 from src.domain.card import Card, CardRarity, CardType
+from src.domain.chroma import chroma_def
+from src.domain.keywords import combo_text
 from src.domain.numbers import BigValue
 from src.infrastructure import colors
 from src.infrastructure.card_assets import card_frame, card_illustration, card_layout
 from src.infrastructure.fonts import FontRegistry
+from src.presentation.fx import chroma_fx
 
 # ---------------------------------------------------------------------------
 # Card dimensions (frame aspect ratio ≈ 0.72)
@@ -63,6 +66,7 @@ _ATK_INK = (255, 150, 120)
 _DEF_INK = (150, 210, 255)
 _BONUS_INK = (140, 240, 140)
 _HOLE = (18, 16, 24)
+KEYWORD_READY_GLOW = (70, 225, 170)   # aura on cards whose Combo is ready
 
 _CACHE_MAX = 256
 _cache: "OrderedDict[tuple, pygame.Surface]" = OrderedDict()
@@ -99,11 +103,15 @@ def _wrap(text: str, font: pygame.font.Font, max_w: int) -> list[str]:
     return lines or [""]
 
 
-def _ability_lines(card: Card, damage: int = 0, block: int = 0) -> list[str]:
-    """Spanish effect lines built from the card's data (effective values)."""
+def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = False) -> list[str]:
+    """Spanish effect lines built from the card's data (effective values).
+
+    ``combo``: the card's Combo is ready, so its numbers already include the combo
+    layer and the keyword line says so.
+    """
     lines: list[str] = []
-    draw = sum(fx.draw for fx in card.all_effects())
-    mana = sum(fx.mana_gain for fx in card.all_effects())
+    draw = card.total_draw(combo)
+    mana = card.total_mana_gain(combo)
     if card.card_type == CardType.ATTACK and damage > 0:
         lines.append(f"Inflige {BigValue.format_int(damage)} de daño.")
     if block > 0:
@@ -114,6 +122,8 @@ def _ability_lines(card: Card, damage: int = 0, block: int = 0) -> list[str]:
         lines.append(f"+{mana} de maná.")
     if card.card_type == CardType.POWER:
         lines.append("Poder permanente.")
+    if card.combo_effects():
+        lines.append("¡Combo activo!" if combo else f"Combo: {combo_text(card)}.")
     return lines[:4]
 
 
@@ -165,14 +175,21 @@ def _backdrop(card_type: CardType, size: tuple[int, int]) -> pygame.Surface:
 
 def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: int = CARD_H,
                         affordable: bool = True, bonus_damage: int = 0,
-                        bonus_block: int = 0) -> pygame.Surface:
-    """Compose the static part of a card (cached by every value it displays)."""
-    damage = card.total_damage() + bonus_damage if card.total_damage() > 0 else 0
-    block = card.total_block() + bonus_block if card.total_block() > 0 else 0
+                        bonus_block: int = 0, combo: bool = False) -> pygame.Surface:
+    """Compose the static part of a card (cached by every value it displays).
+
+    ``combo``: its Combo is ready — numbers include the combo layer (shown in green).
+    """
+    combo = combo and bool(card.combo_effects())
+    raw_damage, raw_block = card.total_damage(combo), card.total_block(combo)
+    damage = raw_damage + bonus_damage if raw_damage > 0 else 0
+    block = raw_block + bonus_block if raw_block > 0 else 0
+    combo_dmg = combo and raw_damage > card.total_damage()
+    combo_blk = combo and raw_block > card.total_block()
     rarity = (card.rarity or CardRarity.COMMON).name
-    key = (card.id, card.name, card.card_type, rarity, card.cost, damage, block, bonus_damage > 0,
-           bonus_block > 0, tuple(_ability_lines(card, damage, block)), affordable, card.is_broken,
-           w, h, id(fonts))
+    key = (card.id, card.name, card.card_type, rarity, card.cost, damage, block, bonus_damage > 0 or combo_dmg,
+           bonus_block > 0 or combo_blk, tuple(_ability_lines(card, damage, block, combo)), affordable,
+           card.is_broken, card.chroma, w, h, id(fonts))
     cached = _cache.get(key)
     if cached is not None:
         _cache.move_to_end(key)
@@ -195,6 +212,8 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
 
     # 3. rarity frame
     frame = card_frame(rarity, w, h)
+    if frame is not None and card.chroma is not None:
+        frame = chroma_fx.gild_frame(frame, card.chroma)
     if frame is not None:
         surf.blit(frame, (0, 0))
     else:
@@ -217,7 +236,13 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     surf.blit(name_s, name_s.get_rect(center=name_rect.center))
 
     text_rect = _rect(z["text"], w, h)
-    lines = _ability_lines(card, damage, block)
+    if card.chroma is not None:   # chroma name plate at the foot of the text panel, e.g. "DORADA"
+        st = chroma_fx.style(card.chroma)
+        plate = _outlined(fonts.get(max(7, round(h * 0.048))), chroma_def(card.chroma).name.upper(),
+                          st.bright, outline=st.dark)
+        surf.blit(plate, plate.get_rect(centerx=text_rect.centerx, bottom=text_rect.bottom))
+        text_rect = pygame.Rect(text_rect.x, text_rect.y, text_rect.w, max(1, text_rect.h - plate.get_height()))
+    lines = _ability_lines(card, damage, block, combo)
     if lines:
         font = fonts.get(max(8, round(h * 0.052)))
         wrapped: list[str] = []
@@ -234,8 +259,8 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
             surf.blit(s, s.get_rect(centerx=text_rect.centerx, top=y))
             y += line_h
 
-    for zone, value, ink, boosted in (("attack", damage, _ATK_INK, bonus_damage > 0),
-                                      ("block", block, _DEF_INK, bonus_block > 0)):
+    for zone, value, ink, boosted in (("attack", damage, _ATK_INK, bonus_damage > 0 or combo_dmg),
+                                      ("block", block, _DEF_INK, bonus_block > 0 or combo_blk)):
         if value > 0:
             c, r = _circle(z[zone], w, h)
             txt = BigValue.format_int(value)
@@ -271,13 +296,24 @@ def draw_card(
     affordable: bool = True,
     bonus_damage: int = 0,
     bonus_block: int = 0,
+    combo: bool = False,
 ) -> pygame.Rect:
     """Draw a card and return its bounding Rect (lifted when hovered or selected)."""
     lift = -20 if (selected or hovered) else 0
     rect = pygame.Rect(x, y + lift, CARD_W, CARD_H)
     body = render_card_surface(card, fonts, affordable=affordable,
-                               bonus_damage=bonus_damage, bonus_block=bonus_block)
+                               bonus_damage=bonus_damage, bonus_block=bonus_block, combo=combo)
+    if combo and card.combo_effects():
+        chroma_fx.draw_silhouette_aura(surface, body, rect.center, KEYWORD_READY_GLOW, chroma_fx.now(),
+                                       key=(CARD_W, CARD_H, card.rarity), speed=4.0)
+    if card.chroma is not None:
+        t = chroma_fx.now()
+        chroma_fx.draw_card_aura(surface, body, rect.center, card.chroma, t,
+                                 key=(CARD_W, CARD_H, card.rarity))
+        body = chroma_fx.animate_card_face(body, card.chroma, t)
     surface.blit(body, rect.topleft)
+    if card.chroma is not None:
+        chroma_fx.draw_motes(surface, rect, card.chroma, chroma_fx.now())
 
     if selected or hovered:
         glow = _RARITY_COLOR.get(card.rarity, colors.CARD_HOVER)
@@ -318,6 +354,7 @@ def draw_card_at(
     bonus_damage: int = 0,
     bonus_block: int = 0,
     outline: tuple[int, int, int] | None = None,
+    combo: bool = False,
 ) -> pygame.Rect:
     """Draw a card centred on ``center``; returns its (unrotated) rect.
 
@@ -328,9 +365,23 @@ def draw_card_at(
     """
     w, h = card_size(scale)
     body = render_card_surface(card, fonts, w=w, h=h, affordable=affordable,
-                               bonus_damage=bonus_damage, bonus_block=bonus_block)
+                               bonus_damage=bonus_damage, bonus_block=bonus_block, combo=combo)
     tilt = int(round(angle))
-    if tilt:
+    if combo and card.combo_effects():   # keyword ready: pulsing aura hugging the card
+        chroma_fx.draw_silhouette_aura(surface, body, (round(center[0]), round(center[1])), KEYWORD_READY_GLOW,
+                                       chroma_fx.now(), key=(w, h, card.rarity), angle=tilt, speed=4.0)
+    if card.chroma is not None:
+        # Animated each frame, so it bypasses the rotation cache.
+        t = chroma_fx.now()
+        chroma_fx.draw_card_aura(surface, body, (round(center[0]), round(center[1])), card.chroma, t,
+                                 key=(w, h, card.rarity), angle=tilt)
+        body = chroma_fx.animate_card_face(body, card.chroma, t, base_w=CARD_W)
+        if tilt:
+            body = pygame.transform.rotozoom(body, tilt, 1.0)
+        surface.blit(body, body.get_rect(center=(round(center[0]), round(center[1]))))
+        chroma_fx.draw_motes(surface, pygame.Rect(round(center[0]) - w // 2, round(center[1]) - h // 2, w, h),
+                             card.chroma, t, scale=w / CARD_W)
+    elif tilt:
         key = (body, tilt)
         rotated = _rot_cache.get(key)
         if rotated is None:

@@ -37,3 +37,6 @@ assets/cache/
 
 # Large design source files (exceed GitHub 100 MB limit)
 assets/3_Creative Pack/
+
+# Local Pruebas (tuning) settings
+dev_settings.json

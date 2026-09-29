@@ -425,6 +425,7 @@ class CombatScene:
                 bonus_damage = bonus_dmg,
                 bonus_block  = bonus_blk,
                 outline      = _RARITY_COLOR.get(card.rarity) if i == hovered else None,
+                combo        = self._combo_ready(card),
             )
 
         self._draw_pile_rect = draw_pile_widget(
@@ -467,10 +468,15 @@ class CombatScene:
     # Hand motion, held card, arrow
     # ------------------------------------------------------------------
 
+    def _combo_ready(self, card) -> bool:
+        """Keyword COMBO would trigger if ``card`` were played now."""
+        return self._state.combo_active and bool(card.combo_effects())
+
     def _bonuses(self, card) -> tuple[int, int]:
+        combo = self._combo_ready(card)
         dmg = (relic_effects.extra_attack_damage(self._state.relics)
-               + self._state.player.attack_bonus) if card.total_damage() > 0 else 0
-        blk = self._state.player.dexterity if card.total_block() > 0 else 0
+               + self._state.player.attack_bonus) if card.total_damage(combo) > 0 else 0
+        blk = self._state.player.dexterity if card.total_block(combo) > 0 else 0
         return dmg, blk
 
     def _held_index(self) -> int | None:
@@ -560,7 +566,7 @@ class CombatScene:
         dmg, blk = self._bonuses(card)
         rect = draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
                             bonus_damage=dmg, bonus_block=blk,
-                            outline=_PLAYABLE if ready else _HELD)
+                            outline=_PLAYABLE if ready else _HELD, combo=self._combo_ready(card))
         if self._play.aiming:
             draw_arrow(surface, (rect.centerx, rect.top + 6), self._arrow_end(),
                        hot=self._play.target is not None, phase=self._fx_time)
@@ -608,12 +614,9 @@ class CombatScene:
     def _get_tooltip(self) -> TooltipContent | None:
         if self._hovered_card is not None and self._hovered_card < self._state.hand.count:
             card      = self._state.hand.cards[self._hovered_card]
-            bonus_dmg = (
-                relic_effects.extra_attack_damage(self._state.relics)
-                + self._state.player.attack_bonus
-            ) if card.total_damage() > 0 else 0
-            bonus_blk = self._state.player.dexterity if card.total_block() > 0 else 0
-            return card_tooltip(card, bonus_damage=bonus_dmg, bonus_block=bonus_blk)
+            bonus_dmg, bonus_blk = self._bonuses(card)
+            return card_tooltip(card, bonus_damage=bonus_dmg, bonus_block=bonus_blk,
+                                combo_active=self._combo_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             return enemy_tooltip(self._state.enemies[self._hovered_enemy])
@@ -809,7 +812,7 @@ class CombatScene:
         old_enemy_hps = [e.current_hp for e in state.enemies]
         old_block     = state.player.block
         is_attack     = (0 <= card_idx < state.hand.count
-                         and state.hand.cards[card_idx].total_damage() > 0)
+                         and state.hand.cards[card_idx].total_damage(state.combo_active) > 0)
 
         self._play.cancel()
         played = state.hand.cards[card_idx] if 0 <= card_idx < state.hand.count else None
@@ -827,6 +830,9 @@ class CombatScene:
         self._feedback_time = 0.0
         self._hovered_card = None
         self._sound.play_card()
+        if result.combo and self._player_rect:
+            self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10, "¡COMBO!",
+                              (90, 235, 180), lifetime=1.1)
 
         block_gained = state.player.block - old_block
         if is_attack:

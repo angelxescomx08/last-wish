@@ -24,6 +24,7 @@ from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.viewport import Viewport
 from src.infrastructure.preferences import UserPreferences, load_preferences, save_preferences
+from src.infrastructure.dev_settings import load_dev_settings, save_dev_settings
 from src.presentation.scenes.boss_reward_scene import BossRewardScene
 from src.presentation.scenes.character_select_scene import CharacterSelectScene
 from src.presentation.scenes.combat_reward_scene import CombatRewardScene
@@ -34,6 +35,7 @@ from src.presentation.scenes.main_menu_scene import MainMenuScene, MenuAction
 from src.presentation.scenes.map_scene import MapScene
 from src.presentation.scenes.pack_opening_scene import PackOpeningScene
 from src.presentation.scenes.settings_scene import SettingsScene
+from src.presentation.scenes.dev_settings_scene import DevSettingsScene
 from src.presentation.scenes.shop_scene import ShopScene
 from src.presentation.scenes.treasure_scene import TreasureScene
 from src.presentation.ui.pause_menu import PauseMenu, PauseAction, draw_pause_button, pause_button_rect
@@ -120,7 +122,7 @@ class SceneManager:
 
     def _can_pause(self) -> bool:
         return self._run is not None and not isinstance(
-            self._top(), (MainMenuScene, CharacterSelectScene, SettingsScene, DeathScene)
+            self._top(), (MainMenuScene, CharacterSelectScene, SettingsScene, DevSettingsScene, DeathScene)
         )
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -197,6 +199,11 @@ class SceneManager:
             self._t_boss_reward(top)
         elif isinstance(top, SettingsScene):
             self._t_settings(top)
+        elif isinstance(top, DevSettingsScene):
+            if top.cleared:
+                top.cleared = False
+                save_dev_settings()
+                self.pop()
         elif isinstance(top, DeathScene):
             self._t_death(top)
 
@@ -213,6 +220,8 @@ class SceneManager:
             self.push(CharacterSelectScene(self._fonts, sound=self._sound))
         elif action == MenuAction.SETTINGS:
             self.push(SettingsScene(self._fonts, self._prefs, sound=self._sound))
+        elif action == MenuAction.DEV:
+            self.push(DevSettingsScene(self._fonts, sound=self._sound))
         elif action == MenuAction.EXIT:
             self.quit_requested = True
 
@@ -312,13 +321,16 @@ class SceneManager:
     def _t_shop(self, scene: ShopScene) -> None:
         if scene.selected_pack is not None:
             theme            = scene.selected_pack
+            chroma           = scene.selected_pack_chroma
             scene.selected_pack = None      # consume
+            scene.selected_pack_chroma = None
             run              = self._run
             cards            = pick_pack_cards(run, theme)
             from src.domain.card_pool import pack_def_for_theme
-            pack_name        = pack_def_for_theme(theme).name
+            from src.domain.chroma import chroma_title
+            pack_name        = chroma_title(pack_def_for_theme(theme).name, chroma, masculine=True)
             self.push(PackOpeningScene(cards, pack_name, self._fonts, sound=self._sound,
-                                       theme=theme.value, seed=run.floor))
+                                       theme=theme.value, seed=run.floor, chroma=chroma))
 
         elif scene.cleared:
             scene.cleared = False
@@ -329,8 +341,8 @@ class SceneManager:
             return
         scene.cleared = False
         run = self._run
-        if scene.chosen_card is not None:
-            run.add_card(scene.chosen_card)
+        for card in scene.chosen_cards:
+            run.add_card(card)
         self.pop()          # pop PackOpeningScene
         # Caller is either ShopScene or BossRewardScene
         top = self._top()
@@ -423,6 +435,7 @@ def run(settings: GameSettings) -> None:
     viewport      = Viewport(settings.width, settings.height)
     fonts         = FontRegistry()
     prefs         = load_preferences()
+    load_dev_settings()
     sound = SoundPlayer(sfx_volume=prefs.sfx_volume, music_volume=prefs.music_volume)
     sound.start_music()
     scene_manager = SceneManager(MainMenuScene(fonts, sound=sound), fonts, prefs, sound=sound)

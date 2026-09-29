@@ -16,11 +16,13 @@ from enum import Enum, auto
 
 import pygame
 
+from src.domain.chroma import chroma_def, chroma_title
 from src.domain.relic import Relic
 from src.domain.run import Run
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
+from src.presentation.fx import chroma_fx
 from src.presentation.ui.tooltip import draw_tooltip, relic_tooltip
 
 _BG = pygame.Color(18, 6, 6)
@@ -154,11 +156,17 @@ class BossRewardScene:
             pygame.draw.rect(surface, colors.BG_PANEL, rect, border_radius=8)
             pygame.draw.rect(surface, border,          rect, 2, border_radius=8)
 
-            ns = self._fonts.get(14).render(relic.name, True, pygame.Color(220, 190, 60))
+            ns = self._fonts.get(14).render(chroma_title(relic.name, relic.chroma), True,
+                                            pygame.Color(220, 190, 60))
             surface.blit(ns, ns.get_rect(centerx=rect.centerx, centery=rect.top + 35))
 
             ds = self._fonts.get(11).render(relic.description, True, colors.TEXT_SECONDARY)
             surface.blit(ds, ds.get_rect(centerx=rect.centerx, centery=rect.top + 90))
+            if relic.chroma is not None:
+                cn = self._fonts.get(11).render(chroma_def(relic.chroma).short_note, True,
+                                                chroma_fx.style(relic.chroma).main)
+                surface.blit(cn, cn.get_rect(centerx=rect.centerx, centery=rect.top + 115))
+                chroma_fx.draw_chroma_box(surface, rect, relic.chroma, chroma_fx.now(), radius=8)
 
         # Tooltip
         if self._hovered_rel is not None and self._hovered_rel < len(self._relics):

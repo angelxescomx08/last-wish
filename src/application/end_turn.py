@@ -5,6 +5,7 @@ import random
 from src.application import relic_effects
 from src.domain.combat import CombatState
 from src.domain.entities import Enemy, Intent, IntentType, StatusEffect
+from src.domain.tuning import TUNING
 
 _HAND_DRAW_SIZE: int = 5
 
@@ -66,7 +67,8 @@ def _execute_intent(state: CombatState, enemy: Enemy) -> None:
             dmg = enemy.intent.value
             absorbed = min(state.player.block, dmg)
             state.player.block = max(0, state.player.block - absorbed)
-            state.player.current_hp = max(0, state.player.current_hp - (dmg - absorbed))
+            if not TUNING.invincible:          # Pruebas: invincible hero
+                state.player.current_hp = max(0, state.player.current_hp - (dmg - absorbed))
             relic_effects.try_spectral_shield(state)
 
         case IntentType.BLOCK:
@@ -108,6 +110,7 @@ def _roll_intent(enemy: Enemy) -> Intent:
 def _begin_player_turn(state: CombatState) -> None:
     state.player.block = 0           # block resets at the START of the new turn
     state.turn += 1
+    state.cards_played_this_turn = 0  # Combo needs a card played earlier this turn
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None

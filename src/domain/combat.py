@@ -22,3 +22,9 @@ class CombatState:
     turn: int = 1
     selected_card_index: int | None = None
     targeted_enemy_index: int | None = None
+    cards_played_this_turn: int = 0   # resets each player turn; > 0 turns Combo on
+
+    @property
+    def combo_active(self) -> bool:
+        """Keyword COMBO: another card was already played this turn."""
+        return self.cards_played_this_turn > 0

@@ -20,6 +20,7 @@ from enum import Enum
 from typing import Callable, Iterable
 
 from src.domain.card import Card, CardClass, CardEffect, CardRarity, CardType
+from src.domain.chroma import Chroma
 from src.domain.entities import StatusEffect
 from src.domain.numbers import BigValue
 
@@ -55,6 +56,7 @@ class PackDef:
     name: str
     description: str
     cost: int
+    chroma: Chroma | None = None   # golden pack: keep 2 cards (effect_multiplier)
 
 
 ALL_PACKS: list[PackDef] = [
@@ -105,6 +107,14 @@ def _pwr(id: str, name: str, cost: int, draw: int = 0, *,
     )
 
 
+def _add_combo(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: int = 0,
+               on_play=None, text: str = "") -> Card:
+    """Give ``card`` the COMBO keyword: an extra layer if a card was played earlier this turn."""
+    card.base_effect.combo = CardEffect(name="Combo", damage=BigValue(dmg), block=BigValue(blk),
+                                        draw=draw, mana_gain=mana, on_play=on_play, text=text)
+    return card
+
+
 # ---------------------------------------------------------------------------
 # Starter deck
 # ---------------------------------------------------------------------------
@@ -131,13 +141,13 @@ def starter_deck() -> list[Card]:
 
 _ACERO: list[Callable[[], Card]] = [
     lambda: _atk("a_golpe_ferreo",   "Golpe Férreo",  1,  9),
-    lambda: _atk("a_tajo",           "Tajo",          1,  6, draw=1),
+    lambda: _add_combo(_atk("a_tajo", "Tajo", 1, 6, draw=1), dmg=5),
     lambda: _atk("a_arremetida",     "Arremetida",    2, 14),
     lambda: _atk("a_furia",          "Furia",         3, 20),
     lambda: _atk("a_punio",          "Puñetazo",      0,  5),
     lambda: _atk("a_golpe_pesado",   "Golpe Pesado",  2, 16),
     lambda: _atk("a_patada",         "Patada",        1,  7),
-    lambda: _atk("a_corte_rapido",   "Corte Rápido",  1,  5, draw=1),
+    lambda: _add_combo(_atk("a_corte_rapido", "Corte Rápido", 1, 5, draw=1), draw=1),
     lambda: _atk("a_embestida",      "Embestida",     2, 12),
     lambda: _atk("a_gran_golpe",     "Gran Golpe",    3, 26),
     # on_play cards
@@ -146,11 +156,11 @@ _ACERO: list[Callable[[], Card]] = [
         base_effect=CardEffect(name="Golpe Total", hits_all_enemies=True, on_play=_on_golpe_total),
         rarity=CardRarity.RARE,
     ),
-    lambda: Card(
+    lambda: _add_combo(Card(
         id="a_instinto", name="Instinto", card_type=CardType.ATTACK, cost=1,
         base_effect=CardEffect(name="Instinto", needs_target=True, on_play=_on_instinto),
         rarity=CardRarity.UNCOMMON,
-    ),
+    ), dmg=6),
 ]
 
 
@@ -166,8 +176,8 @@ _ESCUDO: list[Callable[[], Card]] = [
     lambda: _skl("e_parada",          "Parada",          0,  4),
     lambda: _skl("e_capa_hierro",     "Capa de Hierro",  2, 11, draw=1),
     lambda: _skl("e_torre",           "Torre",           2, 16),
-    lambda: _skl("e_escudo_reactivo", "Escudo Reactivo", 1,  6, draw=1),
-    lambda: _skl("e_agilidad",        "Agilidad",        1,  7),
+    lambda: _add_combo(_skl("e_escudo_reactivo", "Escudo Reactivo", 1, 6, draw=1), mana=1),
+    lambda: _add_combo(_skl("e_agilidad", "Agilidad", 1, 7), blk=5),
     lambda: _skl("e_gran_muralla",    "Gran Muralla",    3, 28),
     # on_play cards
     lambda: Card(
@@ -192,18 +202,18 @@ _MAGIA: list[Callable[[], Card]] = [
     lambda: _atk("m_rayo",            "Rayo",             2, 11),
     lambda: _skl("m_absorcion",       "Absorción",        1,  0, draw=3),
     lambda: _skl("m_impulso",         "Impulso",          1,  6, draw=1),
-    lambda: _combo("m_torbellino",    "Torbellino",       2,  8, 5),
+    lambda: _add_combo(_combo("m_torbellino", "Torbellino", 2, 8, 5), dmg=4, blk=4),
     lambda: _skl("m_barrera_magica",  "Barrera Mágica",   2, 10, draw=1),
     lambda: _skl("m_vision",          "Visión",           0,  0, draw=2),
     lambda: _atk("m_hechizo_menor",   "Hechizo Menor",    1,  6),
     lambda: _pwr("m_concentracion",   "Concentración",    1,  draw=2),
     lambda: _combo("m_conjuro",       "Conjuro de Combate", 2, 10, 6),
     # on_play cards
-    lambda: Card(
+    lambda: _add_combo(Card(
         id="m_veneno", name="Veneno", card_type=CardType.SKILL, cost=1,
         base_effect=CardEffect(name="Veneno", needs_target=True, on_play=_on_veneno),
         rarity=CardRarity.UNCOMMON,
-    ),
+    ), on_play=_on_veneno, text="aplica 3 de Veneno más"),
     lambda: Card(
         id="m_vision_del_caos", name="Visión del Caos", card_type=CardType.SKILL, cost=0,
         base_effect=CardEffect(name="Visión del Caos", hits_all_enemies=True, on_play=_on_vision_del_caos),
@@ -236,11 +246,11 @@ _EPICO: list[Callable[[], Card]] = [
         base_effect=CardEffect(name="Lluvia de Golpes", hits_all_enemies=True, on_play=_on_lluvia_de_golpes),
         rarity=CardRarity.LEGENDARY,
     ),
-    lambda: Card(
+    lambda: _add_combo(Card(
         id="ep_mazo_impecable", name="Mazo Impecable", card_type=CardType.ATTACK, cost=2,
         base_effect=CardEffect(name="Mazo Impecable", needs_target=True, on_play=_on_mazo_impecable),
         rarity=CardRarity.LEGENDARY,
-    ),
+    ), dmg=12),
     lambda: Card(
         id="ep_tormenta_veneno", name="Tormenta de Veneno", card_type=CardType.SKILL, cost=3,
         base_effect=CardEffect(name="Tormenta de Veneno", hits_all_enemies=True, on_play=_on_tormenta_veneno),

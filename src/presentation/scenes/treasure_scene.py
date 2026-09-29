@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import pygame
 
+from src.domain.chroma import chroma_def, chroma_title
 from src.domain.relic import Relic
 from src.domain.run import Run
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
+from src.presentation.fx import chroma_fx
 from src.presentation.ui.tooltip import draw_tooltip, relic_tooltip
 
 _BG = pygame.Color(14, 10, 6)
@@ -67,7 +69,7 @@ class TreasureScene:
         self._relic_rect = box
 
         name_surf = self._fonts.get(18).render(
-            self._relic.name, True, pygame.Color(220, 190, 60)
+            chroma_title(self._relic.name, self._relic.chroma), True, pygame.Color(220, 190, 60)
         )
         surface.blit(name_surf, name_surf.get_rect(centerx=cx, centery=220))
 
@@ -75,6 +77,11 @@ class TreasureScene:
             self._relic.description, True, colors.TEXT_PRIMARY
         )
         surface.blit(desc_surf, desc_surf.get_rect(centerx=cx, centery=270))
+        if self._relic.chroma is not None:
+            note = self._fonts.get(13).render(chroma_def(self._relic.chroma).relic_note, True,
+                                              chroma_fx.style(self._relic.chroma).main)
+            surface.blit(note, note.get_rect(centerx=cx, centery=305))
+            chroma_fx.draw_chroma_box(surface, box, self._relic.chroma, chroma_fx.now(), radius=8)
 
         # Buttons
         btn_y = 390

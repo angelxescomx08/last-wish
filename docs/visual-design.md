@@ -66,6 +66,22 @@ halos and rising sparkles) → outro (chosen card rises to the centre). Any clic
 or Space/Enter skips to the pick screen. Tune timings with the constants at the
 top of the module.
 
+## Chromas (golden cards and relics)
+
+`src/presentation/fx/chroma_fx.py`, keyed by `Chroma` (`STYLES`). Golden: the
+card frame is recoloured once (multiply warm gold + add amber into the
+shadows) with a "DORADA" plate at the bottom; every few seconds (3.2 s cycle,
+1.1 s sweep) a slanted light band crosses the card (pre-rendered frames, added
+onto a copy of the face so the card alpha clips it), four little 4-point stars
+pulse at fixed spots, and a blurred rounded-rect halo pulses behind the card.
+The aura is built from the card's own silhouette (its alpha:
+blurred tight rim + wide haze, silhouette subtracted), because card frames have
+transparent margins and a rect glow showed a brown box (user feedback). Golden
+motes rise around the card (stateless, time-based). The same silhouette aura in
+teal marks cards whose Combo is ready. Relic boxes get the same language (`draw_chroma_box`: halo, masked sheen, gold
+double border, twinkles). Pack reveal treats a golden card like a special one:
+anticipation glow, gold confetti, flash and shake. New chromas add a style.
+
 ## Playing cards — Slay the Spire style hand and targeting arrow
 
 User found card play "raro" and asked for the Slay the Spire arrow. Behaviour

@@ -24,6 +24,7 @@ from src.infrastructure.fonts import FontRegistry
 class MenuAction(Enum):
     PLAY     = auto()
     SETTINGS = auto()
+    DEV      = auto()   # "Pruebas" tuning screen
     EXIT     = auto()
 
 
@@ -42,7 +43,7 @@ _BG_COLOR        = pygame.Color(14, 20, 14)
 _TITLE_Y: int    = 220
 _SUBTITLE_Y: int = 310
 _OPTIONS_Y: int  = 420   # top option centre-y
-_OPTION_GAP: int = 60    # vertical distance between option centres
+_OPTION_GAP: int = 56    # vertical distance between option centres
 _NAV_HINT_Y: int = 690
 
 
@@ -111,6 +112,7 @@ class MainMenuScene:
         return [
             _Option(play_label, MenuAction.PLAY),
             _Option("Ajustes",  MenuAction.SETTINGS),
+            _Option("Pruebas",  MenuAction.DEV),
             _Option("Salir",    MenuAction.EXIT),
         ]
 

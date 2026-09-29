@@ -6,6 +6,8 @@ import pygame
 
 from src.domain.card import Card, CardType, ModifierTag
 from src.domain.card_pool import CARD_CLASS_LABEL
+from src.domain.chroma import chroma_def, chroma_title
+from src.domain.keywords import combo_text, keyword_def
 from src.domain.entities import Enemy, IntentType, Player
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
@@ -54,16 +56,18 @@ def card_tooltip(
     *,
     bonus_damage: int = 0,
     bonus_block: int = 0,
+    combo_active: bool = False,
 ) -> TooltipContent:
-    title = card.name + (" (Rota)" if card.is_broken else "")
+    combo = combo_active and bool(card.combo_effects())
+    title = chroma_title(card.name, card.chroma) + (" (Rota)" if card.is_broken else "")
     lines: list[str] = [
         f"{_CARD_TYPE_NAME[card.card_type]}  ·  Coste: {card.cost} maná",
         f"Clase: {CARD_CLASS_LABEL[card.card_class]}",
         "",
     ]
 
-    dmg = card.total_damage()
-    blk = card.total_block()
+    dmg = card.total_damage(combo)
+    blk = card.total_block(combo)
     if dmg > 0:
         effective = dmg + bonus_damage
         if bonus_damage > 0:
@@ -79,7 +83,7 @@ def card_tooltip(
         else:
             lines.append(f"Otorga {BigValue.format_int(blk)} puntos de bloqueo.")
 
-    base_draw = card.base_effect.draw + sum(fx.draw for fx in card.stacked_effects)
+    base_draw = card.total_draw(combo)
     if base_draw > 0:
         lines.append(f"Roba {base_draw} carta(s) adicional(es).")
 
@@ -107,6 +111,13 @@ def card_tooltip(
 
     if card.is_broken:
         lines += ["", "[!] ROTA: puede fusionarse con otra carta rota."]
+
+    for kw in sorted(card.keywords(), key=lambda k: k.value):
+        lines += ["", keyword_def(kw).rule]
+        lines.append(f"  {'¡Activo! ' if combo else ''}{combo_text(card)}.")
+
+    if card.chroma is not None:
+        lines += ["", chroma_def(card.chroma).card_note]
 
     return TooltipContent(title=title, lines=lines)
 
@@ -138,7 +149,10 @@ def enemy_tooltip(enemy: Enemy) -> TooltipContent:
 
 def relic_tooltip(relic: Relic) -> TooltipContent:
     status = "Estado: Activo" if relic.is_active else "Estado: Agotado"
-    return TooltipContent(title=relic.name, lines=[relic.description, "", status])
+    lines = [relic.description]
+    if relic.chroma is not None:
+        lines.append(chroma_def(relic.chroma).relic_note)
+    return TooltipContent(title=chroma_title(relic.name, relic.chroma), lines=[*lines, "", status])
 
 
 def pile_tooltip(pile_label: str, count: int, *, is_draw: bool) -> TooltipContent:

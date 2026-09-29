@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Callable
 
+from src.domain.chroma import Chroma, effect_multiplier
+from src.domain.keywords import Keyword
 from src.domain.numbers import BigValue
 
 if TYPE_CHECKING:
@@ -72,6 +74,12 @@ class CardEffect:
     hits_all_enemies: set True when on_play affects every enemy (area
     effects). It changes no rule; the UI uses it to show every enemy as the
     card's target instead of the hero.
+
+    combo: optional extra layer (keyword COMBO) that also resolves when
+    another card was already played this turn.
+
+    text: optional Spanish description of what on_play does (shown for combo
+    layers, e.g. "aplica 3 de Veneno más").
     """
     name: str
     damage: BigValue = field(default_factory=lambda: BigValue(0))
@@ -81,6 +89,8 @@ class CardEffect:
     needs_target: bool = False
     hits_all_enemies: bool = False
     on_play: Callable[[CombatState], None] | None = None
+    combo: CardEffect | None = None
+    text: str = ""
 
 
 @dataclass
@@ -106,6 +116,7 @@ class Card:
     is_broken: bool = False
     is_upgraded: bool = False
     card_class: CardClass = CardClass.NEUTRAL
+    chroma: Chroma | None = None      # special finish (golden = every effect x2)
 
     def __post_init__(self) -> None:
         if self.rarity is None:
@@ -118,17 +129,38 @@ class Card:
     def all_effects(self) -> list[CardEffect]:
         return [self.base_effect, *self.stacked_effects]
 
-    def total_damage(self) -> int:
-        total = BigValue(0)
-        for fx in self.all_effects():
-            total = total.add_flat(fx.damage.resolve())
-        return total.resolve()
+    def combo_effects(self) -> list[CardEffect]:
+        """Combo layers of the chain (keyword COMBO)."""
+        return [fx.combo for fx in self.all_effects() if fx.combo is not None]
 
-    def total_block(self) -> int:
+    def active_effects(self, combo: bool = False) -> list[CardEffect]:
+        """Effects that resolve: the chain, plus its combo layers when combo is on."""
+        return self.all_effects() + (self.combo_effects() if combo else [])
+
+    def keywords(self) -> frozenset[Keyword]:
+        return frozenset({Keyword.COMBO}) if self.combo_effects() else frozenset()
+
+    def effect_multiplier(self) -> int:
+        """Chroma scaling of every effect (1 = normal, golden = 2)."""
+        return effect_multiplier(self.chroma)
+
+    def total_damage(self, combo: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.all_effects():
+        for fx in self.active_effects(combo):
+            total = total.add_flat(fx.damage.resolve())
+        return total.resolve() * self.effect_multiplier()
+
+    def total_block(self, combo: bool = False) -> int:
+        total = BigValue(0)
+        for fx in self.active_effects(combo):
             total = total.add_flat(fx.block.resolve())
-        return total.resolve()
+        return total.resolve() * self.effect_multiplier()
+
+    def total_draw(self, combo: bool = False) -> int:
+        return sum(fx.draw for fx in self.active_effects(combo)) * self.effect_multiplier()
+
+    def total_mana_gain(self, combo: bool = False) -> int:
+        return sum(fx.mana_gain for fx in self.active_effects(combo)) * self.effect_multiplier()
 
     def effect_count(self) -> int:
         return len(self.stacked_effects)

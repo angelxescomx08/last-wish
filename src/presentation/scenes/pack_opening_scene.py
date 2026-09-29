@@ -19,9 +19,13 @@ Art comes from existing assets only (pack paintings in ``assets/cards-v2/packs``
 and the crystal card back); everything else is code-drawn light and particles
 (:mod:`src.presentation.fx.bursts`, :mod:`src.presentation.fx.particles`).
 
+A pack with a chroma multiplies how many cards you keep (golden: pick 2);
+the pack art is gilded and sparkles.
+
 Public flag consumed by SceneManager:
   cleared:      bool        — True when player picks (after the outro) or skips.
-  chosen_card:  Card | None — the chosen card.
+  chosen_cards: list[Card]  — every card kept (1, or more for chroma packs).
+  chosen_card:  Card | None — the first chosen card (compatibility).
 """
 from __future__ import annotations
 
@@ -31,11 +35,13 @@ import random
 import pygame
 
 from src.domain.card import Card, CardRarity
+from src.domain.chroma import Chroma, effect_multiplier
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.card_assets import card_back, pack_art
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.fx.bursts import GLOW, SPARK, SQUARE, BurstParticles, scaled, soft_glow
+from src.presentation.fx import chroma_fx
 from src.presentation.fx.particles import EmitterConfig, ParticleSystem
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card, render_card_surface
 from src.presentation.ui.tooltip import card_tooltip, draw_tooltip
@@ -104,6 +110,18 @@ def _rarity(card: Card) -> CardRarity:
     return card.rarity or CardRarity.COMMON
 
 
+def _is_special(card: Card) -> bool:
+    """Rare or better, or any chroma (golden…): gets anticipation and a halo."""
+    return _rarity(card).value >= CardRarity.RARE.value or card.chroma is not None
+
+
+def _reveal_palette(card: Card) -> tuple[Color, ...]:
+    if card.chroma is not None:
+        st = chroma_fx.style(card.chroma)
+        return (st.bright, st.main, st.glow, st.dark)
+    return RARITY_PALETTE[_rarity(card)]
+
+
 class PackOpeningScene:
     """Animated pack opening; player then selects one of the cards to keep."""
 
@@ -116,6 +134,7 @@ class PackOpeningScene:
         sound: SoundPlayer | None = None,
         theme: str | None = None,
         seed: int = 0,
+        chroma: Chroma | None = None,
     ) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
         self._cards      = cards
@@ -129,11 +148,17 @@ class PackOpeningScene:
 
         self.cleared:     bool = False
         self.chosen_card: Card | None = None
+        self.chosen_cards: list[Card] = []
+        self._pack_chroma = chroma
+        self._picks = max(1, min(effect_multiplier(chroma), len(cards))) if cards else 1
+        self._chosen: list[int] = []
 
         # --- theme and art -------------------------------------------------
         self._theme = theme if theme in THEMES else _DEFAULT_THEME
         self._glow_color, self._palette, self._accent = THEMES[self._theme]
         self._pack = self._load_pack()
+        if chroma is not None:
+            self._pack = chroma_fx.gild_frame(self._pack, chroma)
         self._pack_white = self._pack.copy()
         self._pack_white.fill((255, 255, 255, 0), special_flags=pygame.BLEND_RGBA_MAX)
         self._strip, self._body, self._tear_y = self._split_pack(self._pack)
@@ -167,7 +192,6 @@ class PackOpeningScene:
         self._pick_at = (self._flip_start[-1] + FLIP_T + 0.15) if cards else BURST_T
         self._strip_state = [0.0, 0.0, 0.0, 0.0, 0.0]   # dx, dy, vx, vy, angle
         self._body_state = [0.0, 0.0]                   # dy, vy
-        self._chosen_idx: int | None = None
         self._sparkle_acc = [0.0] * len(cards)
 
     # ------------------------------------------------------------------
@@ -265,7 +289,7 @@ class PackOpeningScene:
         t = deal_end + 0.15
         starts = []
         for card in self._cards:
-            if _rarity(card).value >= CardRarity.RARE.value:
+            if _is_special(card):
                 t += ANTICIPATION_T
             starts.append(t)
             t += FLIP_STAGGER
@@ -445,10 +469,10 @@ class PackOpeningScene:
                                angle=(math.pi, math.tau), life=(0.25, 0.5), size=(2, 3), drag=4.0)
             fs = self._flip_start[i]
             r = _rarity(card)
-            if (r.value >= CardRarity.RARE.value and not self._flipped[i]
+            if (_is_special(card) and not self._flipped[i]
                     and fs - ANTICIPATION_T <= self._t_open < fs and self._rng.random() < dt * 30):
                 x, y = self._slot_center(i)
-                self._fx.implode(x, y, 2, palette=RARITY_PALETTE[r][:3], radius=(90, 150),
+                self._fx.implode(x, y, 2, palette=_reveal_palette(card)[:3], radius=(90, 150),
                                  life=(0.2, 0.35))
             if not self._flipped[i] and self._t_open >= fs + FLIP_T * 0.5:
                 self._flipped[i] = True
@@ -476,22 +500,32 @@ class PackOpeningScene:
                      drag=1.0, gravity=560)
             self._shake = max(self._shake, 7.0)
             self._flash = max(self._flash, 0.35)
-        if v >= CardRarity.EPIC.value:
+        if self._cards[i].chroma is not None:
+            gold = _reveal_palette(self._cards[i])
+            fx.burst(x, y - CARD_H / 2, 60, palette=gold, speed=(220, 480),
+                     angle=(-math.pi * 0.95, -math.pi * 0.05), life=(1.0, 1.8), size=(3, 5),
+                     drag=1.0, gravity=560)
+            fx.burst(x, y, 12, palette=gold[:3], speed=(20, 140), life=(0.5, 0.9),
+                     size=(18, 34), style=GLOW, drag=3.0, spread=30)
+            self._shake = max(self._shake, 6.0)
+            self._flash = max(self._flash, 0.3)
+        if v >= CardRarity.EPIC.value or self._cards[i].chroma is not None:
             self._sound.play_reward()
         else:
             self._sound.play_card()
 
     def _update_sparkles(self, dt: float) -> None:
         for i, card in enumerate(self._cards):
-            if self._chosen_idx is not None:
+            if self._phase == "outro":
                 break
-            rate = _SPARKLE_RATE.get(_rarity(card), 0.0) + (4.0 if self._hovered == i else 0.0)
+            rate = (_SPARKLE_RATE.get(_rarity(card), 0.0) + (4.0 if self._hovered == i else 0.0)
+                    + (8.0 if card.chroma is not None else 0.0))
             if not rate:
                 continue
             self._sparkle_acc[i] += rate * dt
             x, y = self._slot_center(i)
             lift = -20 if self._hovered == i else 0
-            pal = RARITY_PALETTE[_rarity(card)]
+            pal = _reveal_palette(card)
             while self._sparkle_acc[i] >= 1.0:
                 self._sparkle_acc[i] -= 1.0
                 rng = self._rng
@@ -563,9 +597,14 @@ class PackOpeningScene:
             angle = math.sin(self._time * 55.0) * (1.5 + 4.0 * u)
             scale = 1.0 + 0.08 * u
         img = self._pack
+        if self._pack_chroma is not None:
+            img = chroma_fx.animate_card_face(img, self._pack_chroma, self._time, base_w=90)
         if angle or scale != 1.0:
             img = pygame.transform.rotozoom(img, angle, scale)
         surface.blit(img, img.get_rect(center=(cx + ox, cy + oy)))
+        if self._pack_chroma is not None:
+            chroma_fx.draw_motes(surface, img.get_rect(center=(cx + ox, cy + oy)), self._pack_chroma,
+                                 self._time, count=18, scale=1.8)
         if phase == "charge":
             u = self._t / CHARGE_T
             white = self._pack_white
@@ -625,10 +664,13 @@ class PackOpeningScene:
 
     def _halo(self, surface: pygame.Surface, card: Card, cx: float, cy: float, k: float) -> None:
         r = _rarity(card)
-        if r.value < CardRarity.RARE.value or k <= 0:
+        if not _is_special(card) or k <= 0:
             return
         k = round(min(1.0, k) * 8) / 8
-        col = scaled(RARITY_PALETTE[r][1], k * (0.35 + 0.12 * (r.value - 3)))
+        if card.chroma is not None:
+            col = scaled(chroma_fx.style(card.chroma).glow, k * 0.6)
+        else:
+            col = scaled(RARITY_PALETTE[r][1], k * (0.35 + 0.12 * (r.value - 3)))
         radius = 125
         surface.blit(soft_glow(col, radius), (int(cx) - radius, int(cy) - radius),
                      special_flags=pygame.BLEND_RGB_ADD)
@@ -657,8 +699,9 @@ class PackOpeningScene:
             pulse = 1.0 + 0.12 * math.sin(math.pi * f)
             sx = abs(math.cos(math.pi * f)) * scale * pulse
             img = self._back if f < 0.5 else render_card_surface(card, self._fonts)
-            r = _rarity(card)
-            if r.value >= CardRarity.RARE.value:
+            if f >= 0.5 and card.chroma is not None:
+                img = chroma_fx.animate_card_face(img, card.chroma, self._time)
+            if _is_special(card):
                 pre = _clamp01((t - (fs - ANTICIPATION_T)) / ANTICIPATION_T)
                 self._halo(surface, card, x + ox, y + oy, pre * 1.4 if f < 1.0 else 1.0)
                 if f == 0.0 and pre > 0:
@@ -676,29 +719,33 @@ class PackOpeningScene:
             self._halo(surface, card, cx + ox, cy + oy - (20 if self._hovered == i else 0),
                        pulse * (1.25 if self._hovered == i else 1.0))
             rect = draw_card(surface, card, start_x + i * (CARD_W + _GAP) + ox, _CARD_Y + oy,
-                             self._fonts, hovered=(self._hovered == i))
+                             self._fonts, hovered=(self._hovered == i), selected=(i in self._chosen))
             self._card_rects.append(rect.move(-ox, -oy))
 
     def _draw_outro(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         u = ease_out_cubic(self._t_out / OUTRO_T)
         for i, card in enumerate(self._cards):
-            if i == self._chosen_idx:
+            if i in self._chosen:
                 continue
             cx, cy = self._slot_center(i)
             self._blit_card(surface, render_card_surface(card, self._fonts), cx + ox,
                             cy + 60 * u + oy, alpha=int(255 * (1.0 - u)))
-        if self._chosen_idx is None:
-            return
-        card = self._cards[self._chosen_idx]
-        sx, sy = self._slot_center(self._chosen_idx)
-        tx, ty = _SCREEN_W / 2, _SCREEN_H / 2 - 20
-        x, y = sx + (tx - sx) * u, (sy - 20) + (ty - sy + 20) * u
-        scale = 1.0 + 0.35 * u
-        col = RARITY_PALETTE[_rarity(card)][1]
-        radius = int(150 * scale)
-        surface.blit(soft_glow(scaled(col, 0.55), radius), (int(x) - radius + ox, int(y) - radius + oy),
-                     special_flags=pygame.BLEND_RGB_ADD)
-        self._blit_card(surface, render_card_surface(card, self._fonts), x + ox, y + oy, scale, scale)
+        n = len(self._chosen)
+        for k, idx in enumerate(self._chosen):
+            card = self._cards[idx]
+            sx, sy = self._slot_center(idx)
+            tx = _SCREEN_W / 2 + (k - (n - 1) / 2) * (CARD_W * 1.35 + 30)
+            ty = _SCREEN_H / 2 - 20
+            x, y = sx + (tx - sx) * u, (sy - 20) + (ty - sy + 20) * u
+            scale = 1.0 + 0.35 * u
+            col = _reveal_palette(card)[1]
+            radius = int(150 * scale)
+            surface.blit(soft_glow(scaled(col, 0.55), radius),
+                         (int(x) - radius + ox, int(y) - radius + oy), special_flags=pygame.BLEND_RGB_ADD)
+            face = render_card_surface(card, self._fonts)
+            if card.chroma is not None:
+                face = chroma_fx.animate_card_face(face, card.chroma, self._time)
+            self._blit_card(surface, face, x + ox, y + oy, scale, scale)
 
     def _draw_ui(self, surface: pygame.Surface, phase: str) -> None:
         cx = surface.get_width() // 2
@@ -715,12 +762,15 @@ class PackOpeningScene:
         if phase == "pick":
             t = self._fonts.get(24).render(f"Abriendo: {self._pack_name}", True, colors.TEXT_ACCENT)
             surface.blit(t, t.get_rect(centerx=cx, centery=50))
-            sub = self._fonts.get(13).render(
-                "Elige una carta para añadir a tu mazo:", True, colors.TEXT_PRIMARY
-            )
+            left = self._picks - len(self._chosen)
+            text = ("Elige una carta para añadir a tu mazo:" if self._picks == 1 else
+                    f"Sobre {'dorado' if self._pack_chroma is Chroma.GOLDEN else 'especial'}: "
+                    f"elige {self._picks} cartas (te quedan {left})")
+            sub = self._fonts.get(13).render(text, True, colors.TEXT_PRIMARY)
             surface.blit(sub, sub.get_rect(centerx=cx, centery=90))
 
-            ss = self._fonts.get(14).render("Omitir", True, colors.TEXT_SECONDARY)
+            ss = self._fonts.get(14).render("Terminar" if self._chosen else "Omitir", True,
+                                            colors.TEXT_SECONDARY)
             sr = ss.get_rect(centerx=cx, centery=_CARD_Y + CARD_H + 40)
             self._skip_rect = pygame.Rect(sr.x - 10, sr.y - 6, sr.width + 20, sr.height + 12)
             pygame.draw.rect(surface, colors.BG_PANEL,     self._skip_rect, border_radius=5)
@@ -757,21 +807,23 @@ class PackOpeningScene:
                 return
         if self._skip_rect and self._skip_rect.collidepoint(pos):
             self._sound.play_cancel()
-            self.chosen_card = None
+            self.chosen_card = self.chosen_cards[0] if self.chosen_cards else None
             self.cleared     = True
 
     def choose(self, i: int) -> None:
-        """Keep card ``i``: plays the outro, then sets ``cleared``."""
-        if self.phase != "pick" or not 0 <= i < len(self._cards):
+        """Keep card ``i``; after the last allowed pick plays the outro, then sets ``cleared``."""
+        if self.phase != "pick" or not 0 <= i < len(self._cards) or i in self._chosen:
             return
         self._sound.play_reward()
-        self.chosen_card = self._cards[i]
-        self._chosen_idx = i
-        self._hovered = None
-        self._phase = "outro"
-        self._t_out = 0.0
+        self._chosen.append(i)
+        self.chosen_cards.append(self._cards[i])
+        self.chosen_card = self.chosen_cards[0]
+        if len(self._chosen) >= self._picks:
+            self._hovered = None
+            self._phase = "outro"
+            self._t_out = 0.0
         x, y = self._slot_center(i)
-        pal = RARITY_PALETTE[_rarity(self._cards[i])]
+        pal = _reveal_palette(self._cards[i])
         self._fx.burst(x, y - 20, 50, palette=pal, speed=(120, 420), life=(0.4, 0.9), size=(2, 5),
                        drag=2.5, spread=40)
         self._fx.burst(x, y - 20, 10, palette=pal[:3], speed=(20, 120), life=(0.4, 0.7),
