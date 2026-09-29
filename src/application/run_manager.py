@@ -40,7 +40,7 @@ def create_run(character: Character, seed: int) -> Run:
         gold=TUNING.starting_gold,
         player_max_hp=character.stats.max_hp + TUNING.extra_max_hp,
         player_current_hp=character.stats.max_hp + TUNING.extra_max_hp,
-        deck=starter_deck(),
+        deck=starter_deck(character.id),
         relics=[],
     )
     run.current_map = generate_map(seed, 1)

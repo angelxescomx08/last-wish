@@ -118,7 +118,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `map_node.py` | `MapNode`, `RoomType` | Single node on the run map: id, room_type, row, col, connections, visited, available |
 | `game_map.py` | `GameMap` | Floor map: nodes dict, boss_id, rows, cols; `available_nodes()`, `mark_visited()` |
 | `run.py` | `Run` | Persistent state across rooms: character, seed, floor, gold, hp, deck, relics, map; `add_card`, `add_relic`, `apply_combat_result` |
-| `card_pool.py` | `PackTheme`, `PackDef`, `ALL_PACKS`, `starter_deck`, `CARD_CLASS_BY_ID`, `CARD_CLASS_LABEL`, `CardFactory`, `card_factories_for_theme(theme, classes=None)`, `card_factories_for_classes(classes)`, `class_for_character(id)`, `PACK_SIZE` | 4 card packs (ACERO/ESCUDO/MAGIA/EPICO), pack definitions with gold costs, neutral starter 10-card deck; every pool card has a class (see *Card classes*) |
+| `card_pool.py` | `PackTheme`, `PackDef`, `ALL_PACKS`, `starter_deck`, `CARD_CLASS_BY_ID`, `CARD_CLASS_LABEL`, `CardFactory`, `card_factories_for_theme(theme, classes=None)`, `card_factories_for_classes(classes)`, `class_for_character(id)`, `PACK_SIZE` | 4 card packs (ACERO/ESCUDO/MAGIA/EPICO), pack definitions with gold costs, `starter_deck(character_id)` (neutral 10-card deck; La Pícara: own 9-card deck — 4× Puñalada 6 dmg, 4× Esquiva 6 block, 1× Finta 1 mana 4 dmg + Combo +4 block); every pool card has a class (see *Card classes*) |
 
 ### Application layer — `src/application/`
 

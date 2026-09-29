@@ -119,8 +119,29 @@ def _add_combo(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: i
 # Starter deck
 # ---------------------------------------------------------------------------
 
-def starter_deck() -> list[Card]:
-    """Initial 10-card deck given to every character regardless of class."""
+def _rogue_starter() -> list[Card]:
+    """La Pícara: 4 attacks (6 dmg), 4 defenses (6 block) and 1 combo card (9 cards).
+
+    Finta: 1 mana, 4 damage; Combo: +4 block. All class ROGUE, common rarity.
+    """
+    def stamp(card: Card) -> Card:
+        card.card_class = CardClass.ROGUE
+        card.rarity = CardRarity.COMMON
+        return card
+    attacks = [stamp(_atk("punalada_base", "Puñalada", 1, 6)) for _ in range(4)]
+    blocks = [stamp(_skl("esquiva_base", "Esquiva", 1, 6)) for _ in range(4)]
+    finta = stamp(_add_combo(_atk("finta_base", "Finta", 1, 4), blk=4))
+    return attacks + blocks + [finta]
+
+
+def starter_deck(character_id=None) -> list[Card]:
+    """Initial deck for a character (a ``CharacterId``).
+
+    La Pícara has her own 9-card deck (see ``_rogue_starter``); the other classes
+    (and no id) get the shared neutral 10-card deck below.
+    """
+    if character_id is not None and getattr(character_id, "value", None) == "rogue":
+        return _rogue_starter()
     return [
         _atk("golpe_base",   "Golpe",    1, 6),
         _atk("golpe_base",   "Golpe",    1, 6),
