@@ -45,11 +45,15 @@ class TestKeywordDomain:
         assert combo_text(_combo_card()) == "+5 de daño"
         assert combo_text(_combo_card(combo_dmg=0, draw=1, mana_gain=1)) == "roba 1, +1 de maná"
 
-    def test_golden_doubles_combo_too(self):
+    def test_golden_casts_combo_twice(self):
         c = _combo_card()
         c.chroma = Chroma.GOLDEN
-        assert c.total_damage(combo=True) == 22
-        assert combo_text(c) == "+10 de daño"
+        assert c.total_damage(combo=True) == 11 and combo_text(c) == "+5 de daño"
+        state = _make_state([_plain(), c], enemy_hp=50)
+        play_card(state, 0, 0)
+        result = play_card(state, 0, 0)
+        assert result.combo and result.casts == 2
+        assert state.enemies[0].current_hp == 50 - 1 - 22
 
 
 class TestComboInCombat:

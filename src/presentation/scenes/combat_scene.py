@@ -16,6 +16,7 @@ from src.infrastructure.sprite_loader import (
     IDLE_CYCLE_SECONDS, SpriteLoader, has_hero_sprites, hero_animation_seconds, hero_id_for,
 )
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
+from src.presentation.fx.bursts import GLOW, SPARK, BurstParticles
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_play import CardPlayInput, PlayRequest
 from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
@@ -98,6 +99,13 @@ _NEIGHBOUR_PUSH: float = 46.0             # px the neighbours of a hovered card 
 _EASE: float = 16.0                       # hand tween speed (1/s)
 _EASE_HELD: float = 32.0                  # held card follows the pointer faster
 _LEAVE_SECONDS: float = 0.3               # played card flies to the discard pile
+# Multi-cast replay (golden cards): the rules resolve instantly, the screen replays each cast.
+_CAST_INTRO: float = 0.35                  # card flies to the stage before the first cast
+_CAST_GAP: float = 0.65                    # time between casts
+_CAST_OUTRO: float = 0.8                   # linger after the last cast (see the kill)
+_KILL_HOLD: float = 0.7                    # any killing blow: wait before declaring victory
+_CAST_STAGE: tuple[float, float] = (560.0, 250.0)
+_GOLD = ((255, 250, 210), (255, 214, 90), (230, 150, 30), (140, 80, 10))
 _ENEMY_HIT_PAD: tuple[int, int] = (40, 70)
 _PLAYABLE = (255, 212, 60)
 _HELD = (240, 232, 214)
@@ -193,6 +201,11 @@ class CombatScene:
         self._play = CardPlayInput(_PLAY_LINE_Y)
         self._motion: dict[tuple[int, int], CardPose] = {}
         self._leaving: list[list] = []         # [card, pose, age, bonus_dmg, bonus_blk]
+        self._sequence: dict | None = None     # multi-cast replay in progress (golden cards)
+        self._hold_time = 0.0                  # delay before victory after a killing blow
+        self._shown_enemies: list[tuple[int, int]] | None = None   # (hp, block) drawn during a replay
+        self._shown_player_block: int | None = None
+        self._bursts = BurstParticles(400, seed=11)
         self._fx_time = 0.0
 
         # Hit-test rects (rebuilt each draw call)
@@ -233,6 +246,8 @@ class CombatScene:
         if self._overlay is not None:
             self._overlay.handle_event(event)
             return
+        if self.presentation_busy and event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
+            return      # a multi-cast replay is playing: wait for it
 
         if event.type == pygame.MOUSEMOTION:
             self._mouse = event.pos
@@ -262,6 +277,9 @@ class CombatScene:
         self._fx.update(dt)
         self._fx_time += max(0.0, dt)
         self._advance_cards(max(0.0, dt))
+        self._bursts.update(dt)
+        self._hold_time = max(0.0, self._hold_time - max(0.0, dt))
+        self._advance_sequence(max(0.0, dt))
 
     def draw(self, surface: pygame.Surface) -> None:
         self._backdrop.draw(surface)
@@ -270,6 +288,8 @@ class CombatScene:
         self._draw_hand_area(surface)
 
         self._draw_leaving(surface)
+        self._draw_cast_stage(surface)
+        self._bursts.draw(surface)
         self._fx.draw(surface)
         if self._feedback_time > 0:
             message = self._fonts.get(16).render(self._feedback_text, True, (245, 165, 125))
@@ -295,14 +315,21 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     @property
+    def presentation_busy(self) -> bool:
+        """A multi-cast replay or a killing blow is still on screen (victory waits for it)."""
+        return self._sequence is not None or self._hold_time > 0
+
+    @property
     def death_occurred(self) -> bool:
         """True once the player's HP reaches 0 (latches until acknowledged)."""
+        if self.presentation_busy:
+            return False
         return not self._state.player.is_alive
 
     @property
     def combat_won(self) -> bool:
         """True when all enemies are dead and victory hasn't been acknowledged."""
-        if self._victory_acknowledged:
+        if self._victory_acknowledged or self.presentation_busy:
             return False
         if self._initial_enemy_count == 0:
             return False
@@ -368,13 +395,34 @@ class CombatScene:
             if i >= len(_ENEMY_SLOTS):
                 break
             ex, ey = _ENEMY_SLOTS[i]
-            rect = draw_enemy(
-                surface, enemy, ex, ey, self._fonts,
-                targeted    = self._state.targeted_enemy_index == i,
-                sprite      = self._sprites.get_enemy_sprite(enemy.name),
-            )
+            shown = self._shown_enemies
+            saved = None
+            if shown is not None and i < len(shown):      # replay: show HP/block cast by cast
+                saved = (enemy.current_hp, enemy.block)
+                enemy.current_hp, enemy.block = shown[i]
+            try:
+                rect = draw_enemy(
+                    surface, enemy, ex, ey, self._fonts,
+                    targeted    = self._state.targeted_enemy_index == i,
+                    sprite      = self._sprites.get_enemy_sprite(enemy.name),
+                )
+            finally:
+                if saved is not None:
+                    enemy.current_hp, enemy.block = saved
             self._enemy_rects.append(rect)
 
+        real_block = self._state.player.block
+        if self._shown_player_block is not None:
+            self._state.player.block = self._shown_player_block
+        try:
+            self._draw_player(surface)
+        finally:
+            self._state.player.block = real_block
+
+        if self._state.active_powers:
+            self._draw_active_powers(surface)
+
+    def _draw_player(self, surface: pygame.Surface) -> None:
         self._player_rect = draw_player(
             surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
             sprite=self._sprites.get_player_sprite(self._state.player.name,
@@ -383,9 +431,6 @@ class CombatScene:
                 animation=self._hero_action or "idle"),
             framed=not has_hero_sprites(self._state.player.name),
         )
-
-        if self._state.active_powers:
-            self._draw_active_powers(surface)
 
     def _draw_active_powers(self, surface: pygame.Surface) -> None:
         label_surf = self._fonts.get(10).render("PODERES ACTIVOS", True, colors.TEXT_SECONDARY)
@@ -810,6 +855,7 @@ class CombatScene:
     def _do_play_card(self, card_idx: int, target_idx: int | None) -> None:
         state         = self._state
         old_enemy_hps = [e.current_hp for e in state.enemies]
+        old_enemy_blk = [e.block for e in state.enemies]
         old_block     = state.player.block
         is_attack     = (0 <= card_idx < state.hand.count
                          and state.hand.cards[card_idx].total_damage(state.combo_active) > 0)
@@ -824,9 +870,6 @@ class CombatScene:
             state.selected_card_index = None
             self._show_error(result.message)
             return
-        if played is not None and played_pose is not None:
-            self._leaving.append([played, CardPose(played_pose.x, played_pose.y, played_pose.scale,
-                                                   played_pose.angle), 0.0, *bonuses])
         self._feedback_time = 0.0
         self._hovered_card = None
         self._sound.play_card()
@@ -834,6 +877,22 @@ class CombatScene:
             self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10, "¡COMBO!",
                               (90, 235, 180), lifetime=1.1)
 
+        if result.casts > 1 and played is not None:
+            # Golden: replay every cast on screen, one after another.
+            start = (CardPose(played_pose.x, played_pose.y, played_pose.scale, played_pose.angle)
+                     if played_pose is not None else CardPose(640.0, 600.0, 1.0, 0.0))
+            self._sequence = {
+                "card": played, "bonuses": bonuses, "result": result, "attack": is_attack,
+                "start": start, "t": 0.0, "fired": 0, "pulse": 0.0,
+                "prev_block": old_block, "prev_hp": list(old_enemy_hps),
+            }
+            self._shown_enemies = list(zip(old_enemy_hps, old_enemy_blk))
+            self._shown_player_block = old_block
+            return
+
+        if played is not None and played_pose is not None:
+            self._leaving.append([played, CardPose(played_pose.x, played_pose.y, played_pose.scale,
+                                                   played_pose.angle), 0.0, *bonuses])
         block_gained = state.player.block - old_block
         if is_attack:
             self._play_hero_action("attack")
@@ -851,6 +910,92 @@ class CombatScene:
                 if not enemy.is_alive:
                     self._fx.add_death_flash(self._enemy_rects[i])
                     self._sound.play_death()
+                    self._hold_time = _KILL_HOLD      # let the kill be seen before victory
+
+    # ------------------------------------------------------------------
+    # Multi-cast replay (golden cards cast twice)
+    # ------------------------------------------------------------------
+
+    def _cast_time(self, k: int) -> float:
+        return _CAST_INTRO + k * _CAST_GAP
+
+    def _advance_sequence(self, dt: float) -> None:
+        seq = self._sequence
+        if seq is None:
+            return
+        seq["t"] += dt
+        seq["pulse"] = max(0.0, seq["pulse"] - dt * 3.0)
+        result = seq["result"]
+        while seq["fired"] < result.casts and seq["t"] >= self._cast_time(seq["fired"]):
+            self._fire_cast(seq["fired"])
+            seq["fired"] += 1
+        if seq["t"] >= self._cast_time(result.casts - 1) + _CAST_OUTRO:
+            card, (dmg, blk) = seq["card"], seq["bonuses"]
+            x, y = _CAST_STAGE
+            self._leaving.append([card, CardPose(x, y, 0.95, 0.0), 0.0, dmg, blk])
+            self._sequence = None
+            self._shown_enemies = None
+            self._shown_player_block = None
+
+    def _fire_cast(self, k: int) -> None:
+        """Show cast ``k``: hero action, hits, HP/block step, gold burst and label."""
+        seq = self._sequence
+        result = seq["result"]
+        n = result.casts
+        x, y = _CAST_STAGE
+        seq["pulse"] = 1.0
+        # gold flare on the staged card (bigger for the repeat casts)
+        self._bursts.burst(x, y, 26 + 14 * k, palette=_GOLD, speed=(120, 420), life=(0.4, 0.9),
+                           size=(2, 5), drag=2.5, spread=40)
+        self._bursts.burst(x, y, 16, palette=_GOLD[:2], speed=(250, 520), life=(0.2, 0.4),
+                           size=(1.5, 2.5), style=SPARK, drag=3.0, spread=30)
+        self._bursts.burst(x, y, 6, palette=_GOLD[:3], speed=(10, 80), life=(0.4, 0.7),
+                           size=(20, 34), style=GLOW, drag=3.0, spread=20)
+        self._fx.add_text(x, y - 120, f"Lanzamiento {k + 1}/{n}", (255, 214, 90), lifetime=0.9)
+        if k > 0:
+            self._sound.play_card()
+            if self._player_rect:
+                self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 34,
+                                  f"¡x{k + 1}!", (255, 210, 80), lifetime=1.0)
+
+        block = result.cast_player_block[k] if k < len(result.cast_player_block) else seq["prev_block"]
+        gained = block - seq["prev_block"]
+        seq["prev_block"] = block
+        self._shown_player_block = block
+        if seq["attack"]:
+            self._play_hero_action("attack")
+        elif gained > 0:
+            self._play_hero_action("guard")
+        if gained > 0 and self._player_rect:
+            self._fx.add_block_flash(self._player_rect, gained)
+            self._sound.play_block()
+
+        hp_after = result.cast_enemy_hp[k] if k < len(result.cast_enemy_hp) else []
+        blk_after = result.cast_enemy_block[k] if k < len(result.cast_enemy_block) else []
+        self._shown_enemies = list(zip(hp_after, blk_after)) or self._shown_enemies
+        for i, hit in enumerate(result.cast_hits[k] if k < len(result.cast_hits) else []):
+            if hit > 0 and i < len(self._enemy_rects):
+                self._fx.add_hit_flash(self._enemy_rects[i], hit)
+                self._sound.play_attack()
+                if i < len(hp_after) and hp_after[i] <= 0 < seq["prev_hp"][i]:
+                    self._fx.add_death_flash(self._enemy_rects[i])
+                    self._sound.play_death()
+        seq["prev_hp"] = list(hp_after) or seq["prev_hp"]
+
+    def _draw_cast_stage(self, surface: pygame.Surface) -> None:
+        """The golden card hovering on stage while its casts replay."""
+        seq = self._sequence
+        if seq is None:
+            return
+        u = min(1.0, seq["t"] / _CAST_INTRO)
+        u = 1.0 - (1.0 - u) ** 3
+        start = seq["start"]
+        x = start.x + (_CAST_STAGE[0] - start.x) * u
+        y = start.y + (_CAST_STAGE[1] - start.y) * u
+        scale = start.scale + (0.95 - start.scale) * u + 0.14 * seq["pulse"]
+        dmg, blk = seq["bonuses"]
+        draw_card_at(surface, seq["card"], (x, y), self._fonts, scale=scale,
+                     angle=start.angle * (1.0 - u), bonus_damage=dmg, bonus_block=blk)
 
     @property
     def hero_action(self) -> str | None:

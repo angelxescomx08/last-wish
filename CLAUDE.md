@@ -393,10 +393,19 @@ Generic system: `Chroma` enum + `ChromaDef` registry (`CHROMA_DEFS`). Only
 `short_note`) and an optional `on_card_played(state, card)` hook for future
 chromas with unusual behaviour. `Card.chroma` / `Relic.chroma` (None = normal).
 
-* Cards: `total_damage/total_block/total_draw/total_mana_gain` are multiplied;
-  `play_card` repeats every `on_play` `effect_multiplier()` times, then runs the
-  hook. Cost is not scaled; flat bonuses (attack bonus, relic damage, dexterity)
-  are added once.
+* Cards: printed stats stay normal; the card is **cast `card.casts()` times**
+  (golden: twice). `play_card` pays once, then `_resolve_cast` runs each full
+  cast (damage + attack bonuses, block + dexterity, mana, every `on_play`,
+  draws, combo layer), then the chroma hook. It counts as one card played.
+  `PlayResult` carries per-cast snapshots (`cast_hits`, `cast_enemy_hp`,
+  `cast_enemy_block`, `cast_player_block`). `CombatScene` **replays** the casts:
+  the card flies to a stage (`_CAST_STAGE`), each cast fires `_CAST_GAP` apart
+  (hero attack, hit number, HP/block drawn step by step via `_shown_enemies`,
+  gold burst, "Lanzamiento k/n", "¡x2!"), then lingers `_CAST_OUTRO`. While
+  `presentation_busy`, input is ignored and `combat_won`/`death_occurred` wait,
+  so a kill is seen before victory (any normal killing blow also holds
+  `_KILL_HOLD`). The face shows
+  "DORADA  x2"; the tooltip note says it is cast 2 times.
 * Relics: every numeric `relic_effects` bonus is multiplied (`_sum`); the
   Spectral Shield gets `effect_multiplier()` charges (`Relic.times_triggered`).
 * Drops: `roll_chroma(rng, for_relic=…)` on reward/pack cards (own rng, so the

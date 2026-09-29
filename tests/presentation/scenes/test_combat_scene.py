@@ -378,3 +378,62 @@ class TestCardPlay:
         corner = {tuple(surface.get_at((x, y)))[:3] for x in range(rect.x - 12, rect.x + 6)
                   for y in range(rect.y - 12, rect.y + 6)}
         assert RETICLE_SELF in corner
+
+
+# ---------------------------------------------------------------------------
+# Golden cards: each cast is replayed on screen; victory waits for it
+# ---------------------------------------------------------------------------
+
+class TestMultiCastReplay:
+    def _golden_scene(self, enemy_hp=12):
+        from src.domain.card import Card, CardEffect, CardType
+        from src.domain.chroma import Chroma
+        from src.domain.numbers import BigValue
+        state = create_sample_combat()
+        state.enemies = state.enemies[:1]
+        enemy = state.enemies[0]
+        enemy.current_hp = enemy.max_hp = enemy_hp
+        enemy.block = 0
+        state.player.attack_bonus = 0
+        state.relics = []
+        state.mana.current = 3
+        card = Card(id="golpe_base", name="Golpe", card_type=CardType.ATTACK, cost=1, chroma=Chroma.GOLDEN,
+                    base_effect=CardEffect(name="Golpe", damage=BigValue(6)))
+        state.hand.cards = [card]
+        scene = CombatScene(state, _fonts())
+        scene.draw(_surface())
+        return scene, enemy
+
+    def _step(self, scene, seconds, dt=1 / 60):
+        surf = _surface()
+        for _ in range(int(seconds / dt)):
+            scene.update(dt)
+            scene.draw(surf)
+
+    def test_killing_double_cast_is_shown_before_victory(self):
+        scene, enemy = self._golden_scene(enemy_hp=12)
+        scene._do_play_card(0, 0)
+        assert enemy.current_hp == 0                    # rules resolved at once
+        assert scene.presentation_busy and not scene.combat_won
+        assert scene._shown_enemies[0][0] == 12         # screen still shows full HP
+        self._step(scene, 0.45)                         # first cast
+        assert scene._shown_enemies[0][0] == 6 and not scene.combat_won
+        self._step(scene, 0.7)                          # second cast
+        assert scene._shown_enemies[0][0] == 0 and not scene.combat_won
+        self._step(scene, 1.0)                          # linger, then victory
+        assert not scene.presentation_busy and scene.combat_won
+
+    def test_input_is_ignored_during_replay(self):
+        scene, _ = self._golden_scene(enemy_hp=100)
+        scene._do_play_card(0, 0)
+        scene.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+        scene.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(1150, 30)))
+        assert scene.state.turn == 1
+
+    def test_normal_killing_blow_holds_briefly(self):
+        scene, enemy = self._golden_scene(enemy_hp=6)
+        scene.state.hand.cards[0].chroma = None
+        scene._do_play_card(0, 0)
+        assert enemy.current_hp == 0 and not scene.combat_won
+        self._step(scene, 0.8)
+        assert scene.combat_won

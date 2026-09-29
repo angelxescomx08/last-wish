@@ -5,17 +5,20 @@ import pygame
 
 
 class _HitFlash:
-    def __init__(self, rect: pygame.Rect, color: tuple[int, int, int], lifetime: float = 0.25) -> None:
+    def __init__(self, rect: pygame.Rect, color: tuple[int, int, int], lifetime: float = 0.25,
+                 delay: float = 0.0) -> None:
         self._rect     = rect.copy()
         self._color    = color
         self._lifetime = lifetime
-        self._age      = 0.0
+        self._age      = -max(0.0, delay)     # negative age = waiting to appear
 
     def update(self, dt: float) -> bool:
         self._age += dt
         return self._age < self._lifetime
 
     def draw(self, surface: pygame.Surface) -> None:
+        if self._age < 0:
+            return
         alpha   = int(170 * max(0.0, 1 - self._age / self._lifetime))
         overlay = pygame.Surface(self._rect.size, pygame.SRCALPHA)
         overlay.fill((*self._color, alpha))
@@ -32,6 +35,7 @@ class _FloatingNumber:
         color: tuple[int, int, int],
         font: pygame.font.Font,
         lifetime: float = 0.8,
+        delay: float = 0.0,
     ) -> None:
         self._x        = x
         self._y        = y
@@ -39,14 +43,17 @@ class _FloatingNumber:
         self._color    = color
         self._font     = font
         self._lifetime = lifetime
-        self._age      = 0.0
+        self._age      = -max(0.0, delay)     # negative age = waiting to appear
 
     def update(self, dt: float) -> bool:
         self._age += dt
-        self._y   -= self._RISE * dt
+        if self._age > 0:
+            self._y -= self._RISE * dt
         return self._age < self._lifetime
 
     def draw(self, surface: pygame.Surface) -> None:
+        if self._age < 0:
+            return
         alpha = int(255 * max(0.0, 1 - self._age / self._lifetime))
         surf  = self._font.render(self._text, True, self._color)
         surf.set_alpha(alpha)
@@ -64,11 +71,13 @@ class FxLayer:
     # Spawn helpers
     # ------------------------------------------------------------------
 
-    def add_hit_flash(self, rect: pygame.Rect, damage: int) -> None:
-        self._effects.append(_HitFlash(rect, (220, 40, 40)))
+    def add_hit_flash(self, rect: pygame.Rect, damage: int, *, dx: float = 0.0,
+                      delay: float = 0.0) -> None:
+        """Red flash + "-N"; ``dx``/``delay`` separate repeated hits (golden cards cast twice)."""
+        self._effects.append(_HitFlash(rect, (220, 40, 40), delay=delay))
         self._effects.append(_FloatingNumber(
-            rect.centerx, rect.top + 20,
-            f"-{damage}", (255, 90, 90), self._font,
+            rect.centerx + dx, rect.top + 20,
+            f"-{damage}", (255, 90, 90), self._font, delay=delay,
         ))
 
     def add_block_flash(self, rect: pygame.Rect, amount: int) -> None:

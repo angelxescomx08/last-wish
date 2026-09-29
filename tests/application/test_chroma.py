@@ -54,9 +54,9 @@ class TestChromaDomain:
             d = chroma_def(c)
             assert d.chroma is c and d.name and d.card_note and d.relic_note and d.short_note
 
-    def test_golden_texts_mention_x2(self):
+    def test_golden_texts(self):
         d = chroma_def(G)
-        assert "x2" in d.card_note and "x2" in d.relic_note and "x2" in d.short_note
+        assert "2 veces" in d.card_note and "x2" in d.relic_note and "x2" in d.short_note
         assert "dorada" in d.card_note.lower()
 
     def test_title(self):
@@ -67,14 +67,10 @@ class TestChromaDomain:
         assert _card(dmg=6).chroma is None
         assert _card(dmg=6).total_damage() == 6
 
-    def test_golden_card_totals_double(self):
+    def test_golden_card_keeps_printed_stats_and_casts_twice(self):
         c = _card(dmg=6, blk=5, draw=1, mana=2, chroma=G)
-        assert (c.total_damage(), c.total_block(), c.total_draw(), c.total_mana_gain()) == (12, 10, 2, 4)
-
-    def test_golden_doubles_stacked_effects_too(self):
-        c = _card(dmg=6, chroma=G)
-        c.stacked_effects.append(CardEffect(name="extra", damage=BigValue(4)))
-        assert c.total_damage() == 20
+        assert (c.total_damage(), c.total_block(), c.total_draw(), c.total_mana_gain()) == (6, 5, 1, 2)
+        assert c.casts() == 2 and _card(dmg=6).casts() == 1
 
     def test_golden_relic_multiplier(self):
         assert _relic(RelicTag.FIRE_ORB, G).effect_multiplier() == 2
@@ -105,15 +101,33 @@ class TestChromaDomain:
 # ---------------------------------------------------------------------------
 
 class TestGoldenCardPlay:
-    def test_damage_doubles_bonuses_added_once(self):
+    def test_cast_twice_each_hit_with_bonuses(self):
         state = _make_state([_card(dmg=6, chroma=G)], enemy_hp=50, player_attack_bonus=3)
-        assert play_card(state, 0, 0).success
-        assert state.enemies[0].current_hp == 50 - (12 + 3)
+        result = play_card(state, 0, 0)
+        assert result.success and result.casts == 2
+        assert result.cast_hits == [[9], [9]]
+        assert state.enemies[0].current_hp == 50 - 2 * (6 + 3)
 
-    def test_block_doubles_dexterity_added_once(self):
+    def test_second_cast_hits_block_separately(self):
+        state = _make_state([_card(dmg=6, chroma=G)], enemy_hp=50, enemy_block=8)
+        result = play_card(state, 0, 0)
+        assert result.cast_hits == [[0], [4]]
+        assert state.enemies[0].block == 0 and state.enemies[0].current_hp == 46
+
+    def test_second_cast_skips_dead_target(self):
+        state = _make_state([_card(dmg=6, chroma=G)], enemy_hp=5)
+        result = play_card(state, 0, 0)
+        assert result.cast_hits == [[5], [0]]
+
+    def test_block_twice_with_dexterity_each_time(self):
         state = _make_state([_card(blk=5, chroma=G, ctype=CardType.SKILL)], player_dexterity=2)
         play_card(state, 0)
-        assert state.player.block == 12
+        assert state.player.block == 14
+
+    def test_counts_as_one_card_played(self):
+        state = _make_state([_card(dmg=1, chroma=G)])
+        play_card(state, 0, 0)
+        assert state.cards_played_this_turn == 1
 
     def test_draw_and_mana_double(self):
         fillers = [_card(dmg=1) for _ in range(5)]
@@ -247,4 +261,4 @@ class TestGoldenDrops:
             run = create_run(ALL_CHARACTERS[seed % 3], seed * 10 ** 15)
             for card in pick_reward_cards(run, f"room{seed}"):
                 assert card.chroma in (None, G)
-                assert card.total_damage() == (card.total_damage() // card.effect_multiplier()) * card.effect_multiplier()
+                assert card.casts() == (2 if card.chroma is G else 1)

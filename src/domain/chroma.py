@@ -3,9 +3,10 @@
 A chroma is data + rules looked up in ``CHROMA_DEFS``, so a new kind is one
 enum member and one ``ChromaDef``; nothing else has to learn about it:
 
-* ``effect_multiplier`` scales every effect of a card (damage, block, draw,
-  mana gained and how many times its ``on_play`` runs) and every numeric
-  effect of a relic (bonuses, heals, charges). Golden = x2.
+* ``effect_multiplier``: a card is **cast that many times** when played (its
+  printed stats stay normal; each cast is complete — damage with bonuses,
+  block, draw, mana, on_play, combo). Relics multiply their numeric effects
+  (bonuses, heals, charges). Packs let you keep that many cards. Golden = x2.
 * ``card_note`` / ``relic_note`` are the Spanish lines shown in tooltips.
 * ``card_drop_chance`` / ``relic_drop_chance`` / ``pack_drop_chance`` drive
   ``roll_chroma`` (overridable from the Pruebas screen, ``domain/tuning.py``).
@@ -51,7 +52,7 @@ CHROMA_DEFS: dict[Chroma, ChromaDef] = {
     Chroma.GOLDEN: ChromaDef(
         chroma=Chroma.GOLDEN,
         name="Dorada",
-        card_note="Dorada: por ser dorada, todos sus efectos son x2.",
+        card_note="Dorada: al jugarla se lanza 2 veces (su efecto completo x2).",
         relic_note="Dorada: por ser dorada, sus efectos son x2.",
         short_note="Dorada: efectos x2",
         pack_note="Dorado: eliges 2 cartas (x2).",

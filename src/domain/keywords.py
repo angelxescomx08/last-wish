@@ -42,19 +42,18 @@ def keyword_def(keyword: Keyword) -> KeywordDef:
 
 
 def combo_text(card: "Card") -> str:
-    """Spanish summary of a card's combo layers, scaled by its chroma: "+5 de daño, roba 1"."""
-    m = card.effect_multiplier()
+    """Spanish summary of a card's combo layers as printed: "+5 de daño, roba 1"."""
     parts: list[str] = []
     for fx in card.combo_effects():
-        dmg, blk = fx.damage.resolve() * m, fx.block.resolve() * m
+        dmg, blk = fx.damage.resolve(), fx.block.resolve()
         if dmg:
             parts.append(f"+{dmg} de daño")
         if blk:
             parts.append(f"+{blk} de escudo")
         if fx.draw:
-            parts.append(f"roba {fx.draw * m}")
+            parts.append(f"roba {fx.draw}")
         if fx.mana_gain:
-            parts.append(f"+{fx.mana_gain * m} de maná")
+            parts.append(f"+{fx.mana_gain} de maná")
         if fx.text:
-            parts.append(fx.text if m == 1 else f"{fx.text} (x{m})")
+            parts.append(fx.text)
     return ", ".join(parts) or "efecto extra"

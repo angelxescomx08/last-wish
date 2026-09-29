@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from src.application import relic_effects
@@ -15,6 +15,12 @@ class PlayResult:
     success: bool
     message: str = ""
     combo: bool = False     # a Combo layer resolved
+    casts: int = 1          # times the card resolved (golden: 2)
+    cast_hits: list[list[int]] = field(default_factory=list)   # per cast, HP lost by each enemy
+    # Snapshots after each cast, so the UI can replay the casts one by one:
+    cast_enemy_hp: list[list[int]] = field(default_factory=list)
+    cast_enemy_block: list[list[int]] = field(default_factory=list)
+    cast_player_block: list[int] = field(default_factory=list)
 
 
 class TargetKind(Enum):
@@ -53,8 +59,6 @@ def play_card(
 
     # Keyword COMBO: combo layers resolve if another card was played earlier this turn.
     combo = state.combo_active and bool(card.combo_effects())
-    dmg = card.total_damage(combo)
-    blk = card.total_block(combo)
 
     # A card needs a target if it deals base damage OR any effect declares it.
     needs_target = requires_target(card)
@@ -68,58 +72,61 @@ def play_card(
         if not state.enemies[target_enemy_index].is_alive:
             return PlayResult(False, "Ese enemigo ya está derrotado")
 
-    # Apply damage to target enemy (relic bonus + character attack_bonus)
-    if dmg > 0 and target_enemy_index is not None:
-        enemy = state.enemies[target_enemy_index]
-        effective_dmg = (
-            dmg
-            + relic_effects.extra_attack_damage(state.relics)
-            + state.player.attack_bonus
-        )
-        absorbed = min(enemy.block, effective_dmg)
-        enemy.block = max(0, enemy.block - absorbed)
-        enemy.current_hp = max(0, enemy.current_hp - (effective_dmg - absorbed))
-
-    # Apply block to player (character dexterity adds a flat bonus)
-    if blk > 0:
-        state.player.block += blk + state.player.dexterity
-
-    # Compute extra draws before mutating the hand
-    draw_count = card.total_draw(combo)     # chroma-scaled (golden x2)
-
-    # Spend mana, then apply any mana refund from the card
+    # Pay once, then move the card out of hand (powers stay on field; the rest is discarded).
     state.mana.spend(card.cost)
-    mana_gain = card.total_mana_gain(combo)
-    if mana_gain > 0:
-        state.mana.gain(mana_gain)
-
-    # Move card out of hand (powers stay on field; everything else goes to discard)
     played = state.hand.cards.pop(card_index)
     if played.card_type == CardType.POWER:
         state.active_powers.append(played)
     else:
         state.discard_pile.cards.append(played)
 
-    # Run custom on_play logic — state is fully updated at this point:
-    # card is out of hand, mana spent, base damage/block applied.
-    # targeted_enemy_index is set so callbacks can read it.
-    # A chroma multiplier repeats the special effects too (golden: twice).
-    state.targeted_enemy_index = target_enemy_index
-    for _ in range(card.effect_multiplier()):
-        for fx in card.active_effects(combo):
-            if fx.on_play is not None:
-                fx.on_play(state)
+    # A chroma casts the whole card several times (golden: twice), each cast complete.
+    casts = card.casts()
+    cast_hits: list[list[int]] = []
+    snap_hp: list[list[int]] = []
+    snap_blk: list[list[int]] = []
+    snap_player: list[int] = []
+    for _ in range(casts):
+        before = [e.current_hp for e in state.enemies]
+        _resolve_cast(state, card, combo, target_enemy_index)
+        cast_hits.append([b - e.current_hp for b, e in zip(before, state.enemies)])
+        snap_hp.append([e.current_hp for e in state.enemies])
+        snap_blk.append([e.block for e in state.enemies])
+        snap_player.append(state.player.block)
     if card.chroma is not None and chroma_def(card.chroma).on_card_played is not None:
         chroma_def(card.chroma).on_card_played(state, played)
-
-    # Draw bonus cards
-    for _ in range(draw_count):
-        _draw_one(state)
 
     state.selected_card_index = None
     state.targeted_enemy_index = None
     state.cards_played_this_turn += 1
-    return PlayResult(True, f"Jugaste {played.name}" + (" — ¡Combo!" if combo else ""), combo=combo)
+    message = f"Jugaste {played.name}" + (f" x{casts}" if casts > 1 else "") + (" — ¡Combo!" if combo else "")
+    return PlayResult(True, message, combo=combo, casts=casts, cast_hits=cast_hits,
+                      cast_enemy_hp=snap_hp, cast_enemy_block=snap_blk, cast_player_block=snap_player)
+
+
+def _resolve_cast(state: CombatState, card: Card, combo: bool, target: int | None) -> None:
+    """One full cast: damage (+ bonuses), block (+ dexterity), mana, on_play effects, draws."""
+    dmg = card.total_damage(combo)
+    blk = card.total_block(combo)
+    if dmg > 0 and target is not None and target < len(state.enemies) and state.enemies[target].is_alive:
+        enemy = state.enemies[target]
+        effective_dmg = dmg + relic_effects.extra_attack_damage(state.relics) + state.player.attack_bonus
+        absorbed = min(enemy.block, effective_dmg)
+        enemy.block = max(0, enemy.block - absorbed)
+        enemy.current_hp = max(0, enemy.current_hp - (effective_dmg - absorbed))
+    if blk > 0:
+        state.player.block += blk + state.player.dexterity
+    mana_gain = card.total_mana_gain(combo)
+    if mana_gain > 0:
+        state.mana.gain(mana_gain)
+    # on_play runs with the card out of hand and this cast's damage/block applied;
+    # targeted_enemy_index is set so callbacks can read it.
+    state.targeted_enemy_index = target
+    for fx in card.active_effects(combo):
+        if fx.on_play is not None:
+            fx.on_play(state)
+    for _ in range(card.total_draw(combo)):
+        _draw_one(state)
 
 
 # ---------------------------------------------------------------------------

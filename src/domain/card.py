@@ -141,26 +141,33 @@ class Card:
         return frozenset({Keyword.COMBO}) if self.combo_effects() else frozenset()
 
     def effect_multiplier(self) -> int:
-        """Chroma scaling of every effect (1 = normal, golden = 2)."""
+        """Chroma multiplier (1 = normal, golden = 2)."""
         return effect_multiplier(self.chroma)
+
+    def casts(self) -> int:
+        """How many times the card resolves when played (golden: cast twice).
+
+        Stats stay as printed; the chroma repeats the whole card instead.
+        """
+        return self.effect_multiplier()
 
     def total_damage(self, combo: bool = False) -> int:
         total = BigValue(0)
         for fx in self.active_effects(combo):
             total = total.add_flat(fx.damage.resolve())
-        return total.resolve() * self.effect_multiplier()
+        return total.resolve()
 
     def total_block(self, combo: bool = False) -> int:
         total = BigValue(0)
         for fx in self.active_effects(combo):
             total = total.add_flat(fx.block.resolve())
-        return total.resolve() * self.effect_multiplier()
+        return total.resolve()
 
     def total_draw(self, combo: bool = False) -> int:
-        return sum(fx.draw for fx in self.active_effects(combo)) * self.effect_multiplier()
+        return sum(fx.draw for fx in self.active_effects(combo))
 
     def total_mana_gain(self, combo: bool = False) -> int:
-        return sum(fx.mana_gain for fx in self.active_effects(combo)) * self.effect_multiplier()
+        return sum(fx.mana_gain for fx in self.active_effects(combo))
 
     def effect_count(self) -> int:
         return len(self.stacked_effects)

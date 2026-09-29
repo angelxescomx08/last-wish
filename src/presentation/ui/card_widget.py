@@ -238,8 +238,9 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     text_rect = _rect(z["text"], w, h)
     if card.chroma is not None:   # chroma name plate at the foot of the text panel, e.g. "DORADA"
         st = chroma_fx.style(card.chroma)
-        plate = _outlined(fonts.get(max(7, round(h * 0.048))), chroma_def(card.chroma).name.upper(),
-                          st.bright, outline=st.dark)
+        casts = card.casts()
+        label = chroma_def(card.chroma).name.upper() + (f"  x{casts}" if casts > 1 else "")
+        plate = _outlined(fonts.get(max(7, round(h * 0.048))), label, st.bright, outline=st.dark)
         surf.blit(plate, plate.get_rect(centerx=text_rect.centerx, bottom=text_rect.bottom))
         text_rect = pygame.Rect(text_rect.x, text_rect.y, text_rect.w, max(1, text_rect.h - plate.get_height()))
     lines = _ability_lines(card, damage, block, combo)

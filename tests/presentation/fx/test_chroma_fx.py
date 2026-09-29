@@ -79,11 +79,11 @@ class TestGoldenCardsAndRelicsOnScreen:
         assert normal is not golden
         assert golden.get_size() == (CARD_W, CARD_H)
 
-    def test_golden_card_shows_doubled_damage_in_tooltip(self):
+    def test_golden_card_keeps_stats_and_explains_double_cast(self):
         tip = card_tooltip(_card(G))
         text = "\n".join(tip.lines)
         assert tip.title == "Golpe · Dorada"
-        assert "12" in text and "x2" in text
+        assert "Inflige 6" in text and "2 veces" in text
 
     def test_draw_card_and_draw_card_at_with_tilt(self):
         fonts = FontRegistry()
