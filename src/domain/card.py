@@ -16,6 +16,18 @@ class CardType(Enum):
     POWER = auto()
 
 
+class CardClass(Enum):
+    """Who may find a card. Values match ``CharacterId`` values.
+
+    NEUTRAL cards are available to every class; the others only to their own
+    class, unless a relic mixes class pools (see ``relic_effects``).
+    """
+    NEUTRAL = "neutral"
+    WARRIOR = "warrior"
+    MAGE    = "mage"
+    ROGUE   = "rogue"
+
+
 class CardRarity(Enum):
     COMMON    = 1   # Común     — starter / basic pool
     UNCOMMON  = 2   # Poco Común — low-cost pack cards
@@ -93,6 +105,7 @@ class Card:
     modifiers: list[CardModifier] = field(default_factory=list)
     is_broken: bool = False
     is_upgraded: bool = False
+    card_class: CardClass = CardClass.NEUTRAL
 
     def __post_init__(self) -> None:
         if self.rarity is None:

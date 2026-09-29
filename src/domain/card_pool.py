@@ -1,4 +1,14 @@
-"""Card pool definitions organised by pack theme.
+"""Card pool definitions organised by pack theme and by class.
+
+Two independent axes:
+  * **theme** (``PackTheme``) — which pack a card comes in (acero, escudo, magia, epico);
+  * **class** (``CardClass``) — who may find it: NEUTRAL cards are for every
+    class, WARRIOR / MAGE / ROGUE cards only for that class. Relics can mix
+    class pools (``Relic.card_classes``); see ``card_rewards.allowed_card_classes``.
+
+A card's class is set in ``CARD_CLASS_BY_ID`` (edit that table to rebalance).
+Each theme keeps at least ``PACK_SIZE`` cards available to every single class
+(neutral + own), so a pack never comes up short.
 
 Every public function returns *new* Card instances — callers must not cache the
 results across multiple uses, as cards are mutable (stacked_effects, modifiers).
@@ -7,9 +17,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
+from typing import Callable, Iterable
 
-from src.domain.card import Card, CardEffect, CardRarity, CardType
+from src.domain.card import Card, CardClass, CardEffect, CardRarity, CardType
 from src.domain.entities import StatusEffect
 from src.domain.numbers import BigValue
 
@@ -334,20 +344,100 @@ def _on_tormenta_veneno(state) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Classes
 # ---------------------------------------------------------------------------
 
-_POOL: dict[PackTheme, list[Callable[[], Card]]] = {
-    PackTheme.ACERO:  _ACERO,
-    PackTheme.ESCUDO: _ESCUDO,
-    PackTheme.MAGIA:  _MAGIA,
-    PackTheme.EPICO:  _EPICO,
+PACK_SIZE: int = 5
+
+CARD_CLASS_LABEL: dict[CardClass, str] = {
+    CardClass.NEUTRAL: "Neutral",
+    CardClass.WARRIOR: "La Guerrera",
+    CardClass.MAGE:    "El Mago",
+    CardClass.ROGUE:   "La Pícara",
+}
+
+_N, _W, _M, _R = CardClass.NEUTRAL, CardClass.WARRIOR, CardClass.MAGE, CardClass.ROGUE
+
+# Class of every pool card, by card id. Cards missing here are NEUTRAL
+# (the starter deck is neutral too). Per theme: neutral + each class >= PACK_SIZE.
+CARD_CLASS_BY_ID: dict[str, CardClass] = {
+    # Acero — neutral: basic blows
+    "a_punio": _N, "a_patada": _N, "a_golpe_ferreo": _N,
+    "a_golpe_pesado": _W, "a_gran_golpe": _W, "a_golpe_total": _W,
+    "a_furia": _M, "a_arremetida": _M, "a_embestida": _M,
+    "a_tajo": _R, "a_corte_rapido": _R, "a_instinto": _R,
+    # Escudo
+    "e_parada": _N, "e_guardia_solida": _N, "e_escudo_solido": _N, "e_fortaleza": _N,
+    "e_baluarte": _W, "e_gran_muralla": _W, "e_torre": _W, "e_retribucion": _W,
+    "e_muro_de_mana": _M, "e_capa_hierro": _M,
+    "e_agilidad": _R, "e_escudo_reactivo": _R,
+    # Magia
+    "m_vision": _N, "m_impulso": _N, "m_absorcion": _N,
+    "m_grito_de_guerra": _W, "m_conjuro": _W,
+    "m_chispa": _M, "m_rayo": _M, "m_hechizo_menor": _M, "m_concentracion": _M,
+    "m_barrera_magica": _M, "m_vision_del_caos": _M,
+    "m_veneno": _R, "m_torbellino": _R,
+    # Épico
+    "ep_poder_oculto": _N, "ep_golpe_mortal": _N,
+    "ep_escudo_impenet": _W, "ep_bastion": _W, "ep_ejecucion": _W,
+    "ep_tormenta": _M, "ep_descarga": _M, "ep_escudo_arcano": _M,
+    "ep_lluvia_de_golpes": _R, "ep_tormenta_veneno": _R, "ep_mazo_impecable": _R,
 }
 
 
-def card_factories_for_theme(theme: PackTheme) -> list[Callable[[], Card]]:
-    """Return all card factories for a given theme."""
-    return list(_POOL[theme])
+@dataclass(frozen=True)
+class CardFactory:
+    """Callable that builds a fresh card and stamps its class and theme."""
+    card_id: str
+    card_class: CardClass
+    theme: PackTheme
+    build: Callable[[], Card]
+
+    def __call__(self) -> Card:
+        card = self.build()
+        card.card_class = self.card_class
+        return card
+
+
+def class_for_character(character_id) -> CardClass:
+    """CardClass owned by a ``CharacterId`` (their values match)."""
+    return CardClass(character_id.value)
+
+
+def _factories(theme: PackTheme, raw: list[Callable[[], Card]]) -> list[CardFactory]:
+    out = []
+    for build in raw:
+        card_id = build().id
+        out.append(CardFactory(card_id, CARD_CLASS_BY_ID.get(card_id, CardClass.NEUTRAL), theme, build))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+_POOL: dict[PackTheme, list[CardFactory]] = {
+    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO),
+    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO),
+    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA),
+    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO),
+}
+
+
+def card_factories_for_theme(theme: PackTheme,
+                             classes: Iterable[CardClass] | None = None) -> list[CardFactory]:
+    """Card factories of a theme; with ``classes``, only cards of those classes."""
+    pool = _POOL[theme]
+    if classes is None:
+        return list(pool)
+    allowed = frozenset(classes)
+    return [f for f in pool if f.card_class in allowed]
+
+
+def card_factories_for_classes(classes: Iterable[CardClass]) -> list[CardFactory]:
+    """Every card factory (all themes) whose class is in ``classes``."""
+    allowed = frozenset(classes)
+    return [f for theme in PackTheme for f in _POOL[theme] if f.card_class in allowed]
 
 
 def pack_def_for_theme(theme: PackTheme) -> PackDef:

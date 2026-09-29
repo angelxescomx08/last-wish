@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import pygame
 
 from src.domain.card import Card, CardType, ModifierTag
+from src.domain.card_pool import CARD_CLASS_LABEL
 from src.domain.entities import Enemy, IntentType, Player
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
@@ -57,6 +58,7 @@ def card_tooltip(
     title = card.name + (" (Rota)" if card.is_broken else "")
     lines: list[str] = [
         f"{_CARD_TYPE_NAME[card.card_type]}  ·  Coste: {card.cost} maná",
+        f"Clase: {CARD_CLASS_LABEL[card.card_class]}",
         "",
     ]
 

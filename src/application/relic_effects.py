@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.domain.card import CardClass
 from src.domain.combat import CombatState
 from src.domain.relic import Relic, RelicTag
 
@@ -34,6 +35,15 @@ def post_combat_heal(relics: list[Relic]) -> int:
 def max_hp_bonus(relics: list[Relic]) -> int:
     """Permanent max-HP increase from relics (Corazón de Hierro: +15 each)."""
     return sum(15 for r in relics if r.is_active and r.tag == RelicTag.IRON_HEART)
+
+
+def unlocked_card_classes(relics: list[Relic]) -> frozenset[CardClass]:
+    """Class card pools added by relics (e.g. a relic that mixes the Mage pool into any run)."""
+    out: set[CardClass] = set()
+    for r in relics:
+        if r.is_active:
+            out |= r.card_classes
+    return frozenset(out)
 
 
 def try_spectral_shield(state: CombatState) -> bool:

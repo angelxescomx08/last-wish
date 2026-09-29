@@ -118,7 +118,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `map_node.py` | `MapNode`, `RoomType` | Single node on the run map: id, room_type, row, col, connections, visited, available |
 | `game_map.py` | `GameMap` | Floor map: nodes dict, boss_id, rows, cols; `available_nodes()`, `mark_visited()` |
 | `run.py` | `Run` | Persistent state across rooms: character, seed, floor, gold, hp, deck, relics, map; `add_card`, `add_relic`, `apply_combat_result` |
-| `card_pool.py` | `PackTheme`, `PackDef`, `ALL_PACKS`, `starter_deck`, `card_factories_for_theme` | 4 card packs (ACERO/ESCUDO/MAGIA/EPICO), pack definitions with gold costs, starter 10-card deck |
+| `card_pool.py` | `PackTheme`, `PackDef`, `ALL_PACKS`, `starter_deck`, `CARD_CLASS_BY_ID`, `CARD_CLASS_LABEL`, `CardFactory`, `card_factories_for_theme(theme, classes=None)`, `card_factories_for_classes(classes)`, `class_for_character(id)`, `PACK_SIZE` | 4 card packs (ACERO/ESCUDO/MAGIA/EPICO), pack definitions with gold costs, neutral starter 10-card deck; every pool card has a class (see *Card classes*) |
 
 ### Application layer — `src/application/`
 
@@ -131,7 +131,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
 | `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory`, `generate_event_gold`, `pick_treasure_relic`, `pick_boss_relics`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
-| `card_rewards.py` | `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]` | Seeded card reward selection after combat and pack opening |
+| `card_rewards.py` | `allowed_card_classes(run)`; `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]` | Seeded card reward selection after combat and pack opening, filtered to the run's allowed classes (packs topped up from other themes if ever short) |
 
 ### Infrastructure layer — `src/infrastructure/`
 
@@ -384,6 +384,19 @@ Four pack themes are available in the shop. Each pack shows 5 cards; the player 
 
 `starter_deck()` returns the initial 10-card deck used when creating a new run.
 `card_factories_for_theme(theme)` returns a list of zero-argument callables that produce the cards belonging to that theme — used by `pick_pack_cards()`.
+
+### Card classes (`CardClass` in `src/domain/card.py`)
+
+Every card has `card_class`: `NEUTRAL` (all classes), `WARRIOR`, `MAGE` or `ROGUE`
+(values match `CharacterId`). Class and pack theme are independent axes. The
+class of each pool card is set in `CARD_CLASS_BY_ID` (`card_pool.py`); unmapped
+cards and the starter deck are neutral. Rule kept by tests: in every theme,
+neutral + any single class ≥ `PACK_SIZE` (5).
+
+A run finds only `allowed_card_classes(run)` = neutral + its own class + the
+classes of its active relics' `Relic.card_classes` (`relic_effects.unlocked_card_classes`).
+A pool-mixing relic is just a `Relic(..., card_classes=frozenset({CardClass.MAGE}))`
+(or all three classes). The card tooltip shows "Clase: …".
 
 ---
 
