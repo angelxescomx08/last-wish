@@ -21,6 +21,8 @@ CARDS_DIR = Path(__file__).parent.parent.parent / "assets" / "cards-v2"
 LAYOUT_PATH = CARDS_DIR / "layout.json"
 ART_DIR = CARDS_DIR / "art"
 _DCSS = Path(__file__).parent.parent.parent / "assets" / "dungeon-crawl-stone-soup-full"
+CARD_BACK_PATH = (Path(__file__).parent.parent.parent / "assets" / "Card Sprites" / "Card Back"
+                  / "crystal (1).png")
 
 # Provisional illustrations by card type until real art exists in ART_DIR
 PLACEHOLDER_ART: dict[str, str] = {
@@ -57,6 +59,15 @@ def card_frame(rarity: str, w: int, h: int) -> pygame.Surface | None:
     if src is None:
         return None
     return pygame.transform.smoothscale(src, (w, h))
+
+
+@lru_cache(maxsize=8)
+def card_back(w: int, h: int) -> pygame.Surface | None:
+    """Face-down card (crystal back, same aspect as the frames) scaled to (w, h)."""
+    src = _load(CARD_BACK_PATH)
+    if src is None:
+        return None
+    return pygame.transform.smoothscale(src, (max(1, w), max(1, h)))
 
 
 @lru_cache(maxsize=16)

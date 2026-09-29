@@ -48,6 +48,24 @@ Illustrations are provisional Dungeon Crawl icons by type until real art is
 placed in `assets/cards-v2/art/<card id>.png` (any size, cropped to cover the
 window). Effect text is generated from card data with effective values.
 
+## Pack opening animation
+
+`PackOpeningScene` animates the existing art only — no new images: the closed
+pack painting (`pack_art`) and the crystal card back (`card_back`). Code adds
+light and particles (`fx/bursts.py` for one-shot bursts, `fx/particles.py`
+for background motes). Each pack theme has a colour set (`THEMES`: acero red,
+escudo green, magia blue, epico purple with gold accents); each rarity has a
+palette (`RARITY_PALETTE`). Beats: drop-in → float with pulsing glow and hint →
+click → charge (shake grows, sparks implode, pack whitens) → tear (white flash,
+screen shake, the top strip is cut along a jagged line with a light seam and
+spins away, the body falls and fades, explosion + rotating light rays) → deal
+(cards arc out of the pack, scaling up and straightening) → reveal (flip by
+horizontal squash, rare+ wait with a growing halo and inward sparks; burst size
+grows with rarity, legendary adds gold confetti, flash and shake) → pick (rare+
+halos and rising sparkles) → outro (chosen card rises to the centre). Any click
+or Space/Enter skips to the pick screen. Tune timings with the constants at the
+top of the module.
+
 ## Playing cards — Slay the Spire style hand and targeting arrow
 
 User found card play "raro" and asked for the Slay the Spire arrow. Behaviour

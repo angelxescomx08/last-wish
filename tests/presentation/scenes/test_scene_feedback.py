@@ -106,9 +106,16 @@ def test_pack_reveal_is_once_and_card_choice_is_once():
     scene = _draw(PackOpeningScene(_run().deck[:5], 'Sobre', FontRegistry(), sound=sound))
     for _ in range(100):
         scene.update(1 / 60)
+    assert 'play_open_pack' not in sound.calls      # waits for the player to open it
+    _click(scene, (640, 360))
+    for _ in range(600):
+        scene.update(1 / 60)
+    assert sound.calls.count('play_open_pack') == 1
+    _draw(scene)
+    sound.calls.clear()
     for _ in range(2):
         _click(scene, scene._card_rects[0].center)
-    assert sound.calls == ['play_open_pack', 'play_reward']
+    assert sound.calls == ['play_reward']
 
 
 @pytest.mark.parametrize('factory,rect', [

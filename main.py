@@ -315,7 +315,8 @@ class SceneManager:
             cards            = pick_pack_cards(run, theme)
             from src.domain.card_pool import pack_def_for_theme
             pack_name        = pack_def_for_theme(theme).name
-            self.push(PackOpeningScene(cards, pack_name, self._fonts, sound=self._sound))
+            self.push(PackOpeningScene(cards, pack_name, self._fonts, sound=self._sound,
+                                       theme=theme.value, seed=run.floor))
 
         elif scene.cleared:
             scene.cleared = False
@@ -349,7 +350,8 @@ class SceneManager:
             cards  = pick_pack_cards(run, PackTheme.EPICO)
             from src.domain.card_pool import pack_def_for_theme
             name   = pack_def_for_theme(PackTheme.EPICO).name
-            self.push(PackOpeningScene(cards, name, self._fonts, sound=self._sound))
+            self.push(PackOpeningScene(cards, name, self._fonts, sound=self._sound,
+                                       theme=PackTheme.EPICO.value, seed=run.floor))
 
         elif scene.cleared:
             scene.cleared = False

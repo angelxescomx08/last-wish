@@ -142,7 +142,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
-| `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
+| `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
@@ -158,7 +158,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/combat_reward_scene.py` | Gold display + 3 card choices after a non-boss combat. Signals `cleared: bool`, `chosen_card: Card \| None` |
 | `scenes/treasure_scene.py` | Show a relic, take or skip. Signals `cleared: bool`, `took_relic: bool` |
 | `scenes/shop_scene.py` | 4 pack tiles with gold cost. Signals `selected_pack: PackTheme \| None`, `cleared: bool` |
-| `scenes/pack_opening_scene.py` | 5-card pick-1 overlay. Signals `cleared: bool`, `chosen_card: Card \| None` |
+| `scenes/pack_opening_scene.py` | Animated opening (intro → idle float → click → charge with imploding sparks → tear: flash, shake, top strip flies off, particle explosion, light rays → cards dealt face-down → flipped one by one with rarity bursts; rare+ get an anticipation glow, legendary gold confetti) then 5-card pick-1 with rarity halos/sparkles and an outro for the chosen card. Any click/Space skips the animation. Ctor kwargs `theme` (PackTheme value, picks pack art + colours) and `seed`. `phase`, `is_animating`, `skip_animation()`, `choose(i)`. Signals `cleared: bool` (after the outro), `chosen_card: Card \| None` |
 | `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)`, `draw_card_at(surface, card, center, fonts, *, scale, angle, …, outline)` (free placement: scale quantised to 5 %, tilt rotated once and cached) and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 256) |
@@ -167,6 +167,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
+| `fx/bursts.py` | `BurstParticles` — pooled one-shot particles in screen px, each with its own palette/size/drag/gravity and style (`SQUARE`, `SPARK` streak, `GLOW` additive): `emit`, `burst` (radial), `implode` (ring → centre), `update`, `draw`; `soft_glow(color, radius)` cached additive light, `scaled(color, k)` |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
 | `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc.; `draw_tooltip(…, beside=rect)` places it next to a hovered card |
@@ -459,6 +460,8 @@ One test file per source module. All test files follow the same structure:
 | `test_preferences.py` | `infrastructure/preferences.py` | defaults, load (present/missing/invalid JSON), save, round-trip, unknown keys ignored |
 | `test_sprite_loader.py` | `infrastructure/sprite_loader.py` | mapping completeness, all asset files exist on disk, unknown-name → None, cache empty on unknown |
 | `presentation/fx/test_particles.py` | `fx/particles.py` | spawn rate, capacity, budget, lifetime, dt clamp (10^9), 10 000-step stress, gravity, landing bursts, determinism, clip, trails |
+| `presentation/fx/test_bursts.py` | `fx/bursts.py` | emit/burst/implode shapes, lifetime, gravity, drag, dt clamp, swap-remove, 10 000-step stress, drawing of each style, glow cache |
+| `presentation/scenes/test_pack_opening_scene.py` | `scenes/pack_opening_scene.py` | phase order, open by click/Space, rare anticipation timing, skip at any moment, outro then cleared, single choice, every theme draws every phase, empty pack, 10 000 random updates |
 | `presentation/fx/test_sprite_animation.py` | `fx/sprite_animation.py` | frame timing, looping, hold, offsets, invalid input |
 | `infrastructure/test_dungeon_assets.py` | `infrastructure/dungeon_assets.py` | files exist, metadata anchors/palettes, pre-scaling, single load |
 | `presentation/ui/test_dungeon_backdrop.py` | `ui/dungeon_backdrop.py` | room drawn, torches animate, budget 0, fallback, cost bound, combat integration |
