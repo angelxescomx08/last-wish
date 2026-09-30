@@ -83,3 +83,34 @@ def test_values_render():
     scene = _scene()
     texts = [scene.value_text(r) for r in scene._rows]
     assert "5 %" in texts and "x1" in texts and "No" in texts
+
+
+def test_hero_stats_section_in_right_column():
+    scene = _scene()
+    for label in ("Suerte extra", "Daño extra", "Destreza extra"):
+        i = _index(scene, label)
+        assert scene._rows[i].column == 1
+        assert scene._row_rects[i].left > 640
+    assert all(r.bottom <= 680 for r in scene._row_rects)
+
+
+def test_luck_row_changes_tuning_and_shift_steps_ten():
+    scene = _scene()
+    scene._selected = _index(scene, "Suerte extra")
+    _key(scene, pygame.K_RIGHT)
+    assert TUNING.extra_luck == 1
+    scene.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT, mod=pygame.KMOD_SHIFT))
+    assert TUNING.extra_luck == 11
+    for _ in range(30):
+        scene.adjust(scene._selected, 10)
+    assert TUNING.extra_luck == 200
+
+
+def test_luck_preview_reflects_extra_luck():
+    from src.presentation.scenes.dev_settings_scene import luck_preview_lines
+    before = luck_preview_lines()
+    TUNING.extra_luck = 50
+    after = luck_preview_lines()
+    assert len(after) == 6 and before != after
+    assert any("suerte 58" in line for line in after)   # La Pícara: 8 + 50
+

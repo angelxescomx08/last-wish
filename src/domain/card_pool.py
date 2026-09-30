@@ -429,6 +429,20 @@ class CardFactory:
         card.card_class = self.card_class
         return card
 
+    @property
+    def rarity(self) -> CardRarity:
+        """Tier of the card this factory builds (used for luck-weighted picks)."""
+        return _factory_rarity(self.build)
+
+
+_RARITY_CACHE: dict[Callable[[], Card], CardRarity] = {}
+
+
+def _factory_rarity(build: Callable[[], Card]) -> CardRarity:
+    if build not in _RARITY_CACHE:
+        _RARITY_CACHE[build] = build().rarity or CardRarity.COMMON
+    return _RARITY_CACHE[build]
+
 
 def class_for_character(character_id) -> CardClass:
     """CardClass owned by a ``CharacterId`` (their values match)."""

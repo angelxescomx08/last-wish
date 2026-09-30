@@ -16,6 +16,7 @@ from src.domain.numbers import BigValue
 from src.domain.pile import DiscardPile, DrawPile, Hand
 from src.domain.relic import Relic
 from src.domain.run import Run
+from src.domain.tuning import TUNING, hero_luck
 
 
 # ---------------------------------------------------------------------------
@@ -53,9 +54,9 @@ def create_combat_for_character(character: Character) -> CombatState:
         name=character.name,
         max_hp=character.stats.max_hp,
         current_hp=character.stats.max_hp,
-        dexterity=character.stats.dexterity,
-        attack_bonus=character.stats.damage,
-        luck=character.stats.luck,
+        dexterity=character.stats.dexterity + TUNING.extra_dexterity,
+        attack_bonus=character.stats.damage + TUNING.extra_damage,
+        luck=hero_luck(character.stats.luck),
     )
 
     mana = Mana(
@@ -130,9 +131,9 @@ def create_combat_from_run(run: Run, enemies: list[Enemy]) -> CombatState:
         name=run.character.name,
         max_hp=base_max_hp,
         current_hp=min(run.player_current_hp, base_max_hp),
-        dexterity=run.character.stats.dexterity,
-        attack_bonus=run.character.stats.damage,
-        luck=run.character.stats.luck,
+        dexterity=run.character.stats.dexterity + TUNING.extra_dexterity,
+        attack_bonus=run.character.stats.damage + TUNING.extra_damage,
+        luck=hero_luck(run.character.stats.luck),
     )
 
     mana = Mana(

@@ -7,7 +7,7 @@ from src.domain.character import ALL_CHARACTERS
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.preferences import UserPreferences
 from src.presentation.scenes.main_menu_scene import MainMenuScene
-from src.presentation.ui.pause_menu import PAUSE_BUTTON
+from src.presentation.ui.pause_menu import PAUSE_BUTTON, pause_button_rect
 
 
 def setup_run():
@@ -83,7 +83,8 @@ def test_escape_cancels_card_before_pausing_and_pause_button_releases_drag():
     key(manager, pygame.K_ESCAPE)
     scene._play.cancel.assert_called_once()
     assert manager._pause is None
-    manager.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=PAUSE_BUTTON.center))
+    manager.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                            pos=pause_button_rect(scene).center))   # combat's own button
     assert manager._pause is not None
     assert scene._play.cancel.call_count == 2
 

@@ -56,10 +56,13 @@ class TestComposites:
         assert body.get_at((10, 10)) == (50, 50, 50, 255)  # original untouched
 
     def test_halo_adds_warm_light(self):
+        # The halo hugs the silhouette: bright warm rim around the edge, dark inside.
         surf = pygame.Surface((200, 200))
         chroma_fx.draw_halo(surf, (100, 100), (80, 100), G, 0.0)
-        r, g, b = surf.get_at((100, 100))[:3]
+        column = [surf.get_at((100, y))[:3] for y in range(30, 70)]   # crosses the top edge (y=50)
+        r, g, b = max(column, key=sum)
         assert r > 0 and r >= g > b
+        assert surf.get_at((100, 100))[:3] == (0, 0, 0)
 
     @pytest.mark.parametrize("size", [(48, 48), (400, 220), (8, 8), (1, 1)])
     def test_box_draws_gold_border(self, size):

@@ -5,6 +5,9 @@ pools unlocked by relics (``Relic.card_classes``) — see ``allowed_card_classes
 
 pick_reward_cards  — 3 random cards offered after combat (all themes).
 pick_pack_cards    — 5 random cards from a theme's pool (for pack opening).
+
+Both pick a rarity tier first (weights in ``domain/rarity.py``, bent by luck),
+then a card of that tier, so higher tiers get likelier with more luck.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ import random
 from src.application import relic_effects
 from src.domain.card import Card, CardClass
 from src.domain.chroma import roll_chroma
+from src.domain.rarity import weighted_sample
 from src.domain.card_pool import (
     PackTheme,
     card_factories_for_classes,
@@ -20,7 +24,7 @@ from src.domain.card_pool import (
     class_for_character,
 )
 from src.domain.run import Run
-from src.domain.tuning import TUNING
+from src.domain.tuning import TUNING, hero_luck
 
 _REWARD_PRIME: int = 3_141_592_653
 _CHROMA_SALT: int = 0x5EED_C0DE
@@ -39,6 +43,15 @@ def _with_chromas(cards: list[Card], seed: int, luck: int = 0) -> list[Card]:
     return cards
 
 
+def _luck(run: Run) -> int:
+    return hero_luck(run.character.stats.luck)
+
+
+def _pick(pool, count: int, rng: random.Random, luck: int):
+    """Distinct card factories, tier first (luck-weighted, ``rarity.weighted_sample``)."""
+    return weighted_sample(pool, count, rng, rarity_of=lambda f: f.rarity, luck=luck)
+
+
 def allowed_card_classes(run: Run) -> frozenset[CardClass]:
     """Neutral + the run's class + every class pool mixed in by its relics (or all, from Pruebas)."""
     if TUNING.all_class_cards:
@@ -52,8 +65,8 @@ def pick_reward_cards(run: Run, room_id: str, count: int = 3) -> list[Card]:
     seed = _reward_seed(run, room_id)
     rng = random.Random(seed)
     pool = card_factories_for_classes(allowed_card_classes(run))
-    chosen = rng.sample(pool, min(count, len(pool)))
-    return _with_chromas([factory() for factory in chosen], seed, run.character.stats.luck)
+    chosen = _pick(pool, count, rng, _luck(run))
+    return _with_chromas([factory() for factory in chosen], seed, _luck(run))
 
 
 def pick_pack_cards(run: Run, theme: PackTheme, count: int = 5) -> list[Card]:
@@ -66,8 +79,8 @@ def pick_pack_cards(run: Run, theme: PackTheme, count: int = 5) -> list[Card]:
     rng     = random.Random(seed)
     allowed = allowed_card_classes(run)
     pool    = card_factories_for_theme(theme, allowed)
-    chosen  = rng.sample(pool, min(count, len(pool)))
+    chosen  = _pick(pool, count, rng, _luck(run))
     if len(chosen) < count:
         extra = [f for f in card_factories_for_classes(allowed) if f.theme is not theme]
-        chosen += rng.sample(extra, min(count - len(chosen), len(extra)))
-    return _with_chromas([factory() for factory in chosen], seed, run.character.stats.luck)
+        chosen += _pick(extra, count - len(chosen), rng, _luck(run))
+    return _with_chromas([factory() for factory in chosen], seed, _luck(run))

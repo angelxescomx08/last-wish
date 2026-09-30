@@ -50,6 +50,20 @@ uv sync
 uv run main.py
 ```
 
+## Running the tests
+
+```bash
+# Full test suite
+uv run pytest tests/
+
+# Verbose output
+uv run pytest tests/ -v
+
+# A single file or test
+uv run pytest tests/domain/test_rarity.py
+uv run pytest tests/domain/test_rarity.py::TestTiers::test_five_tiers
+```
+
 ## License
 
 This game is proprietary software. It is **not** open source.  

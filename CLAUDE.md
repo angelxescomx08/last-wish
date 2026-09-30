@@ -632,6 +632,14 @@ Luck = `run.character.stats.luck` (Guerrera 2, Mago 5, Pícara 8). It no longer 
   base 50/28/14/6/2. Common never changes; each higher tier grows faster.
 - **Chroma odds**: `roll_chroma(..., luck=)` multiplies every drop chance (cards, relics,
   packs) by `1 + 0.10 × luck`, capped at 100 %. Pruebas overrides are multiplied too.
-- Card reward/pack card selection is unchanged (uniform over the allowed pool).
+- **Card tiers**: card rewards and packs also use `weighted_sample` (tier first, then a card
+  of that tier), with the same weights. `CardFactory.rarity` exposes each factory's tier (cached).
+- **Pruebas**: `Tuning.extra_luck`, `extra_damage`, `extra_dexterity` (+ the old `extra_max_hp`,
+  `extra_mana`, `extra_draw`) form the "Stats del héroe" column of the Pruebas screen, with a live
+  preview of each hero's odds. Luck everywhere = `tuning.hero_luck(character luck)`
+  (`run_manager.run_luck(run)` for runs). Shift multiplies a step by 10.
+- There is **no cap** on luck. Golden chances hit 100 % at luck 115 (relics), 157 (packs) and
+  190 (cards). Tier odds tend to Común 0 % / Poco común 34 % / Rara 34 % / Épica 22 % /
+  Legendaria 9.8 % as luck grows.
 - UI: relic tooltip shows `Rareza: …`; HUD relic border uses the card rarity colour
   (`card_widget.RARITY_COLOR`); player tooltip shows luck.

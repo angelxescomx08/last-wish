@@ -29,6 +29,9 @@ class Tuning:
     extra_mana: int = 0               # added to max mana at combat start
     extra_draw: int = 0               # extra cards drawn each turn
     extra_max_hp: int = 0
+    extra_luck: int = 0               # hero stats (Pruebas "Stats del héroe")
+    extra_damage: int = 0
+    extra_dexterity: int = 0
 
     def reset(self) -> None:
         default = Tuning()
@@ -37,6 +40,11 @@ class Tuning:
 
 
 TUNING = Tuning()
+
+
+def hero_luck(base_luck: int) -> int:
+    """Character luck plus the Pruebas bonus (never negative)."""
+    return max(0, base_luck + TUNING.extra_luck)
 
 
 def chroma_key(chroma: Chroma, kind: str) -> str:

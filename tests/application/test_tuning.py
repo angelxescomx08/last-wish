@@ -131,3 +131,30 @@ class TestPersistence:
                                                         "gold_multiplier", "extra_max_hp", "invincible")}, t)
             assert 0 <= t.extra_draw <= 20 and 0 <= t.extra_mana <= 20
             assert 0 <= t.starting_gold <= 1_000_000 and 0 <= t.gold_multiplier <= 100
+
+
+class TestHeroStatBonuses:
+    def test_defaults_zero(self):
+        t = Tuning()
+        assert (t.extra_luck, t.extra_damage, t.extra_dexterity) == (0, 0, 0)
+
+    def test_damage_and_dexterity_reach_the_player(self):
+        from src.application.combat_factory import create_combat_for_character, create_combat_from_run
+        c = ALL_CHARACTERS[0]
+        TUNING.extra_damage, TUNING.extra_dexterity = 5, 3
+        for state in (create_combat_for_character(c), create_combat_from_run(create_run(c, 1), [])):
+            assert state.player.attack_bonus == c.stats.damage + 5
+            assert state.player.dexterity == c.stats.dexterity + 3
+
+    def test_reset_clears_stats(self):
+        TUNING.extra_luck = TUNING.extra_damage = TUNING.extra_dexterity = 9
+        TUNING.reset()
+        assert (TUNING.extra_luck, TUNING.extra_damage, TUNING.extra_dexterity) == (0, 0, 0)
+
+    def test_persist_and_clamp(self):
+        t = Tuning()
+        apply_dict({"extra_luck": 20, "extra_damage": 4, "extra_dexterity": 2}, t)
+        assert (t.extra_luck, t.extra_damage, t.extra_dexterity) == (20, 4, 2)
+        apply_dict({"extra_luck": -3, "extra_damage": "x", "extra_dexterity": 10**9}, t)
+        assert (t.extra_luck, t.extra_damage, t.extra_dexterity) == (0, 0, 10_000)
+

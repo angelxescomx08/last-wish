@@ -52,10 +52,12 @@ class TestSpawning:
     def test_implode_arrives_at_centre_as_it_dies(self):
         fx = BurstParticles(50, seed=2)
         fx.implode(100, 100, 50, palette=PAL, radius=(80, 80), life=(0.5, 0.5))
-        fx.update(0.25)
+        for _ in range(5):              # update() clamps dt to MAX_DT, so step 0.05 s at a time
+            fx.update(0.05)
         for x, y in fx.positions():
             assert math.isclose(math.hypot(x - 100, y - 100), 40.0, abs_tol=1e-6)
-        fx.update(0.26)
+        for _ in range(6):
+            fx.update(0.05)
         assert fx.count == 0
 
     def test_same_seed_is_deterministic(self):

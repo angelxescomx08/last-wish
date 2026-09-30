@@ -39,6 +39,9 @@ def apply_dict(data: object, target: Tuning = TUNING) -> None:
     target.extra_mana = _num(data.get("extra_mana"), 0, 0, 20, integer=True)
     target.extra_draw = _num(data.get("extra_draw"), 0, 0, 20, integer=True)
     target.extra_max_hp = _num(data.get("extra_max_hp"), 0, 0, 10_000, integer=True)
+    target.extra_luck = _num(data.get("extra_luck"), 0, 0, 1_000, integer=True)
+    target.extra_damage = _num(data.get("extra_damage"), 0, 0, 10_000, integer=True)
+    target.extra_dexterity = _num(data.get("extra_dexterity"), 0, 0, 10_000, integer=True)
 
 
 def load_dev_settings(path: Path = _FILE) -> None:

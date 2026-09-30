@@ -200,3 +200,69 @@ class TestLuckInRuns:
             return sum(r.chroma is Chroma.GOLDEN
                        for s in range(400) for r in pick_boss_relics(_run_with_luck(luck, s), 3))
         assert golden(30) > golden(0)
+
+
+# --- cards: rarity-weighted rewards and packs ----------------------------------
+
+from src.application.card_rewards import pick_pack_cards  # noqa: E402
+from src.domain.card_pool import PackTheme, card_factories_for_classes  # noqa: E402
+from src.domain.card import CardClass  # noqa: E402
+
+
+class TestCardRarityWeighting:
+    def test_factory_knows_its_rarity(self):
+        for f in card_factories_for_classes(frozenset(CardClass)):
+            assert f.rarity is f().rarity
+
+    def _avg_tier(self, luck):
+        tiers = [c.rarity.value for s in range(300) for c in pick_reward_cards(_run_with_luck(luck, s), "r")]
+        return sum(tiers) / len(tiers)
+
+    def test_luck_gives_rarer_reward_cards(self):
+        assert self._avg_tier(40) > self._avg_tier(0)
+
+    def test_legendary_rewards_are_rare_without_luck(self):
+        cards = [c for s in range(300) for c in pick_reward_cards(_run_with_luck(0, s), "r")]
+        share = sum(c.rarity is Rarity.LEGENDARY for c in cards) / len(cards)
+        assert share < 0.10          # was ~23 % with uniform picks
+
+    @pytest.mark.parametrize("theme", list(PackTheme))
+    def test_packs_still_five_distinct(self, theme):
+        cards = pick_pack_cards(_run_with_luck(8, 4), theme, 5)
+        assert len(cards) == 5 and len({c.id for c in cards}) == 5
+
+
+# --- Pruebas: extra luck -----------------------------------------------------------
+
+from src.application.combat_factory import create_combat_for_character, create_combat_from_run  # noqa: E402
+from src.application.run_manager import run_luck  # noqa: E402
+from src.domain.tuning import hero_luck  # noqa: E402
+
+
+class TestExtraLuck:
+    def test_hero_luck_adds_tuning(self):
+        assert hero_luck(8) == 8
+        TUNING.extra_luck = 12
+        assert hero_luck(8) == 20
+
+    def test_hero_luck_never_negative(self):
+        assert hero_luck(-5) == 0
+
+    def test_run_luck_uses_tuning(self):
+        run = _run_with_luck(2, 1)
+        TUNING.extra_luck = 100
+        assert run_luck(run) == 102
+
+    def test_player_luck_in_combat(self):
+        TUNING.extra_luck = 7
+        c = ALL_CHARACTERS[0]
+        assert create_combat_for_character(c).player.luck == c.stats.luck + 7
+        assert create_combat_from_run(create_run(c, 1), []).player.luck == c.stats.luck + 7
+
+    def test_extra_luck_raises_golden_relics(self):
+        def golden():
+            return sum(r.chroma is Chroma.GOLDEN
+                       for s in range(300) for r in pick_boss_relics(_run_with_luck(0, s), 3))
+        base = golden()
+        TUNING.extra_luck = 50
+        assert golden() > base
