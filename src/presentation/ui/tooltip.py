@@ -11,6 +11,7 @@ from src.domain.keywords import combo_text, keyword_def
 from src.domain.entities import Enemy, IntentType, Player
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
+from src.domain.rarity import rarity_label
 from src.domain.relic import Relic
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
@@ -149,7 +150,7 @@ def enemy_tooltip(enemy: Enemy) -> TooltipContent:
 
 def relic_tooltip(relic: Relic) -> TooltipContent:
     status = "Estado: Activo" if relic.is_active else "Estado: Agotado"
-    lines = [relic.description]
+    lines = [relic.description, f"Rareza: {rarity_label(relic.rarity)}"]
     if relic.chroma is not None:
         lines.append(chroma_def(relic.chroma).relic_note)
     return TooltipContent(title=chroma_title(relic.name, relic.chroma), lines=[*lines, "", status])
@@ -200,6 +201,9 @@ def player_tooltip(player: Player) -> TooltipContent:
         lines.append(f"Bloqueo: {player.block} -- Absorbe el próximo daño recibido.")
     else:
         lines.append("Sin bloqueo activo.")
+    if player.luck > 0:
+        lines.append(f"Suerte: {player.luck} -- Más cartas y reliquias doradas,")
+        lines.append("y reliquias de mayor rareza.")
 
     if player.status_effects:
         lines.append("")

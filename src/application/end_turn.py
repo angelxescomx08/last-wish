@@ -12,7 +12,7 @@ _HAND_DRAW_SIZE: int = 5
 
 def cards_per_turn(state: CombatState) -> int:
     """Nominal turn draw; actual draws are limited by deck and hand capacity."""
-    return _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics) + state.player.luck // 5
+    return _HAND_DRAW_SIZE + relic_effects.extra_draw_per_turn(state.relics)
 
 
 def end_player_turn(state: CombatState) -> None:

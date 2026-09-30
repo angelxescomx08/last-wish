@@ -673,7 +673,6 @@ class CombatScene:
             return TooltipContent('Cartas por turno', [
                 '5 cartas base',
                 f'+{relic_effects.extra_draw_per_turn(self._state.relics)} por reliquias',
-                f'+{self._state.player.luck // 5} por suerte',
                 'El robo se limita al espacio libre en la mano',
                 'y a las cartas disponibles en robo y descarte.',
             ])

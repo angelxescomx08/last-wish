@@ -9,7 +9,8 @@ enum member and one ``ChromaDef``; nothing else has to learn about it:
   (bonuses, heals, charges). Packs let you keep that many cards. Golden = x2.
 * ``card_note`` / ``relic_note`` are the Spanish lines shown in tooltips.
 * ``card_drop_chance`` / ``relic_drop_chance`` / ``pack_drop_chance`` drive
-  ``roll_chroma`` (overridable from the Pruebas screen, ``domain/tuning.py``).
+  ``roll_chroma`` (overridable from the Pruebas screen, ``domain/tuning.py``);
+  the hero's luck multiplies them (``rarity.luck_chroma_multiplier``).
 * On a pack the multiplier is the number of cards you keep (golden: pick 2).
 * ``on_card_played`` is an optional hook for chromas that will "do weird
   things": it runs after the card fully resolves with ``(state, card)``.
@@ -22,6 +23,8 @@ import random
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Callable
+
+from src.domain.rarity import luck_chroma_multiplier
 
 if TYPE_CHECKING:
     from src.domain.card import Card
@@ -82,17 +85,21 @@ def chroma_title(name: str, chroma: Chroma | None, *, masculine: bool = False) -
     return f"{name} · {d.name_masc if masculine and d.name_masc else d.name}"
 
 
-def roll_chroma(rng: random.Random, *, for_relic: bool = False, kind: str | None = None) -> Chroma | None:
+def roll_chroma(
+    rng: random.Random, *, for_relic: bool = False, kind: str | None = None, luck: int = 0,
+) -> Chroma | None:
     """Draw at most one chroma (one rng call). ``kind``: "card" (default), "relic" or "pack".
 
-    Chances come from ``tuning.chroma_chance`` (Pruebas overrides or the definition).
+    Chances come from ``tuning.chroma_chance`` (Pruebas overrides or the definition)
+    and are multiplied by ``rarity.luck_chroma_multiplier(luck)`` (capped at 100 %).
     """
     from src.domain.tuning import chroma_chance   # local: tuning imports this module
     kind = kind or ("relic" if for_relic else "card")
+    boost = luck_chroma_multiplier(luck)
     roll = rng.random()
     acc = 0.0
     for chroma in CHROMA_DEFS:
-        acc += chroma_chance(chroma, kind)
+        acc += min(1.0, chroma_chance(chroma, kind) * boost)
         if roll < acc:
             return chroma
     return None

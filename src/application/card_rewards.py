@@ -31,11 +31,11 @@ def _reward_seed(run: Run, room_id: str) -> int:
     return (run.seed * _REWARD_PRIME + run.floor * 1_999 + h) & 0xFFFF_FFFF_FFFF_FFFF
 
 
-def _with_chromas(cards: list[Card], seed: int) -> list[Card]:
-    """Each generated card may get a chroma (e.g. 5 % golden); own rng, so card picks are unchanged."""
+def _with_chromas(cards: list[Card], seed: int, luck: int = 0) -> list[Card]:
+    """Each generated card may get a chroma (5 % golden, boosted by luck); own rng, so card picks are unchanged."""
     rng = random.Random(seed ^ _CHROMA_SALT)
     for card in cards:
-        card.chroma = roll_chroma(rng)
+        card.chroma = roll_chroma(rng, luck=luck)
     return cards
 
 
@@ -53,7 +53,7 @@ def pick_reward_cards(run: Run, room_id: str, count: int = 3) -> list[Card]:
     rng = random.Random(seed)
     pool = card_factories_for_classes(allowed_card_classes(run))
     chosen = rng.sample(pool, min(count, len(pool)))
-    return _with_chromas([factory() for factory in chosen], seed)
+    return _with_chromas([factory() for factory in chosen], seed, run.character.stats.luck)
 
 
 def pick_pack_cards(run: Run, theme: PackTheme, count: int = 5) -> list[Card]:
@@ -70,4 +70,4 @@ def pick_pack_cards(run: Run, theme: PackTheme, count: int = 5) -> list[Card]:
     if len(chosen) < count:
         extra = [f for f in card_factories_for_classes(allowed) if f.theme is not theme]
         chosen += rng.sample(extra, min(count - len(chosen), len(extra)))
-    return _with_chromas([factory() for factory in chosen], seed)
+    return _with_chromas([factory() for factory in chosen], seed, run.character.stats.luck)

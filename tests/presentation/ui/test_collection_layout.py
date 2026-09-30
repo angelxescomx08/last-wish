@@ -61,7 +61,7 @@ def test_turn_draw_count_uses_same_bonuses_as_gameplay():
     from src.application.end_turn import cards_per_turn
     from src.application import relic_effects
     state = create_sample_combat()
-    assert cards_per_turn(state) == 5 + relic_effects.extra_draw_per_turn(state.relics) + state.player.luck // 5
+    assert cards_per_turn(state) == 5 + relic_effects.extra_draw_per_turn(state.relics)
 
 
 def test_scrollbar_drag_and_short_collection():

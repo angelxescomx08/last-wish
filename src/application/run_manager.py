@@ -18,6 +18,7 @@ from src.application.map_generator import generate_map
 from src.domain.card_pool import ALL_PACKS, PackDef, starter_deck
 from src.domain.character import Character
 from src.domain.chroma import roll_chroma
+from src.domain.rarity import weighted_sample
 from src.domain.entities import Enemy, Intent, IntentType
 from src.domain.relic import Relic, RelicTag
 from src.domain.run import Run
@@ -161,10 +162,19 @@ def _all_relic_defs() -> list[Relic]:
     ]
 
 
-def _with_chroma(relics: list[Relic], rng: random.Random) -> list[Relic]:
-    """Each offered relic may get a chroma (e.g. 8 % golden)."""
+def _luck(run: Run) -> int:
+    return run.character.stats.luck
+
+
+def _pick_relics(pool: list[Relic], count: int, rng: random.Random, luck: int) -> list[Relic]:
+    """``count`` distinct relics, higher tiers likelier with more luck (``rarity.weighted_sample``)."""
+    return weighted_sample(pool, count, rng, rarity_of=lambda r: r.rarity, luck=luck)
+
+
+def _with_chroma(relics: list[Relic], rng: random.Random, luck: int = 0) -> list[Relic]:
+    """Each offered relic may get a chroma (8 % golden, boosted by luck)."""
     for relic in relics:
-        relic.chroma = roll_chroma(rng, for_relic=True)
+        relic.chroma = roll_chroma(rng, for_relic=True, luck=luck)
     return relics
 
 
@@ -175,8 +185,8 @@ def pick_treasure_relic(run: Run, room_id: str) -> Relic:
     if not pool:
         pool = _all_relic_defs()   # fallback: duplicates allowed
     rng = random.Random(_enemy_seed(run, room_id) ^ 0x1234)
-    relic = rng.choice(pool)
-    return _with_chroma([relic], rng)[0]
+    relics = _pick_relics(pool, 1, rng, _luck(run))
+    return _with_chroma(relics, rng, _luck(run))[0]
 
 
 def pick_boss_relics(run: Run, count: int = 3) -> list[Relic]:
@@ -186,7 +196,7 @@ def pick_boss_relics(run: Run, count: int = 3) -> list[Relic]:
     if len(pool) < count:
         pool = _all_relic_defs()
     rng = random.Random(run.seed * 37 + run.floor * 13)
-    return _with_chroma(rng.sample(pool, min(count, len(pool))), rng)
+    return _with_chroma(_pick_relics(pool, count, rng, _luck(run)), rng, _luck(run))
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +219,7 @@ def pick_shop_stock(run: Run) -> tuple[list[PackDef], list[Relic]]:
     pool = [relic for relic in _all_relic_defs() if relic.tag not in owned_tags]
     if len(pool) < 3:
         pool = _all_relic_defs()
-    packs, relics = rng.sample(ALL_PACKS, 3), rng.sample(pool, 3)
-    relics = _with_chroma(relics, rng)
-    packs = [replace(p, chroma=roll_chroma(rng, kind="pack")) for p in packs]
+    packs, relics = rng.sample(ALL_PACKS, 3), _pick_relics(pool, 3, rng, _luck(run))
+    relics = _with_chroma(relics, rng, _luck(run))
+    packs = [replace(p, chroma=roll_chroma(rng, kind="pack", luck=_luck(run))) for p in packs]
     return packs, relics

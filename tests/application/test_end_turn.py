@@ -221,40 +221,20 @@ class TestEndPlayerTurn:
 
 
 # ---------------------------------------------------------------------------
-# Luck bonus draw
+# Luck no longer changes the draw (it now improves drop odds, see rarity.py)
 # ---------------------------------------------------------------------------
 
-class TestLuckBonus:
-    def test_zero_luck_no_extra_draw(self):
-        state = _make_state(draw_count=20, player_luck=0)
+class TestLuckDoesNotDraw:
+    @pytest.mark.parametrize("luck", [0, 1, 5, 10, 100])
+    def test_opening_hand_ignores_luck(self, luck):
+        state = _make_state(draw_count=20, player_luck=luck)
         draw_opening_hand(state)
         assert state.hand.count == 5
 
-    def test_luck_4_no_extra_draw(self):
-        state = _make_state(draw_count=20, player_luck=4)
-        draw_opening_hand(state)
-        assert state.hand.count == 5  # 4 // 5 == 0
-
-    def test_luck_5_draws_one_extra(self):
-        state = _make_state(draw_count=20, player_luck=5)
-        draw_opening_hand(state)
-        assert state.hand.count == 6  # 5 // 5 == 1
-
-    def test_luck_10_draws_two_extra(self):
+    def test_each_turn_ignores_luck(self):
         state = _make_state(draw_count=20, player_luck=10)
-        draw_opening_hand(state)
-        assert state.hand.count == 7  # 10 // 5 == 2
-
-    def test_luck_bonus_also_applies_each_turn(self):
-        state = _make_state(draw_count=20, player_luck=5)
         end_player_turn(state)
-        assert state.hand.count == 6
-
-    def test_luck_100_capped_by_hand_max(self):
-        state = _make_state(draw_count=50, player_luck=100)
-        draw_opening_hand(state)
-        assert state.hand.count == state.hand.max_size  # 5+20=25 > max → capped
-        assert state.hand.count <= state.hand.max_size
+        assert state.hand.count == 5
 
 
 # ---------------------------------------------------------------------------

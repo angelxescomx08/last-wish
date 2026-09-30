@@ -109,9 +109,10 @@ Every file in this layer is pygame-free and has a corresponding test file.
 |---|---|---|
 | `numbers.py` | `BigValue`, `Operation` | Arbitrary-precision arithmetic: base + flat additions + multipliers |
 | `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list. `CardEffect.needs_target` forces an enemy target; `CardEffect.hits_all_enemies` marks area effects (UI hint only) |
-| `relic.py` | `Relic`, `RelicTag` | Passive items with a tag identifying their mechanic (8 tags total) |
+| `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY` | Passive items with a tag identifying their mechanic (8 tags total). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged) |
+| `rarity.py` | `Rarity`, `RARITY_LABEL`, `rarity_weight`, `rarity_odds`, `luck_chroma_multiplier`, `weighted_sample` | Five tiers shared by cards and relics (`CardRarity` is an alias). Luck-weighted tier odds and chroma boost |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
-| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck` |
+| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck` (luck only affects drop odds, see Luck & rarity) |
 | `pile.py` | `DrawPile`, `DiscardPile`, `Hand` | Card containers with `count` and `is_full` |
 | `mana.py` | `Mana` | Mana resource with `spend`, `gain`, `refill`, `can_afford` |
 | `combat.py` | `CombatState` | Single source of truth for the entire battle state |
@@ -126,7 +127,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 |---|---|---|
 | `relic_effects.py` | `extra_draw_per_turn`, `extra_attack_damage`, `bonus_starting_mana`, `try_spectral_shield`, `bonus_gold_reward`, `post_combat_heal`, `max_hp_bonus` | Pure query functions — read relics, return bonuses or mutate state |
 | `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult`; `requires_target(card)`, `target_kind(card)` → `TargetKind` (`ENEMY` / `ALL_ENEMIES` / `SELF`) | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block. `target_kind` tells the UI what a card will act on |
-| `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus + `player.luck // 5` |
+| `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus (luck does not affect draws) |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
@@ -262,7 +263,7 @@ Relics are stored in `CombatState.relics: list[Relic]`. Each `Relic` carries a `
 draw_opening_hand(state)         ← called once at combat start
   ├── random.shuffle(draw_pile)
   ├── COMBAT_AMULET: mana.maximum += 1; mana.refill()
-  └── _draw_cards(5 + extra_draw_per_turn(relics) + player.luck // 5)
+  └── _draw_cards(5 + extra_draw_per_turn(relics))
 
 end_player_turn(state)           ← called each time player ends their turn
   ├── _discard_hand()            discard all hand cards
@@ -274,7 +275,7 @@ end_player_turn(state)           ← called each time player ends their turn
         ├── state.player.block = 0  ← block resets at START of new turn
         ├── state.turn += 1
         ├── state.mana.refill()
-        └── _draw_cards(5 + extra_draw_per_turn(relics) + player.luck // 5)
+        └── _draw_cards(5 + extra_draw_per_turn(relics))
 ```
 
 **Block rule:** Block resets to 0 at the **start of the player's next turn**, after enemies have already acted. Block gained during the player's turn **does** absorb enemy attacks that same turn.
@@ -290,7 +291,7 @@ Player fields and affect combat calculations:
 |---|---|---|
 | `damage` | `attack_bonus` | Flat bonus added to every attack card's effective damage |
 | `max_hp` | `max_hp` / `current_hp` | Starting and maximum HP |
-| `luck` | `luck` | Extra cards drawn per turn: `luck // 5` |
+| `luck` | `luck` | Better drop odds: golden cards/relics/packs and higher relic tiers (see Luck & rarity) |
 | `max_mana` | `mana.maximum` | Starting mana pool (before COMBAT_AMULET adds 1) |
 | `dexterity` | `dexterity` | Flat bonus added to every block card's effective block |
 
@@ -608,3 +609,29 @@ confirmation with Cancel selected by default. Only explicit confirmation clears
 `_run` and replaces the stack with a fresh `MainMenuScene` using shared audio.
 This discards the current run; it is not a save/suspend feature. The existing main
 menu `Salir` action closes the application. Tests: `tests/test_pause_menu.py`.
+
+---
+
+## Luck & rarity (`src/domain/rarity.py`)
+
+Cards and relics share **five tiers**: Común, Poco común, Rara, Épica, Legendaria
+(`Rarity`; `CardRarity` is an alias). Relic tiers live in `RELIC_RARITY`:
+
+| Tier | Relics |
+|---|---|
+| Común | Poción de Sangre, Anillo de Oro |
+| Poco común | Corazón de Hierro, Orbe de Fuego |
+| Rara | Tótem Roto, Piedra de Energía |
+| Épica | Amuleto de Combate |
+| Legendaria | Escudo Espectral |
+
+Luck = `run.character.stats.luck` (Guerrera 2, Mago 5, Pícara 8). It no longer draws cards.
+
+- **Relic tier odds**: `weighted_sample` picks a tier by weight, then a relic of that tier
+  (treasure, boss reward, shop). Weight = `BASE_RARITY_WEIGHT[tier] × (1 + 0.10 × luck × (tier − 1))`,
+  base 50/28/14/6/2. Common never changes; each higher tier grows faster.
+- **Chroma odds**: `roll_chroma(..., luck=)` multiplies every drop chance (cards, relics,
+  packs) by `1 + 0.10 × luck`, capped at 100 %. Pruebas overrides are multiplied too.
+- Card reward/pack card selection is unchanged (uniform over the allowed pool).
+- UI: relic tooltip shows `Rareza: …`; HUD relic border uses the card rarity colour
+  (`card_widget.RARITY_COLOR`); player tooltip shows luck.

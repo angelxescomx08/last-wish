@@ -52,6 +52,7 @@ _RARITY_COLOR: dict[CardRarity, pygame.Color] = {
     CardRarity.EPIC:      pygame.Color(180, 90, 240),
     CardRarity.LEGENDARY: pygame.Color(245, 175, 40),
 }
+RARITY_COLOR = _RARITY_COLOR   # public: relics share the same tiers and colours
 
 _TYPE_BACKDROP: dict[CardType, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     CardType.ATTACK: ((70, 18, 22), (150, 44, 40)),

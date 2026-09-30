@@ -9,6 +9,7 @@ from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
 from src.presentation.fx import chroma_fx
+from src.presentation.ui.card_widget import RARITY_COLOR
 
 RELIC_SZ: int       = 48
 _RELIC_GAP: int     = 5
@@ -39,9 +40,9 @@ def draw_relics(
 
         hovered = i == hovered_index
         bg      = colors.TEXT_ACCENT if hovered else colors.RELIC_BG
-        border  = colors.TEXT_PRIMARY if hovered else colors.RELIC_BORDER
+        border  = colors.TEXT_PRIMARY if hovered else RARITY_COLOR.get(relic.rarity, colors.RELIC_BORDER)
         pygame.draw.rect(surface, bg, rect, border_radius=6)
-        pygame.draw.rect(surface, border, rect, 2 if hovered else 1, border_radius=6)
+        pygame.draw.rect(surface, border, rect, 2, border_radius=6)
 
         icon = sprites.get_relic_sprite(relic.name, size=_RELIC_ICON_SZ) if sprites else None
 

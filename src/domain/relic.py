@@ -5,6 +5,7 @@ from enum import Enum
 
 from src.domain.card import CardClass
 from src.domain.chroma import Chroma, effect_multiplier
+from src.domain.rarity import Rarity
 
 
 class RelicTag(Enum):
@@ -18,6 +19,19 @@ class RelicTag(Enum):
     BLOOD_POTION    = "blood_potion"     # Recupera 8 HP después de cada combate
 
 
+# Tier of each relic (same five tiers as cards). Luck makes higher tiers likelier.
+RELIC_RARITY: dict[RelicTag, Rarity] = {
+    RelicTag.BLOOD_POTION:    Rarity.COMMON,
+    RelicTag.GOLD_RING:       Rarity.COMMON,
+    RelicTag.IRON_HEART:      Rarity.UNCOMMON,
+    RelicTag.FIRE_ORB:        Rarity.UNCOMMON,
+    RelicTag.BROKEN_TOTEM:    Rarity.RARE,
+    RelicTag.ENERGY_STONE:    Rarity.RARE,
+    RelicTag.COMBAT_AMULET:   Rarity.EPIC,
+    RelicTag.SPECTRAL_SHIELD: Rarity.LEGENDARY,
+}
+
+
 @dataclass
 class Relic:
     id: str
@@ -29,6 +43,11 @@ class Relic:
     card_classes: frozenset[CardClass] = field(default_factory=frozenset)
     chroma: Chroma | None = None   # special finish (golden = effects x2)
     times_triggered: int = 0       # uses spent by one-shot relics (charges = multiplier)
+    rarity: Rarity | None = None   # None → taken from RELIC_RARITY by tag (Common if untagged)
+
+    def __post_init__(self) -> None:
+        if self.rarity is None:
+            self.rarity = RELIC_RARITY.get(self.tag, Rarity.COMMON) if self.tag else Rarity.COMMON
 
     def effect_multiplier(self) -> int:
         return effect_multiplier(self.chroma)

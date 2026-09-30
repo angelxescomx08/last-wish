@@ -52,7 +52,7 @@ class Player:
     block: int = 0
     dexterity: int = 0    # bonus block added to every block card played
     attack_bonus: int = 0  # bonus damage added to every attack card played
-    luck: int = 0          # extra cards drawn per turn (1 per 5 luck)
+    luck: int = 0          # better odds of golden cards/relics and higher relic tiers
     status_effects: list[StatusEffect] = field(default_factory=list)
 
     @property

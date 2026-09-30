@@ -19,7 +19,7 @@ class CharacterId(Enum):
 class CharacterStats:
     damage:    int  # flat bonus added to every attack card played
     max_hp:    int  # starting and maximum health
-    luck:      int  # extra cards drawn per turn (1 per 5 luck)
+    luck:      int  # better odds of golden cards/relics and higher relic tiers (domain/rarity.py)
     max_mana:  int  # starting and maximum mana
     dexterity: int  # flat bonus added to every block card played
 

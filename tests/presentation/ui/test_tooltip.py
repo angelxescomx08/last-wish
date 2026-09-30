@@ -186,6 +186,13 @@ class TestRelicTooltip:
         r = Relic("r", "N", "Daño extra", tag=RelicTag.FIRE_ORB)
         assert "Daño extra" in relic_tooltip(r).lines
 
+    def test_shows_rarity(self):
+        r = Relic("r", "N", "D", tag=RelicTag.SPECTRAL_SHIELD)
+        assert "Rareza: Legendaria" in relic_tooltip(r).lines
+
+    def test_untagged_relic_is_common(self):
+        assert "Rareza: Común" in relic_tooltip(Relic("r", "N", "D")).lines
+
     def test_active_shows_activo(self):
         r = Relic("r", "N", "D", is_active=True)
         combined = "\n".join(relic_tooltip(r).lines)
@@ -271,6 +278,15 @@ class TestPlayerTooltip:
         p.status_effects = [StatusEffect("Fuerza", 3, is_buff=True)]
         combined = "\n".join(player_tooltip(p).lines)
         assert "Fuerza" in combined
+
+    def test_luck_shown_when_positive(self):
+        p = _player()
+        p.luck = 8
+        combined = "\n".join(player_tooltip(p).lines)
+        assert "Suerte: 8" in combined
+
+    def test_no_luck_line_when_zero(self):
+        assert "Suerte" not in "\n".join(player_tooltip(_player()).lines)
 
     def test_returns_tooltip_content(self):
         assert isinstance(player_tooltip(_player()), TooltipContent)

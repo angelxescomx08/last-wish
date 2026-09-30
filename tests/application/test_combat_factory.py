@@ -138,12 +138,7 @@ class TestCardAndRelicSetup:
 # Luck bonus draw
 # ---------------------------------------------------------------------------
 
-class TestLuckBonusDraw:
-    def test_rogue_draws_more_than_warrior(self):
-        warrior_state = create_combat_for_character(_get(CharacterId.WARRIOR))
-        rogue_state   = create_combat_for_character(_get(CharacterId.ROGUE))
-        warrior_luck  = _get(CharacterId.WARRIOR).stats.luck
-        rogue_luck    = _get(CharacterId.ROGUE).stats.luck
-        # Rogue has more luck → should draw more cards if luck // 5 differs
-        if rogue_luck // 5 > warrior_luck // 5:
-            assert rogue_state.hand.count > warrior_state.hand.count
+class TestLuckDoesNotChangeDraw:
+    def test_all_characters_draw_the_same_opening_hand(self):
+        counts = {c.id: create_combat_for_character(c).hand.count for c in ALL_CHARACTERS}
+        assert len(set(counts.values())) == 1

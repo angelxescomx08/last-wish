@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Callable
 from src.domain.chroma import Chroma, effect_multiplier
 from src.domain.keywords import Keyword
 from src.domain.numbers import BigValue
+from src.domain.rarity import Rarity
 
 if TYPE_CHECKING:
     from src.domain.combat import CombatState
@@ -30,12 +31,8 @@ class CardClass(Enum):
     ROGUE   = "rogue"
 
 
-class CardRarity(Enum):
-    COMMON    = 1   # Común     — starter / basic pool
-    UNCOMMON  = 2   # Poco Común — low-cost pack cards
-    RARE      = 3   # Raro       — mid-cost pack cards
-    EPIC      = 4   # Épico      — high-cost pack cards
-    LEGENDARY = 5   # Legendario — EPICO pack cards
+# Cards and relics share the same five tiers (see ``src/domain/rarity.py``).
+CardRarity = Rarity
 
 
 class ModifierTag(Enum):
