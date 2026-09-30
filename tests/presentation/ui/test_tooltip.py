@@ -190,6 +190,14 @@ class TestRelicTooltip:
         r = Relic("r", "N", "D", tag=RelicTag.SPECTRAL_SHIELD)
         assert "Rareza: Legendaria" in relic_tooltip(r).lines
 
+    def test_class_relic_says_who_can_use_it(self):
+        from src.domain.card import CardClass
+        r = Relic("r", "N", "D", tag=RelicTag.THROWING_KNIFE, relic_class=CardClass.ROGUE)
+        assert "Solo para La Pícara" in relic_tooltip(r).lines
+
+    def test_neutral_relic_has_no_class_line(self):
+        assert not any("Solo para" in l for l in relic_tooltip(Relic("r", "N", "D")).lines)
+
     def test_untagged_relic_is_common(self):
         assert "Rareza: Común" in relic_tooltip(Relic("r", "N", "D")).lines
 

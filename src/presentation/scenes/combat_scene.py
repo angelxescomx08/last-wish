@@ -466,11 +466,14 @@ class CombatScene:
                 surface, card, (pose.x, pose.y), self._fonts,
                 scale        = pose.scale,
                 angle        = pose.angle,
-                affordable   = self._state.mana.can_afford(card.cost),
+                affordable   = self._state.mana.can_afford(self._state.card_cost(card)),
+                cost         = self._state.card_cost(card),
                 bonus_damage = bonus_dmg,
                 bonus_block  = bonus_blk,
                 outline      = _RARITY_COLOR.get(card.rarity) if i == hovered else None,
                 combo        = self._combo_ready(card),
+                singular     = self._state.singular_ready(card),
+                void         = self._state.void_ready(card),
             )
 
         self._draw_pile_rect = draw_pile_widget(
@@ -517,11 +520,17 @@ class CombatScene:
         """Keyword COMBO would trigger if ``card`` were played now."""
         return self._state.combo_active and bool(card.combo_effects())
 
+    def _ready_damage(self, card) -> int:
+        """Printed damage of ``card`` with every keyword layer that would resolve now."""
+        return card.total_damage(self._combo_ready(card), self._state.singular_ready(card),
+                                 self._state.void_ready(card))
+
     def _bonuses(self, card) -> tuple[int, int]:
-        combo = self._combo_ready(card)
-        dmg = (relic_effects.extra_attack_damage(self._state.relics)
-               + self._state.player.attack_bonus) if card.total_damage(combo) > 0 else 0
-        blk = self._state.player.dexterity if card.total_block(combo) > 0 else 0
+        combo, singular = self._combo_ready(card), self._state.singular_ready(card)
+        void = self._state.void_ready(card)
+        dmg = (relic_effects.extra_attack_damage(self._state.relics) + self._state.player.attack_bonus
+               + self._state.next_damage_bonus) if card.total_damage(combo, singular, void) > 0 else 0
+        blk = self._state.player.dexterity if card.total_block(combo, singular, void) > 0 else 0
         return dmg, blk
 
     def _held_index(self) -> int | None:
@@ -611,7 +620,9 @@ class CombatScene:
         dmg, blk = self._bonuses(card)
         rect = draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
                             bonus_damage=dmg, bonus_block=blk,
-                            outline=_PLAYABLE if ready else _HELD, combo=self._combo_ready(card))
+                            outline=_PLAYABLE if ready else _HELD, combo=self._combo_ready(card),
+                            singular=self._state.singular_ready(card),
+                            void=self._state.void_ready(card), cost=self._state.card_cost(card))
         if self._play.aiming:
             draw_arrow(surface, (rect.centerx, rect.top + 6), self._arrow_end(),
                        hot=self._play.target is not None, phase=self._fx_time)
@@ -661,7 +672,9 @@ class CombatScene:
             card      = self._state.hand.cards[self._hovered_card]
             bonus_dmg, bonus_blk = self._bonuses(card)
             return card_tooltip(card, bonus_damage=bonus_dmg, bonus_block=bonus_blk,
-                                combo_active=self._combo_ready(card))
+                                combo_active=self._combo_ready(card),
+                                singular_active=self._state.singular_ready(card),
+                                void_active=self._state.void_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             return enemy_tooltip(self._state.enemies[self._hovered_enemy])
@@ -816,7 +829,7 @@ class CombatScene:
     def _pick_card(self, index: int, pos: tuple[int, int] | None) -> None:
         """Pick up a card with the mouse (``pos``) or with its number key."""
         card = self._state.hand.cards[index]
-        if not self._state.mana.can_afford(card.cost):
+        if not self._state.mana.can_afford(self._state.card_cost(card)):
             self._show_error("Maná insuficiente")
             return
         kind = target_kind(card)
@@ -857,7 +870,7 @@ class CombatScene:
         old_enemy_blk = [e.block for e in state.enemies]
         old_block     = state.player.block
         is_attack     = (0 <= card_idx < state.hand.count
-                         and state.hand.cards[card_idx].total_damage(state.combo_active) > 0)
+                         and self._ready_damage(state.hand.cards[card_idx]) > 0)
 
         self._play.cancel()
         played = state.hand.cards[card_idx] if 0 <= card_idx < state.hand.count else None
@@ -875,6 +888,13 @@ class CombatScene:
         if result.combo and self._player_rect:
             self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10, "¡COMBO!",
                               (90, 235, 180), lifetime=1.1)
+        shown = 1 if result.combo else 0
+        for flag, label, color in ((result.singular, "¡SINGULAR!", (185, 140, 255)),
+                                   (result.void, "¡VACÍO!", (90, 170, 255))):
+            if flag and self._player_rect:
+                self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10 - 24 * shown,
+                                  label, color, lifetime=1.1)
+                shown += 1
 
         if result.casts > 1 and played is not None:
             # Golden: replay every cast on screen, one after another.

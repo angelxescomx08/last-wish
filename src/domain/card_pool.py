@@ -15,13 +15,14 @@ results across multiple uses, as cards are mutable (stacked_effects, modifiers).
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Iterable
 
 from src.domain.card import Card, CardClass, CardEffect, CardRarity, CardType
 from src.domain.chroma import Chroma
-from src.domain.entities import StatusEffect
+from src.domain.entities import WEAK, StatusEffect, add_status
 from src.domain.numbers import BigValue
 
 
@@ -115,6 +116,22 @@ def _add_combo(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: i
     return card
 
 
+def _add_singular(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: int = 0,
+                  on_play=None, text: str = "") -> Card:
+    """Give ``card`` the SINGULAR keyword: an extra layer if the starting deck has no repeats."""
+    card.base_effect.singular = CardEffect(name="Singular", damage=BigValue(dmg), block=BigValue(blk),
+                                           draw=draw, mana_gain=mana, on_play=on_play, text=text)
+    return card
+
+
+def _add_void(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: int = 0,
+              on_play=None, text: str = "") -> Card:
+    """Give ``card`` the VOID keyword ("Vacío"): an extra layer if it spends your last mana."""
+    card.base_effect.void = CardEffect(name="Vacío", damage=BigValue(dmg), block=BigValue(blk),
+                                       draw=draw, mana_gain=mana, on_play=on_play, text=text)
+    return card
+
+
 # ---------------------------------------------------------------------------
 # Starter deck
 # ---------------------------------------------------------------------------
@@ -174,12 +191,14 @@ _ACERO: list[Callable[[], Card]] = [
     # on_play cards
     lambda: Card(
         id="a_golpe_total", name="Golpe Total", card_type=CardType.ATTACK, cost=2,
-        base_effect=CardEffect(name="Golpe Total", hits_all_enemies=True, on_play=_on_golpe_total),
+        base_effect=CardEffect(name="Golpe Total", hits_all_enemies=True, on_play=_on_golpe_total,
+                               text="inflige 10 de daño a todos los enemigos"),
         rarity=CardRarity.RARE,
     ),
     lambda: _add_combo(Card(
         id="a_instinto", name="Instinto", card_type=CardType.ATTACK, cost=1,
-        base_effect=CardEffect(name="Instinto", needs_target=True, on_play=_on_instinto),
+        base_effect=CardEffect(name="Instinto", needs_target=True, on_play=_on_instinto,
+                               text="inflige 2 de daño por cada carta en tu mano"),
         rarity=CardRarity.UNCOMMON,
     ), dmg=6),
 ]
@@ -203,12 +222,14 @@ _ESCUDO: list[Callable[[], Card]] = [
     # on_play cards
     lambda: Card(
         id="e_muro_de_mana", name="Muro de Maná", card_type=CardType.SKILL, cost=1,
-        base_effect=CardEffect(name="Muro de Maná", on_play=_on_muro_de_mana),
+        base_effect=CardEffect(name="Muro de Maná", on_play=_on_muro_de_mana,
+                               text="gana 5 de escudo por cada maná que te quede"),
         rarity=CardRarity.UNCOMMON,
     ),
     lambda: Card(
         id="e_retribucion", name="Retribución", card_type=CardType.SKILL, cost=1,
-        base_effect=CardEffect(name="Retribución", on_play=_on_retribucion),
+        base_effect=CardEffect(name="Retribución", on_play=_on_retribucion,
+                               text="gana 2 de escudo por cada carta en el descarte"),
         rarity=CardRarity.UNCOMMON,
     ),
 ]
@@ -232,17 +253,20 @@ _MAGIA: list[Callable[[], Card]] = [
     # on_play cards
     lambda: _add_combo(Card(
         id="m_veneno", name="Veneno", card_type=CardType.SKILL, cost=1,
-        base_effect=CardEffect(name="Veneno", needs_target=True, on_play=_on_veneno),
+        base_effect=CardEffect(name="Veneno", needs_target=True, on_play=_on_veneno,
+                               text="aplica 3 de Veneno"),
         rarity=CardRarity.UNCOMMON,
     ), on_play=_on_veneno, text="aplica 3 de Veneno más"),
     lambda: Card(
         id="m_vision_del_caos", name="Visión del Caos", card_type=CardType.SKILL, cost=0,
-        base_effect=CardEffect(name="Visión del Caos", hits_all_enemies=True, on_play=_on_vision_del_caos),
+        base_effect=CardEffect(name="Visión del Caos", hits_all_enemies=True, on_play=_on_vision_del_caos,
+                               text="inflige 1 de daño a todos por cada carta en tu pila de robo"),
         rarity=CardRarity.COMMON,
     ),
     lambda: Card(
         id="m_grito_de_guerra", name="Grito de Guerra", card_type=CardType.SKILL, cost=1,
-        base_effect=CardEffect(name="Grito de Guerra", on_play=_on_grito_de_guerra),
+        base_effect=CardEffect(name="Grito de Guerra", on_play=_on_grito_de_guerra,
+                               text="gana 1 de maná por cada enemigo vivo"),
         rarity=CardRarity.UNCOMMON,
     ),
 ]
@@ -264,19 +288,103 @@ _EPICO: list[Callable[[], Card]] = [
     # on_play cards
     lambda: Card(
         id="ep_lluvia_de_golpes", name="Lluvia de Golpes", card_type=CardType.ATTACK, cost=3,
-        base_effect=CardEffect(name="Lluvia de Golpes", hits_all_enemies=True, on_play=_on_lluvia_de_golpes),
+        base_effect=CardEffect(name="Lluvia de Golpes", hits_all_enemies=True, on_play=_on_lluvia_de_golpes,
+                               text="inflige 5 de daño a todos por cada ataque en el descarte"),
         rarity=CardRarity.LEGENDARY,
     ),
     lambda: _add_combo(Card(
         id="ep_mazo_impecable", name="Mazo Impecable", card_type=CardType.ATTACK, cost=2,
-        base_effect=CardEffect(name="Mazo Impecable", needs_target=True, on_play=_on_mazo_impecable),
+        base_effect=CardEffect(name="Mazo Impecable", needs_target=True, on_play=_on_mazo_impecable,
+                               text="inflige 40 de daño si toda tu mano cuesta 1 o menos"),
         rarity=CardRarity.LEGENDARY,
     ), dmg=12),
     lambda: Card(
         id="ep_tormenta_veneno", name="Tormenta de Veneno", card_type=CardType.SKILL, cost=3,
-        base_effect=CardEffect(name="Tormenta de Veneno", hits_all_enemies=True, on_play=_on_tormenta_veneno),
+        base_effect=CardEffect(name="Tormenta de Veneno", hits_all_enemies=True, on_play=_on_tormenta_veneno,
+                               text="aplica 5 de Veneno a todos los enemigos"),
         rarity=CardRarity.LEGENDARY,
     ),
+]
+
+
+# ---------------------------------------------------------------------------
+# La Pícara — combo / suerte archetype (all ROGUE, see CARD_CLASS_BY_ID)
+# ---------------------------------------------------------------------------
+
+def _r(id: str, name: str, ctype: CardType, cost: int, rarity: CardRarity, *, dmg: int = 0,
+       blk: int = 0, draw: int = 0, on_play=None, text: str = "", needs_target: bool = False,
+       hits_all: bool = False, on_turn_start=None) -> Card:
+    return Card(
+        id=id, name=name, card_type=ctype, cost=cost, rarity=rarity,
+        base_effect=CardEffect(name=name, damage=BigValue(dmg), block=BigValue(blk), draw=draw,
+                               on_play=on_play, text=text, needs_target=needs_target,
+                               hits_all_enemies=hits_all, on_turn_start=on_turn_start),
+    )
+
+
+_A, _S, _P = CardType.ATTACK, CardType.SKILL, CardType.POWER
+_C, _U, _RA, _E, _L = (CardRarity.COMMON, CardRarity.UNCOMMON, CardRarity.RARE,
+                       CardRarity.EPIC, CardRarity.LEGENDARY)
+
+
+def hidden_dagger() -> Card:
+    """Token "Daga Oculta": played by itself when drawn (4 damage to a random enemy), then gone."""
+    card = _r("t_daga_oculta", "Daga Oculta", _A, 0, _C, on_play=_on_random_hit_4,
+              text="al robarla: inflige 4 de daño a un enemigo al azar")
+    card.play_on_draw = True
+    return card
+
+
+_ROGUE_ACERO: list[Callable[[], Card]] = [
+    lambda: _add_combo(_r("r_estocada_oportuna", "Estocada Oportuna", _A, 1, _E, dmg=3), draw=1),
+    lambda: _r("r_pinchazo", "Pinchazo", _A, 0, _C, dmg=3),
+    lambda: _r("r_golpe_desesperado", "Golpe Desesperado", _A, 1, _U, dmg=12,
+               on_play=_on_discard_random, text="descarta una carta al azar de tu mano"),
+    lambda: _r("r_lluvia_de_dagas", "Lluvia de Dagas", _A, 2, _C, on_play=_on_two_random_10,
+               text="inflige 10 de daño a 2 enemigos al azar", hits_all=True),
+    lambda: _r("r_golpe_de_gracia", "Golpe de Gracia", _A, 1, _U, dmg=8,
+               on_play=_on_refund_on_kill, text="si lo matas, recupera 1 de maná"),
+    lambda: _r("r_corte_y_guardia", "Corte y Guardia", _A, 1, _C, dmg=3, blk=3),
+    lambda: _add_combo(_r("r_cuchillada_errante", "Cuchillada Errante", _A, 1, _C,
+                          on_play=_on_random_hit_4, text="inflige 4 de daño a un enemigo al azar",
+                          hits_all=True),
+                       on_play=_on_random_hit_4, text="hazlo de nuevo"),
+    lambda: _add_singular(_r("r_abanico_de_cuchillas", "Abanico de Cuchillas", _A, 2, _E,
+                             on_play=_on_all_hit_5, text="inflige 5 de daño a todos los enemigos",
+                             hits_all=True), blk=5, draw=1),
+]
+
+_ROGUE_ESCUDO: list[Callable[[], Card]] = [
+    lambda: _r("r_paso_atras", "Paso Atrás", _S, 0, _C, blk=3),
+    lambda: _add_combo(_r("r_guardia_evasiva", "Guardia Evasiva", _S, 2, _U, blk=10),
+                       on_play=_on_weaken_all, text="los enemigos infligen 25% menos de daño este turno"),
+    lambda: _r("r_muro_de_humo", "Muro de Humo", _S, 2, _U, blk=14),
+]
+
+_ROGUE_MAGIA: list[Callable[[], Card]] = [
+    lambda: _r("r_preparacion", "Preparación", _S, 0, _E, on_play=_on_next_card_cheaper,
+               text="la siguiente carta que juegues este turno cuesta 1 menos"),
+    lambda: _r("r_rebuscar", "Rebuscar", _S, 2, _RA, on_play=_on_draw_one_of_each_type,
+               text="roba un poder, un ataque y una habilidad"),
+    lambda: _r("r_astucia", "Astucia", _S, 1, _E, draw=2),
+    lambda: _add_combo(_r("r_dagas_ocultas", "Dagas Ocultas", _S, 1, _RA, on_play=_on_hide_two_daggers,
+                          text="mete 2 Dagas Ocultas en tu pila de robo"),
+                       on_play=_on_hide_one_dagger, text="mete 3 en vez de 2"),
+    lambda: _r("r_afilar", "Afilar", _S, 1, _C, on_play=_on_next_damage_plus_6,
+               text="tu siguiente carta que haga daño este turno inflige 6 más"),
+    lambda: _r("r_reflejos", "Reflejos", _P, 1, _U, on_play=_on_gain_dexterity,
+               text="gana 1 de destreza este combate"),
+    lambda: _r("r_danza_de_sombras", "Danza de Sombras", _P, 2, _E, on_play=_on_combo_always,
+               text="este combate, tus Combos se activan sin jugar otra carta antes"),
+]
+
+_ROGUE_EPICO: list[Callable[[], Card]] = [
+    lambda: _r("r_ritmo_letal", "Ritmo Letal", _P, 2, _L, on_play=_on_first_card_cheaper,
+               text="este combate, la primera carta de cada turno cuesta 1 menos"),
+    lambda: _add_singular(_r("r_tormenta_de_acero", "Tormenta de Acero", _P, 1, _L,
+                             on_turn_start=_on_turn_blades,
+                             text="al inicio de cada turno, inflige 3 de daño a todos los enemigos"),
+                          text="5 de daño en vez de 3"),
 ]
 
 
@@ -374,6 +482,101 @@ def _on_tormenta_veneno(state) -> None:
             e.status_effects.append(StatusEffect("Veneno", 5, is_buff=False))
 
 
+# ROGUE effects
+
+def _alive(state) -> list:
+    return [e for e in state.enemies if e.is_alive]
+
+
+def _on_random_hit_4(state) -> None:
+    """4 damage to a random living enemy."""
+    alive = _alive(state)
+    if alive:
+        _apply_block_absorbed_damage(random.choice(alive), 4)
+
+
+def _on_two_random_10(state) -> None:
+    """10 damage to 2 different random enemies (or the only one left)."""
+    for e in random.sample(_alive(state), min(2, len(_alive(state)))):
+        _apply_block_absorbed_damage(e, 10)
+
+
+def _on_all_hit_5(state) -> None:
+    for e in _alive(state):
+        _apply_block_absorbed_damage(e, 5)
+
+
+def _on_discard_random(state) -> None:
+    """Discard a random card from the hand (this card has already left it)."""
+    if state.hand.cards:
+        card = state.hand.cards.pop(random.randrange(state.hand.count))
+        state.discard_pile.cards.append(card)
+
+
+def _on_refund_on_kill(state) -> None:
+    """If this card's damage killed the target, gain 1 mana back."""
+    idx = state.targeted_enemy_index
+    if idx is not None and idx < len(state.enemies) and not state.enemies[idx].is_alive:
+        state.mana.gain(1)
+
+
+def _on_weaken_all(state) -> None:
+    """Every living enemy is Débil for its next action (25 % less damage)."""
+    for e in _alive(state):
+        add_status(e.status_effects, WEAK, 1, is_buff=False)
+
+
+def _on_next_card_cheaper(state) -> None:
+    state.next_card_discount += 1
+
+
+def _on_first_card_cheaper(state) -> None:
+    state.first_card_discount += 1
+
+
+def _on_next_damage_plus_6(state) -> None:
+    state.next_damage_bonus += 6
+
+
+def _on_combo_always(state) -> None:
+    state.combo_always = True
+
+
+def _on_gain_dexterity(state) -> None:
+    state.player.dexterity += 1
+
+
+def _on_draw_one_of_each_type(state) -> None:
+    """Take the top Power, Attack and Skill of the draw pile into the hand (if any)."""
+    for ctype in (CardType.POWER, CardType.ATTACK, CardType.SKILL):
+        if state.hand.is_full:
+            return
+        for i in range(state.draw_pile.count - 1, -1, -1):     # top of the pile = end of the list
+            if state.draw_pile.cards[i].card_type is ctype:
+                state.hand.cards.append(state.draw_pile.cards.pop(i))
+                break
+
+
+def _hide_daggers(state, n: int) -> None:
+    for _ in range(n):
+        state.draw_pile.cards.insert(random.randint(0, state.draw_pile.count), hidden_dagger())
+
+
+def _on_hide_two_daggers(state) -> None:
+    _hide_daggers(state, 2)
+
+
+def _on_hide_one_dagger(state) -> None:
+    _hide_daggers(state, 1)
+
+
+def _on_turn_blades(state) -> None:
+    """Tormenta de Acero: at turn start, 3 damage to all enemies (Singular deck: 5)."""
+    dmg = 5 if state.singular_deck else 3
+    for e in _alive(state):
+        _apply_block_absorbed_damage(e, dmg)
+
+
 # ---------------------------------------------------------------------------
 # Classes
 # ---------------------------------------------------------------------------
@@ -413,6 +616,13 @@ CARD_CLASS_BY_ID: dict[str, CardClass] = {
     "ep_escudo_impenet": _W, "ep_bastion": _W, "ep_ejecucion": _W,
     "ep_tormenta": _M, "ep_descarga": _M, "ep_escudo_arcano": _M,
     "ep_lluvia_de_golpes": _R, "ep_tormenta_veneno": _R, "ep_mazo_impecable": _R,
+    # La Pícara (combo / suerte)
+    "r_estocada_oportuna": _R, "r_pinchazo": _R, "r_golpe_desesperado": _R, "r_lluvia_de_dagas": _R,
+    "r_golpe_de_gracia": _R, "r_corte_y_guardia": _R, "r_cuchillada_errante": _R,
+    "r_paso_atras": _R, "r_guardia_evasiva": _R, "r_muro_de_humo": _R,
+    "r_preparacion": _R, "r_rebuscar": _R, "r_astucia": _R, "r_dagas_ocultas": _R, "r_afilar": _R,
+    "r_reflejos": _R, "r_danza_de_sombras": _R,
+    "r_abanico_de_cuchillas": _R, "r_ritmo_letal": _R, "r_tormenta_de_acero": _R,
 }
 
 
@@ -462,10 +672,10 @@ def _factories(theme: PackTheme, raw: list[Callable[[], Card]]) -> list[CardFact
 # ---------------------------------------------------------------------------
 
 _POOL: dict[PackTheme, list[CardFactory]] = {
-    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO),
-    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO),
-    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA),
-    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO),
+    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO + _ROGUE_ACERO),
+    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO + _ROGUE_ESCUDO),
+    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA + _ROGUE_MAGIA),
+    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO + _ROGUE_EPICO),
 }
 
 

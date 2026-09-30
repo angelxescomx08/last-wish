@@ -619,11 +619,11 @@ Cards and relics share **five tiers**: Común, Poco común, Rara, Épica, Legend
 
 | Tier | Relics |
 |---|---|
-| Común | Poción de Sangre, Anillo de Oro |
-| Poco común | Corazón de Hierro, Orbe de Fuego |
+| Común | Poción de Sangre, Anillo de Oro, Amuleto de Vitalidad |
+| Poco común | Corazón de Hierro, Orbe de Fuego, Broche de Evasión (Pícara), Cuchillo Arrojadizo (Pícara) |
 | Rara | Tótem Roto, Piedra de Energía |
 | Épica | Amuleto de Combate |
-| Legendaria | Escudo Espectral |
+| Legendaria | Escudo Espectral, Trébol de Siete Hojas, Ankh, Espejo Singular |
 
 Luck = `run.character.stats.luck` (Guerrera 2, Mago 5, Pícara 8). It no longer draws cards.
 
@@ -637,9 +637,114 @@ Luck = `run.character.stats.luck` (Guerrera 2, Mago 5, Pícara 8). It no longer 
 - **Pruebas**: `Tuning.extra_luck`, `extra_damage`, `extra_dexterity` (+ the old `extra_max_hp`,
   `extra_mana`, `extra_draw`) form the "Stats del héroe" column of the Pruebas screen, with a live
   preview of each hero's odds. Luck everywhere = `tuning.hero_luck(character luck)`
-  (`run_manager.run_luck(run)` for runs). Shift multiplies a step by 10.
+  (`run_manager.run_luck(run)` for runs, which also adds `relic_effects.luck_bonus`). Shift multiplies a step by 10.
 - There is **no cap** on luck. Golden chances hit 100 % at luck 115 (relics), 157 (packs) and
   190 (cards). Tier odds tend to Común 0 % / Poco común 34 % / Rara 34 % / Épica 22 % /
   Legendaria 9.8 % as luck grows.
 - UI: relic tooltip shows `Rareza: …`; HUD relic border uses the card rarity colour
   (`card_widget.RARITY_COLOR`); player tooltip shows luck.
+
+---
+
+## Class relics and combo relics
+
+`Relic.relic_class` (default `CardClass.NEUTRAL`) says who can find a relic: neutral relics
+for every hero, class relics only for that hero (`run_manager._relic_pool`, used by treasure,
+boss reward and shop). The relic tooltip shows "Solo para …" for class relics.
+
+| Relic | Tag | Class | Tier | Effect (golden x2) |
+|---|---|---|---|---|
+| Amuleto de Vitalidad | `VITALITY_AMULET` | Neutral | Común | +10 max HP (`max_hp_bonus`) |
+| Trébol de Siete Hojas | `SEVEN_LEAF_CLOVER` | Neutral | Legendaria | +100 luck (`luck_bonus`) |
+| Espejo Singular | `SINGULAR_MIRROR` | Neutral | Legendaria | On pickup: removes repeated cards, one copy of each kept (golden copy preferred) |
+| Ankh | `ANKH` | Neutral | Legendaria | Fatal hit: revive at full HP, once (golden: twice) (`try_ankh`) |
+| Broche de Evasión | `EVASION_BROOCH` | Pícara | Poco común | A card's Combo resolves: +1 block |
+| Cuchillo Arrojadizo | `THROWING_KNIFE` | Pícara | Poco común | A card's Combo resolves: 1 damage to a random living enemy (block absorbs) |
+
+Pickup effects: every relic is obtained through `run_manager.acquire_relic(run, relic)` (treasure,
+boss reward, shop), which recomputes max HP and applies one-time effects (Espejo Singular →
+`relic_effects.remove_duplicate_cards`). It only cleans the deck once; later copies stay.
+
+Death saves: `end_turn` calls `relic_effects.try_revive(state)` after each enemy hit, which tries
+Escudo Espectral first (1 HP) and then the Ankh (full HP), so the stronger save is kept.
+
+Combo relics trigger from `relic_effects.on_card_played(state, card, combo)`, called by
+`play_card` once per play (not per golden cast) right after the last cast, so their effect is
+part of the last cast's snapshots/hits. They only trigger when the card's Combo layer actually
+resolved (`combo=True`: another card was already played this turn), never on the first card.
+
+---
+
+## Keyword Singular (`src/domain/keywords.py`)
+
+`Keyword.SINGULAR` ("Singular: efecto extra si tu mazo inicial no tiene cartas repetidas").
+Works like Combo: an extra layer `CardEffect.singular` (helper `card_pool._add_singular`),
+`Card.singular_effects()`, and every `total_*` / `active_effects` takes `singular=`.
+
+- "Mazo inicial" = the deck a combat starts with. `deck_is_singular(cards)` (no two cards
+  with the same `id`; a golden copy is a repeat) sets `CombatState.singular_deck` once in
+  `create_combat_from_run` / `create_combat_for_character`; it never changes mid-combat.
+- `CombatState.singular_ready(card)`; `play_card` resolves the layer on every cast and
+  reports `PlayResult.singular`. Unlike Combo it also works on the first card of the turn.
+- UI: `card_widget` (`singular=`, violet aura `SINGULAR_READY_GLOW`, "¡Singular activo!"),
+  `card_tooltip(singular_active=)`, "¡SINGULAR!" floating text in combat.
+- Starter decks have repeats; the Espejo Singular relic is the way to thin the deck.
+
+---
+
+## Game design list (`docs/game_design.md`)
+
+Living list (in Spanish) of keywords, cards and relics: planned (⏳) and implemented (✅).
+When a card, relic or keyword is added or renamed, update its row there too.
+
+---
+
+## Keyword Vacío (`Keyword.VOID`)
+
+"Vacío: efecto extra si al jugarla te quedas con 0 de maná." Mage cards only (by design;
+none exist yet). Same layer pattern as Combo/Singular: `CardEffect.void`, `Card.void_effects()`,
+`void=` on every `total_*` / `active_effects`, helper `card_pool._add_void`.
+
+- `keywords.void_triggers(cost, mana_before)`: `cost > 0 and mana_before - cost == 0`
+  (a free card never triggers it). `CombatState.void_ready(card)` checks it with the current mana.
+- `play_card` decides it **before** paying; the layer resolves on every cast; `PlayResult.void`.
+- UI: blue aura `VOID_READY_GLOW` (Combo > Vacío > Singular), "¡Vacío activo!", "¡VACÍO!" text.
+
+---
+
+## Card upgrades and El Brujo
+
+- `Card.upgrade_level`, `Card.max_upgrades` (default 1; `None` = unlimited), optional
+  `Card.upgrade: CardUpgrade` (deltas for cost/damage/block/draw/mana_gain, optional new
+  `on_play`/`text`, `description`), `Card.base_name`; `Card.is_upgraded` is a property.
+- `src/domain/card_upgrade.py`: `can_upgrade`, `default_upgrade` (+3 or +1/3 dmg/block; else
+  -1 cost; else +1 draw), `apply_upgrade` (in place; renames "X+", "X+2"…), `upgraded_preview`,
+  `describe_upgrade`.
+- `src/application/warlock.py`: `UPGRADE_PRICE` by rarity (50/75/100/150/200),
+  `upgrade_price(card)` = base × (level + 1), `can_buy_upgrade`, `buy_upgrade(run, index)`.
+- Map: `RoomType.WARLOCK` ("Brujo"), exactly one per floor (`map_generator` phase 3, after events).
+- `scenes/warlock_scene.py`: deck grid (`CollectionViewer` subclass with prices, "Salir"),
+  confirmation panel (card now → upgraded preview, "Mejorar (precio)" / "Cancelar"). The panel is
+  exposed as `_overlay` so Escape closes it. `CollectionViewer` gained `close_label`,
+  `footer_text`, `hint_text`, `close_on_outside_click`.
+
+---
+
+## Combat mechanics added for La Pícara's cards
+
+- `CombatState.card_cost(card)`: printed cost minus `next_card_discount` (this turn, used up by
+  the next card played) and `first_card_discount` (power, first card of each turn). Used by
+  `play_card`, `void_ready`, and the combat UI (`draw_card_at(..., cost=)`, green when cheaper).
+- `CombatState.next_damage_bonus` (Afilar): added to the next card that deals damage; expires at
+  end of turn. `combo_always` (Danza de Sombras) makes `combo_active` always true.
+- `CardEffect.on_turn_start` (powers): run by `end_turn._trigger_powers` at the start of each of
+  your turns, once per cast (golden: twice).
+- `Card.play_on_draw` (token "Daga Oculta", `card_pool.hidden_dagger()`): `application/drawing.py`
+  (`draw_one` / `draw_cards`, shared by turn draws and card draws) plays it for free when drawn.
+- Status "Débil" (`entities.WEAK`, `weakened`, `add_status`, `tick_status`): −25% attack damage.
+  On enemies it lasts their next action; enemy DEBUFF intent makes the hero Débil for 2 turns
+  (`end_turn.ENEMY_DEBUFF_TURNS`) unless they have Panacea (`relic_effects.immune_to_debuffs`).
+- Fuente Eterna: `relic_effects.max_mana_per_turn` added to `mana.maximum` in `_begin_player_turn`.
+- `CardEffect.text` is shown on the card face and tooltip; every on_play card now has one.
+- Rogue cards live in `_ROGUE_ACERO/_ESCUDO/_MAGIA/_EPICO` in `card_pool.py` (helper `_r`).
+

@@ -113,7 +113,7 @@ class TestComboInCombat:
 class TestRogueCards:
     def test_combo_cards_belong_to_the_rogue(self):
         combo = [f() for f in card_factories_for_classes(set(CardClass)) if f().combo_effects()]
-        assert len(combo) == 8
+        assert len(combo) == 12
         assert {c.card_class for c in combo} == {CardClass.ROGUE}
 
     def test_every_rogue_combo_card_is_stronger_with_combo(self):

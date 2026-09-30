@@ -193,3 +193,20 @@ class TestDynamicContent:
         for bonus in range(400):
             render_card_surface(_attack(), fonts, bonus_damage=bonus)
         assert len(card_widget._cache) <= card_widget._CACHE_MAX
+
+
+class TestEffectTextAndDiscount:
+    def test_on_play_text_is_shown(self):
+        card = _skill()
+        card.base_effect.text = "descarta una carta al azar"
+        assert "Descarta una carta al azar." in _ability_lines(card)
+
+    def test_power_with_text_has_no_generic_line(self):
+        card = _power()
+        card.base_effect.text = "gana 1 de destreza este combate"
+        assert _ability_lines(card) == ["Gana 1 de destreza este combate."]
+
+    def test_discounted_cost_redraws(self):
+        fonts = _fonts()
+        card = _attack()
+        assert _bytes(render_card_surface(card, fonts)) != _bytes(render_card_surface(card, fonts, cost=0))

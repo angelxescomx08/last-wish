@@ -609,7 +609,8 @@ class TestTargetKind:
     def test_pool_area_cards_are_flagged(self):
         from src.application.play_card import TargetKind, target_kind
         from src.domain.card_pool import PackTheme, card_factories_for_theme
-        area = {"Golpe Total", "Visión del Caos", "Lluvia de Golpes", "Tormenta de Veneno"}
+        area = {"Golpe Total", "Visión del Caos", "Lluvia de Golpes", "Tormenta de Veneno",
+                "Abanico de Cuchillas", "Cuchillada Errante", "Lluvia de Dagas"}
         found = {c.name for t in PackTheme for c in (f() for f in card_factories_for_theme(t))
                  if target_kind(c) is TargetKind.ALL_ENEMIES}
         assert found == area

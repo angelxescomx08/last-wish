@@ -30,10 +30,13 @@ _EXPECTED_ENEMIES = {
     "Cultista", "Guardián", "Brujo", "Esqueleto",
     "Golem", "Asesino", "Señor de la Cripta",
 }
-_EXPECTED_RELICS = {
-    "Amuleto de Combate", "Tótem Roto", "Orbe de Fuego", "Escudo Espectral",
-    "Piedra de Energía", "Anillo de Oro", "Corazón de Hierro", "Poción de Sangre",
-}
+def _expected_relics() -> set[str]:
+    """Every relic that can drop in a run needs an icon."""
+    from src.application.run_manager import _all_relic_defs
+    return {r.name for r in _all_relic_defs()}
+
+
+_EXPECTED_RELICS = _expected_relics()
 
 
 class TestMappingCompleteness:

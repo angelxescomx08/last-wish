@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 
 import pygame
 
-from src.domain.card import Card, CardType, ModifierTag
+from src.domain.card import Card, CardClass, CardType, ModifierTag
 from src.domain.card_pool import CARD_CLASS_LABEL
 from src.domain.chroma import chroma_def, chroma_title
-from src.domain.keywords import combo_text, keyword_def
+from src.domain.keywords import Keyword, combo_text, keyword_def, singular_text, void_text
 from src.domain.entities import Enemy, IntentType, Player
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
@@ -58,8 +58,12 @@ def card_tooltip(
     bonus_damage: int = 0,
     bonus_block: int = 0,
     combo_active: bool = False,
+    singular_active: bool = False,
+    void_active: bool = False,
 ) -> TooltipContent:
     combo = combo_active and bool(card.combo_effects())
+    singular = singular_active and bool(card.singular_effects())
+    void = void_active and bool(card.void_effects())
     title = chroma_title(card.name, card.chroma) + (" (Rota)" if card.is_broken else "")
     lines: list[str] = [
         f"{_CARD_TYPE_NAME[card.card_type]}  ·  Coste: {card.cost} maná",
@@ -67,8 +71,8 @@ def card_tooltip(
         "",
     ]
 
-    dmg = card.total_damage(combo)
-    blk = card.total_block(combo)
+    dmg = card.total_damage(combo, singular, void)
+    blk = card.total_block(combo, singular, void)
     if dmg > 0:
         effective = dmg + bonus_damage
         if bonus_damage > 0:
@@ -84,11 +88,16 @@ def card_tooltip(
         else:
             lines.append(f"Otorga {BigValue.format_int(blk)} puntos de bloqueo.")
 
-    base_draw = card.total_draw(combo)
+    base_draw = card.total_draw(combo, singular, void)
     if base_draw > 0:
         lines.append(f"Roba {base_draw} carta(s) adicional(es).")
 
-    if not (dmg or blk or base_draw):
+    for fx in card.all_effects():
+        if fx.text:
+            lines.append(fx.text[0].upper() + fx.text[1:] + ("" if fx.text.endswith(".") else "."))
+    if card.play_on_draw:
+        lines.append("Se juega sola al robarla y desaparece.")
+    if not (dmg or blk or base_draw or any(fx.text for fx in card.all_effects())):
         lines.append("Efecto especial -- aún por determinar.")
 
     if card.stacked_effects:
@@ -114,8 +123,13 @@ def card_tooltip(
         lines += ["", "[!] ROTA: puede fusionarse con otra carta rota."]
 
     for kw in sorted(card.keywords(), key=lambda k: k.value):
+        active, text = {
+            Keyword.COMBO: (combo, combo_text(card)),
+            Keyword.SINGULAR: (singular, singular_text(card)),
+            Keyword.VOID: (void, void_text(card)),
+        }[kw]
         lines += ["", keyword_def(kw).rule]
-        lines.append(f"  {'¡Activo! ' if combo else ''}{combo_text(card)}.")
+        lines.append(f"  {'¡Activo! ' if active else ''}{text}.")
 
     if card.chroma is not None:
         lines += ["", chroma_def(card.chroma).card_note]
@@ -151,6 +165,8 @@ def enemy_tooltip(enemy: Enemy) -> TooltipContent:
 def relic_tooltip(relic: Relic) -> TooltipContent:
     status = "Estado: Activo" if relic.is_active else "Estado: Agotado"
     lines = [relic.description, f"Rareza: {rarity_label(relic.rarity)}"]
+    if relic.relic_class is not CardClass.NEUTRAL:
+        lines.append(f"Solo para {CARD_CLASS_LABEL[relic.relic_class]}")
     if relic.chroma is not None:
         lines.append(chroma_def(relic.chroma).relic_note)
     return TooltipContent(title=chroma_title(relic.name, relic.chroma), lines=[*lines, "", status])

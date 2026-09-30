@@ -187,6 +187,14 @@ RELIC_SPRITE_PATHS: dict[str, str] = {
     "Anillo de Oro":       "item/ring/gold.png",
     "Corazón de Hierro":   "item/amulet/crystal_red.png",
     "Poción de Sangre":    "item/potion/ruby_new.png",
+    "Amuleto de Vitalidad":  "item/amulet/artefact/urand_vitality.png",
+    "Trébol de Siete Hojas": "item/amulet/penta_green.png",
+    "Broche de Evasión":     "item/amulet/artefact/urand_brooch_of_shielding_new.png",
+    "Cuchillo Arrojadizo":   "item/weapon/knife.png",
+    "Ankh":                  "item/amulet/celtic_yellow.png",
+    "Espejo Singular":       "item/misc/mirror.png",
+    "Panacea":               "item/potion/golden.png",
+    "Fuente Eterna":         "item/misc/misc_crystal_new.png",
 }
 
 

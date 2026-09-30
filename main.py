@@ -8,6 +8,7 @@ import pygame
 from src.application.card_rewards import pick_pack_cards, pick_reward_cards
 from src.application.combat_factory import create_combat_from_run
 from src.application.run_manager import (
+    acquire_relic,
     advance_floor,
     apply_combat_victory,
     generate_boss,
@@ -38,6 +39,7 @@ from src.presentation.scenes.settings_scene import SettingsScene
 from src.presentation.scenes.dev_settings_scene import DevSettingsScene
 from src.presentation.scenes.shop_scene import ShopScene
 from src.presentation.scenes.treasure_scene import TreasureScene
+from src.presentation.scenes.warlock_scene import WarlockScene
 from src.presentation.ui.pause_menu import PauseMenu, PauseAction, draw_pause_button, pause_button_rect
 
 # ---------------------------------------------------------------------------
@@ -197,6 +199,10 @@ class SceneManager:
             self._t_event(top)
         elif isinstance(top, BossRewardScene):
             self._t_boss_reward(top)
+        elif isinstance(top, WarlockScene):
+            if top.cleared:
+                top.cleared = False
+                self.pop()
         elif isinstance(top, SettingsScene):
             self._t_settings(top)
         elif isinstance(top, DevSettingsScene):
@@ -269,6 +275,9 @@ class SceneManager:
             gold = generate_event_gold(run, node.id)
             self.push(EventScene(run, gold, node.id, self._fonts, sound=self._sound))
 
+        elif node.room_type == RoomType.WARLOCK:
+            self.push(WarlockScene(run, self._fonts, sound=self._sound))
+
     def _t_combat(self, scene: CombatScene) -> None:
         run = self._run
 
@@ -310,12 +319,7 @@ class SceneManager:
         scene.cleared = False
         run = self._run
         if scene.took_relic:
-            run.add_relic(scene._relic)
-            from src.application import relic_effects
-            run.player_max_hp = (
-                run.character.stats.max_hp
-                + relic_effects.max_hp_bonus(run.relics)
-            )
+            acquire_relic(run, scene._relic)
         self.pop()
 
     def _t_shop(self, scene: ShopScene) -> None:
@@ -371,12 +375,7 @@ class SceneManager:
             scene.cleared = False
             run = self._run
             if scene.chosen_relic is not None:
-                run.add_relic(scene.chosen_relic)
-                from src.application import relic_effects
-                run.player_max_hp = (
-                    run.character.stats.max_hp
-                    + relic_effects.max_hp_bonus(run.relics)
-                )
+                acquire_relic(run, scene.chosen_relic)
             self.pop()              # pop BossRewardScene
             self.pop()              # pop CombatScene
             advance_floor(run)

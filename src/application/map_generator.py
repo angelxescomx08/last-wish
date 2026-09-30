@@ -165,6 +165,16 @@ def generate_map(seed: int, floor: int) -> GameMap:
         if event_id:
             nodes[event_id].room_type = RoomType.EVENT
 
+    # El Brujo: exactly one per floor. Middle rows first; if they are full, any
+    # combat room that is neither the entry nor the boss's row.
+    warlock_id = _pick_from_rows(mid_rows, mutable_pool)
+    if warlock_id is None:
+        fallback = [nid for nid, n in nodes.items()
+                    if n.room_type == RoomType.COMBAT and 0 < n.row < rows - 1]
+        warlock_id = rng.choice(sorted(fallback)) if fallback else None
+    if warlock_id:
+        nodes[warlock_id].room_type = RoomType.WARLOCK
+
     return GameMap(
         floor=floor,
         nodes=nodes,

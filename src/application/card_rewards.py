@@ -24,7 +24,7 @@ from src.domain.card_pool import (
     class_for_character,
 )
 from src.domain.run import Run
-from src.domain.tuning import TUNING, hero_luck
+from src.domain.tuning import TUNING
 
 _REWARD_PRIME: int = 3_141_592_653
 _CHROMA_SALT: int = 0x5EED_C0DE
@@ -44,7 +44,8 @@ def _with_chromas(cards: list[Card], seed: int, luck: int = 0) -> list[Card]:
 
 
 def _luck(run: Run) -> int:
-    return hero_luck(run.character.stats.luck)
+    from src.application.run_manager import run_luck   # local: keeps module load order simple
+    return run_luck(run)
 
 
 def _pick(pool, count: int, rng: random.Random, luck: int):

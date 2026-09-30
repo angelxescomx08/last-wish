@@ -10,6 +10,7 @@ from src.domain.card import Card, CardEffect, CardModifier, CardType, ModifierTa
 from src.domain.card_pool import starter_deck
 from src.domain.character import Character
 from src.domain.combat import CombatState
+from src.domain.keywords import deck_is_singular
 from src.domain.entities import Enemy, Intent, IntentType, Player
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
@@ -105,6 +106,7 @@ def create_combat_for_character(character: Character) -> CombatState:
         hand=Hand(cards=[]),
         draw_pile=DrawPile(cards=all_cards),
         discard_pile=DiscardPile(cards=[]),
+        singular_deck=deck_is_singular(all_cards),
         mana=mana,
         relics=[],
         turn=1,
@@ -133,7 +135,7 @@ def create_combat_from_run(run: Run, enemies: list[Enemy]) -> CombatState:
         current_hp=min(run.player_current_hp, base_max_hp),
         dexterity=run.character.stats.dexterity + TUNING.extra_dexterity,
         attack_bonus=run.character.stats.damage + TUNING.extra_damage,
-        luck=hero_luck(run.character.stats.luck),
+        luck=hero_luck(run.character.stats.luck) + relic_effects.luck_bonus(run.relics),
     )
 
     mana = Mana(
@@ -149,6 +151,7 @@ def create_combat_from_run(run: Run, enemies: list[Enemy]) -> CombatState:
         enemies=enemies,
         hand=Hand(cards=[]),
         draw_pile=DrawPile(cards=deck_copy),
+        singular_deck=deck_is_singular(deck_copy),
         discard_pile=DiscardPile(cards=[]),
         mana=mana,
         relics=list(run.relics),

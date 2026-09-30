@@ -10,6 +10,7 @@ class RoomType(Enum):
     SHOP     = auto()
     EVENT    = auto()
     BOSS     = auto()
+    WARLOCK  = auto()   # El Brujo: upgrade cards for gold (one per floor)
 
 
 @dataclass

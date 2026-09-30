@@ -10,6 +10,10 @@ from src.presentation.ui.tooltip import draw_tooltip
 class CollectionViewer:
     tile_width = 180
     tile_height = 254
+    close_label = 'Cerrar ×'
+    footer_text = 'ESC o clic fuera para cerrar'
+    hint_text = 'Pasa el cursor para ver detalles  ·  Rueda / ↑ ↓ / Re Pág / Av Pág'
+    close_on_outside_click = True
 
     def __init__(self, title: str, items: list, fonts: FontRegistry, noun: str) -> None:
         self._title, self._items, self._fonts, self._noun = title, items, fonts, noun
@@ -56,7 +60,8 @@ class CollectionViewer:
             if event.button in (4, 5):
                 self._scroll_to(self._scroll_y + (-60 if event.button == 4 else 60))
             elif event.button == 1:
-                if self._close_rect.collidepoint(event.pos) or not self._panel.collidepoint(event.pos):
+                if self._close_rect.collidepoint(event.pos) or (
+                        self.close_on_outside_click and not self._panel.collidepoint(event.pos)):
                     self.dismissed = True
                 elif self._max_scroll and self._track.collidepoint(event.pos):
                     if self._thumb.collidepoint(event.pos):
@@ -81,10 +86,10 @@ class CollectionViewer:
         pygame.draw.rect(surface, colors.BORDER_BRIGHT, self._panel, 1, border_radius=12)
         title = self._fonts.get(24).render(f'{self._title}  ·  {len(self._items)} {self._noun}', True, colors.TEXT_ACCENT)
         surface.blit(title, (78, 48))
-        hint = self._fonts.get(13).render('Pasa el cursor para ver detalles  ·  Rueda / ↑ ↓ / Re Pág / Av Pág', True, colors.TEXT_SECONDARY)
+        hint = self._fonts.get(13).render(self.hint_text, True, colors.TEXT_SECONDARY)
         surface.blit(hint, (78, 90))
         pygame.draw.rect(surface, colors.BG_DARK, self._close_rect, border_radius=6)
-        label = self._fonts.get(15).render('Cerrar ×', True, colors.TEXT_PRIMARY)
+        label = self._fonts.get(15).render(self.close_label, True, colors.TEXT_PRIMARY)
         surface.blit(label, label.get_rect(center=self._close_rect.center))
         self._visible_indices = []
         self._item_rects = {}
@@ -109,7 +114,7 @@ class CollectionViewer:
         if self._max_scroll:
             pygame.draw.rect(surface, colors.BG_DARK, self._track, border_radius=6)
             pygame.draw.rect(surface, colors.TEXT_SECONDARY, self._thumb, border_radius=6)
-        footer = self._fonts.get(12).render('ESC o clic fuera para cerrar', True, colors.TEXT_SECONDARY)
+        footer = self._fonts.get(12).render(self.footer_text, True, colors.TEXT_SECONDARY)
         surface.blit(footer, footer.get_rect(center=(640, 668)))
         if self._viewport.collidepoint(self._mouse) and self._drag_offset is None:
             for i, rect in self._item_rects.items():

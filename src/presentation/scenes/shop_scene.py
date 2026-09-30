@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import pygame
 
-from src.application import relic_effects
-from src.application.run_manager import pick_shop_stock
+from src.application.run_manager import acquire_relic, pick_shop_stock
 from src.domain.card_pool import PackTheme
 from src.domain.chroma import chroma_def, chroma_title
 from src.domain.run import Run
@@ -154,11 +153,7 @@ class ShopScene:
                     return
                 self._run.gold -= _RELIC_COST
                 self._sold_relics.add(i)
-                self._run.add_relic(self._relics[i])
-                self._run.player_max_hp = (
-                    self._run.character.stats.max_hp
-                    + relic_effects.max_hp_bonus(self._run.relics)
-                )
+                acquire_relic(self._run, self._relics[i])
                 self._sound.play_purchase()
                 self._show_feedback(f"{self._relics[i].name} obtenida")
                 return

@@ -75,6 +75,18 @@ class CardEffect:
     combo: optional extra layer (keyword COMBO) that also resolves when
     another card was already played this turn.
 
+    singular: optional extra layer (keyword SINGULAR) that also resolves when
+    the deck the combat started with has no repeated cards.
+
+    void: optional extra layer (keyword VOID, "Vacío") that also resolves when
+    paying the card's cost leaves the mana at exactly 0.
+
+    on_turn_start: for POWER cards, runs at the start of each of your turns while
+    the power is in play (golden: twice).
+
+    text: Spanish description of what on_play does, shown on the card face and in
+    its tooltip (for keyword layers, shown after "Combo:" etc.).
+
     text: optional Spanish description of what on_play does (shown for combo
     layers, e.g. "aplica 3 de Veneno más").
     """
@@ -87,7 +99,29 @@ class CardEffect:
     hits_all_enemies: bool = False
     on_play: Callable[[CombatState], None] | None = None
     combo: CardEffect | None = None
+    singular: CardEffect | None = None
+    void: CardEffect | None = None
+    on_turn_start: Callable[[CombatState], None] | None = None
     text: str = ""
+
+
+@dataclass(frozen=True)
+class CardUpgrade:
+    """What one upgrade level changes on a card (see ``domain/card_upgrade.py``).
+
+    Numbers are deltas applied to the card's base effect each time it is upgraded
+    (``cost`` is usually negative: cheaper). ``on_play`` / ``text`` replace the base
+    effect's callback and its Spanish description when set ("algo del texto").
+    ``description`` is the Spanish summary shown by the Brujo; empty = generated.
+    """
+    cost: int = 0
+    damage: int = 0
+    block: int = 0
+    draw: int = 0
+    mana_gain: int = 0
+    on_play: Callable[[CombatState], None] | None = None
+    text: str = ""
+    description: str = ""
 
 
 @dataclass
@@ -111,13 +145,26 @@ class Card:
     stacked_effects: list[CardEffect] = field(default_factory=list)
     modifiers: list[CardModifier] = field(default_factory=list)
     is_broken: bool = False
-    is_upgraded: bool = False
     card_class: CardClass = CardClass.NEUTRAL
     chroma: Chroma | None = None      # special finish (golden = every effect x2)
+    # Upgrades (Brujo): times upgraded, the cap (None = unlimited) and an optional
+    # custom upgrade; without one, ``card_upgrade.default_upgrade`` decides.
+    upgrade_level: int = 0
+    max_upgrades: int | None = 1
+    upgrade: CardUpgrade | None = None
+    base_name: str = ""               # name before "+" suffixes (set post-init)
+    # Played automatically (free) the moment it is drawn, then removed from the combat.
+    play_on_draw: bool = False
 
     def __post_init__(self) -> None:
         if self.rarity is None:
             self.rarity = CardRarity.COMMON
+        if not self.base_name:
+            self.base_name = self.name
+
+    @property
+    def is_upgraded(self) -> bool:
+        return self.upgrade_level > 0
 
     # ------------------------------------------------------------------
     # Queries
@@ -130,12 +177,31 @@ class Card:
         """Combo layers of the chain (keyword COMBO)."""
         return [fx.combo for fx in self.all_effects() if fx.combo is not None]
 
-    def active_effects(self, combo: bool = False) -> list[CardEffect]:
-        """Effects that resolve: the chain, plus its combo layers when combo is on."""
-        return self.all_effects() + (self.combo_effects() if combo else [])
+    def singular_effects(self) -> list[CardEffect]:
+        """Singular layers of the chain (keyword SINGULAR)."""
+        return [fx.singular for fx in self.all_effects() if fx.singular is not None]
+
+    def void_effects(self) -> list[CardEffect]:
+        """Vacío layers of the chain (keyword VOID)."""
+        return [fx.void for fx in self.all_effects() if fx.void is not None]
+
+    def active_effects(self, combo: bool = False, singular: bool = False,
+                       void: bool = False) -> list[CardEffect]:
+        """Effects that resolve: the chain, plus its combo / singular / void layers when on."""
+        return (self.all_effects()
+                + (self.combo_effects() if combo else [])
+                + (self.singular_effects() if singular else [])
+                + (self.void_effects() if void else []))
 
     def keywords(self) -> frozenset[Keyword]:
-        return frozenset({Keyword.COMBO}) if self.combo_effects() else frozenset()
+        out = set()
+        if self.combo_effects():
+            out.add(Keyword.COMBO)
+        if self.singular_effects():
+            out.add(Keyword.SINGULAR)
+        if self.void_effects():
+            out.add(Keyword.VOID)
+        return frozenset(out)
 
     def effect_multiplier(self) -> int:
         """Chroma multiplier (1 = normal, golden = 2)."""
@@ -148,23 +214,23 @@ class Card:
         """
         return self.effect_multiplier()
 
-    def total_damage(self, combo: bool = False) -> int:
+    def total_damage(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo):
+        for fx in self.active_effects(combo, singular, void):
             total = total.add_flat(fx.damage.resolve())
         return total.resolve()
 
-    def total_block(self, combo: bool = False) -> int:
+    def total_block(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo):
+        for fx in self.active_effects(combo, singular, void):
             total = total.add_flat(fx.block.resolve())
         return total.resolve()
 
-    def total_draw(self, combo: bool = False) -> int:
-        return sum(fx.draw for fx in self.active_effects(combo))
+    def total_draw(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
+        return sum(fx.draw for fx in self.active_effects(combo, singular, void))
 
-    def total_mana_gain(self, combo: bool = False) -> int:
-        return sum(fx.mana_gain for fx in self.active_effects(combo))
+    def total_mana_gain(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
+        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void))
 
     def effect_count(self) -> int:
         return len(self.stacked_effects)

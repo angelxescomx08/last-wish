@@ -42,8 +42,11 @@ class TestRoomTypeEnum:
     def test_boss_exists(self):
         assert RoomType.BOSS in RoomType
 
-    def test_exactly_five_variants(self):
-        assert len(list(RoomType)) == 5
+    def test_exactly_six_variants(self):
+        assert len(list(RoomType)) == 6
+
+    def test_warlock_exists(self):
+        assert RoomType.WARLOCK in RoomType
 
     def test_all_unique_values(self):
         values = [t.value for t in RoomType]

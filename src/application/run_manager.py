@@ -15,7 +15,8 @@ from dataclasses import replace
 
 from src.application import relic_effects
 from src.application.map_generator import generate_map
-from src.domain.card_pool import ALL_PACKS, PackDef, starter_deck
+from src.domain.card import CardClass
+from src.domain.card_pool import ALL_PACKS, PackDef, class_for_character, starter_deck
 from src.domain.character import Character
 from src.domain.chroma import roll_chroma
 from src.domain.rarity import weighted_sample
@@ -159,12 +160,57 @@ def _all_relic_defs() -> list[Relic]:
               "+15 de HP máximo permanente.",               tag=RelicTag.IRON_HEART),
         Relic("r_blood",    "Poción de Sangre",
               "Recupera 8 HP después de cada combate.",    tag=RelicTag.BLOOD_POTION),
+        Relic("r_vitality", "Amuleto de Vitalidad",
+              "+10 de HP máximo permanente.",               tag=RelicTag.VITALITY_AMULET),
+        Relic("r_clover",   "Trébol de Siete Hojas",
+              "+100 de suerte: muchas más cartas y reliquias doradas y de mayor rareza.",
+              tag=RelicTag.SEVEN_LEAF_CLOVER),
+        Relic("r_panacea",  "Panacea",
+              "Eres inmune a cualquier debuff de los enemigos.", tag=RelicTag.PANACEA),
+        Relic("r_fount",    "Fuente Eterna",
+              "Al inicio de cada turno ganas 1 de maná máximo.", tag=RelicTag.ETERNAL_FOUNT),
+        Relic("r_ankh",     "Ankh",
+              "Al recibir un golpe fatal, revives con toda tu vida (una vez).",
+              tag=RelicTag.ANKH),
+        Relic("r_mirror",   "Espejo Singular",
+              "Al obtenerla, elimina todas tus cartas repetidas: te quedas con una copia de cada carta.",
+              tag=RelicTag.SINGULAR_MIRROR),
+        Relic("r_brooch",   "Broche de Evasión",
+              "Cada vez que activas un Combo, ganas 1 de bloqueo.",
+              tag=RelicTag.EVASION_BROOCH, relic_class=CardClass.ROGUE),
+        Relic("r_knife",    "Cuchillo Arrojadizo",
+              "Cada vez que activas un Combo, inflige 1 de daño a un enemigo al azar.",
+              tag=RelicTag.THROWING_KNIFE, relic_class=CardClass.ROGUE),
     ]
 
 
+def acquire_relic(run: Run, relic: Relic) -> None:
+    """Add ``relic`` to the run and apply its on-pickup effects (treasure, boss and shop).
+
+    * Every relic: max HP is recomputed (Corazón de Hierro, Amuleto de Vitalidad).
+    * Espejo Singular: removes every repeated card, keeping one copy of each.
+    """
+    run.add_relic(relic)
+    run.player_max_hp = run.character.stats.max_hp + relic_effects.max_hp_bonus(run.relics)
+    if relic.tag is RelicTag.SINGULAR_MIRROR:
+        run.deck = relic_effects.remove_duplicate_cards(run.deck)
+
+
+def _relic_pool(run: Run, minimum: int = 1) -> list[Relic]:
+    """Relics this hero can find (neutral + own class), not owned yet.
+
+    If fewer than ``minimum`` remain, owned ones come back (duplicates allowed).
+    """
+    own = class_for_character(run.character.id)
+    allowed = [r for r in _all_relic_defs() if r.relic_class in (CardClass.NEUTRAL, own)]
+    owned_tags = {r.tag for r in run.relics}
+    pool = [r for r in allowed if r.tag not in owned_tags]
+    return pool if len(pool) >= minimum else allowed
+
+
 def run_luck(run: Run) -> int:
-    """Luck used for drop odds: character luck + Pruebas bonus."""
-    return hero_luck(run.character.stats.luck)
+    """Luck used for drop odds: character luck + Pruebas bonus + relics (Trébol: +100)."""
+    return hero_luck(run.character.stats.luck) + relic_effects.luck_bonus(run.relics)
 
 
 def _pick_relics(pool: list[Relic], count: int, rng: random.Random, luck: int) -> list[Relic]:
@@ -181,10 +227,7 @@ def _with_chroma(relics: list[Relic], rng: random.Random, luck: int = 0) -> list
 
 def pick_treasure_relic(run: Run, room_id: str) -> Relic:
     """Choose a relic not already owned by the player."""
-    owned_tags = {r.tag for r in run.relics}
-    pool       = [r for r in _all_relic_defs() if r.tag not in owned_tags]
-    if not pool:
-        pool = _all_relic_defs()   # fallback: duplicates allowed
+    pool = _relic_pool(run)
     rng = random.Random(_enemy_seed(run, room_id) ^ 0x1234)
     relics = _pick_relics(pool, 1, rng, run_luck(run))
     return _with_chroma(relics, rng, run_luck(run))[0]
@@ -192,10 +235,7 @@ def pick_treasure_relic(run: Run, room_id: str) -> Relic:
 
 def pick_boss_relics(run: Run, count: int = 3) -> list[Relic]:
     """Choose `count` distinct relics for the boss reward screen."""
-    owned_tags = {r.tag for r in run.relics}
-    pool       = [r for r in _all_relic_defs() if r.tag not in owned_tags]
-    if len(pool) < count:
-        pool = _all_relic_defs()
+    pool = _relic_pool(run, count)
     rng = random.Random(run.seed * 37 + run.floor * 13)
     return _with_chroma(_pick_relics(pool, count, rng, run_luck(run)), rng, run_luck(run))
 
@@ -216,10 +256,7 @@ def advance_floor(run: Run) -> None:
 def pick_shop_stock(run: Run) -> tuple[list[PackDef], list[Relic]]:
     """Choose three distinct offers of each kind, stable for this room."""
     rng = random.Random(f"shop:{run.seed}:{run.floor}:{run.current_room_id}")
-    owned_tags = {relic.tag for relic in run.relics}
-    pool = [relic for relic in _all_relic_defs() if relic.tag not in owned_tags]
-    if len(pool) < 3:
-        pool = _all_relic_defs()
+    pool = _relic_pool(run, 3)
     packs, relics = rng.sample(ALL_PACKS, 3), _pick_relics(pool, 3, rng, run_luck(run))
     relics = _with_chroma(relics, rng, run_luck(run))
     packs = [replace(p, chroma=roll_chroma(rng, kind="pack", luck=run_luck(run))) for p in packs]

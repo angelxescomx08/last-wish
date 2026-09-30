@@ -39,6 +39,7 @@ _FILL_AVAIL: dict[RoomType, pygame.Color] = {
     RoomType.SHOP:     pygame.Color( 35, 110, 185),
     RoomType.EVENT:    pygame.Color(110,  50, 170),
     RoomType.BOSS:     pygame.Color(200,  25,  25),
+    RoomType.WARLOCK:  pygame.Color( 30, 140, 110),
 }
 _FILL_LOCKED: dict[RoomType, pygame.Color] = {
     t: pygame.Color(max(c.r - 130, 14), max(c.g - 130, 14), max(c.b - 130, 14))
@@ -60,6 +61,7 @@ _LABELS: dict[RoomType, str] = {
     RoomType.SHOP:     "Tienda",
     RoomType.EVENT:    "Evento",
     RoomType.BOSS:     "JEFE",
+    RoomType.WARLOCK:  "Brujo",
 }
 
 # ---------------------------------------------------------------------------

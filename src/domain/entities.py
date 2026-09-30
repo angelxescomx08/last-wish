@@ -25,6 +25,35 @@ class StatusEffect:
     is_buff: bool
 
 
+# Status "Débil": the one who has it deals 25 % less attack damage (rounded down).
+WEAK: str = "Débil"
+WEAK_FACTOR_NUM, WEAK_FACTOR_DEN = 3, 4
+
+
+def weakened(amount: int, status_effects: list[StatusEffect]) -> int:
+    """``amount`` reduced by Débil (x0.75, rounded down) when present."""
+    if any(se.name == WEAK and se.stacks > 0 for se in status_effects):
+        return amount * WEAK_FACTOR_NUM // WEAK_FACTOR_DEN
+    return amount
+
+
+def add_status(status_effects: list[StatusEffect], name: str, stacks: int, *, is_buff: bool) -> None:
+    """Add ``stacks`` to an existing status of that name, or append a new one."""
+    for se in status_effects:
+        if se.name == name:
+            se.stacks += stacks
+            return
+    status_effects.append(StatusEffect(name, stacks, is_buff))
+
+
+def tick_status(status_effects: list[StatusEffect], name: str) -> list[StatusEffect]:
+    """One stack of ``name`` wears off; returns the list without exhausted statuses."""
+    for se in status_effects:
+        if se.name == name:
+            se.stacks -= 1
+    return [se for se in status_effects if se.stacks > 0]
+
+
 @dataclass
 class Enemy:
     id: str

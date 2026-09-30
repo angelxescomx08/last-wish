@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.application.end_turn import draw_opening_hand
+from src.domain.keywords import deck_is_singular
 from src.domain.card import Card, CardEffect, CardModifier, CardType, ModifierTag
 from src.domain.combat import CombatState
 from src.domain.entities import Enemy, Intent, IntentType, Player, StatusEffect
@@ -111,6 +112,7 @@ def create_sample_combat() -> CombatState:
         hand=Hand(cards=[]),
         draw_pile=DrawPile(cards=all_draw_cards),
         discard_pile=DiscardPile(cards=discard_cards),
+        singular_deck=deck_is_singular([*all_draw_cards, *discard_cards]),
         mana=Mana(current=3, maximum=3),
         relics=relics,
         turn=1,

@@ -78,7 +78,7 @@ class TestCardClassDomain:
             assert len(card_factories_for_theme(theme, {CardClass.NEUTRAL})) >= 2
 
     def test_filter_without_classes_returns_whole_theme(self):
-        assert len(card_factories_for_theme(PackTheme.ACERO)) == 12
+        assert len(card_factories_for_theme(PackTheme.ACERO)) == 12 + 8   # + La Pícara
 
     def test_class_filter_across_themes(self):
         mage = card_factories_for_classes({CardClass.MAGE})

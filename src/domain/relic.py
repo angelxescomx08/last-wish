@@ -17,6 +17,14 @@ class RelicTag(Enum):
     GOLD_RING       = "gold_ring"        # +15 de oro extra por victoria de combate
     IRON_HEART      = "iron_heart"       # +15 de HP máximo permanente
     BLOOD_POTION    = "blood_potion"     # Recupera 8 HP después de cada combate
+    VITALITY_AMULET = "vitality_amulet"  # +10 de HP máximo permanente
+    SEVEN_LEAF_CLOVER = "seven_leaf_clover"  # +100 de suerte
+    EVASION_BROOCH  = "evasion_brooch"   # Pícara: al activar un Combo → +1 de bloqueo
+    SINGULAR_MIRROR = "singular_mirror"  # Al obtenerla: elimina las cartas repetidas del mazo
+    PANACEA         = "panacea"          # Inmune a los debuffs de los enemigos
+    ETERNAL_FOUNT   = "eternal_fount"    # +1 de maná máximo al inicio de cada turno
+    ANKH            = "ankh"             # Al recibir un golpe fatal, revive con toda la vida
+    THROWING_KNIFE  = "throwing_knife"   # Pícara: al activar un Combo → 1 de daño a un enemigo al azar
 
 
 # Tier of each relic (same five tiers as cards). Luck makes higher tiers likelier.
@@ -29,6 +37,14 @@ RELIC_RARITY: dict[RelicTag, Rarity] = {
     RelicTag.ENERGY_STONE:    Rarity.RARE,
     RelicTag.COMBAT_AMULET:   Rarity.EPIC,
     RelicTag.SPECTRAL_SHIELD: Rarity.LEGENDARY,
+    RelicTag.VITALITY_AMULET: Rarity.COMMON,
+    RelicTag.EVASION_BROOCH:  Rarity.UNCOMMON,
+    RelicTag.THROWING_KNIFE:  Rarity.UNCOMMON,
+    RelicTag.SEVEN_LEAF_CLOVER: Rarity.LEGENDARY,
+    RelicTag.ANKH:            Rarity.LEGENDARY,
+    RelicTag.SINGULAR_MIRROR: Rarity.LEGENDARY,
+    RelicTag.PANACEA:         Rarity.LEGENDARY,
+    RelicTag.ETERNAL_FOUNT:   Rarity.LEGENDARY,
 }
 
 
@@ -41,6 +57,8 @@ class Relic:
     is_active: bool = True
     # Class card pools this relic adds to rewards and packs (mixes pools).
     card_classes: frozenset[CardClass] = field(default_factory=frozenset)
+    # Who can find it: NEUTRAL = every hero, otherwise only that class's hero.
+    relic_class: CardClass = CardClass.NEUTRAL
     chroma: Chroma | None = None   # special finish (golden = effects x2)
     times_triggered: int = 0       # uses spent by one-shot relics (charges = multiplier)
     rarity: Rarity | None = None   # None → taken from RELIC_RARITY by tag (Common if untagged)

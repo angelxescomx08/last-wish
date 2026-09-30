@@ -22,7 +22,7 @@ import pygame
 
 from src.domain.card import Card, CardRarity, CardType
 from src.domain.chroma import chroma_def
-from src.domain.keywords import combo_text
+from src.domain.keywords import combo_text, singular_text, void_text
 from src.domain.numbers import BigValue
 from src.infrastructure import colors
 from src.infrastructure.card_assets import card_frame, card_illustration, card_layout
@@ -68,6 +68,8 @@ _DEF_INK = (150, 210, 255)
 _BONUS_INK = (140, 240, 140)
 _HOLE = (18, 16, 24)
 KEYWORD_READY_GLOW = (70, 225, 170)   # aura on cards whose Combo is ready
+SINGULAR_READY_GLOW = (185, 140, 255)  # aura on cards whose Singular is ready
+VOID_READY_GLOW = (90, 170, 255)       # aura on cards whose Vacío is ready
 
 _CACHE_MAX = 256
 _cache: "OrderedDict[tuple, pygame.Surface]" = OrderedDict()
@@ -104,15 +106,28 @@ def _wrap(text: str, font: pygame.font.Font, max_w: int) -> list[str]:
     return lines or [""]
 
 
-def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = False) -> list[str]:
+def _keyword_glow(card: Card, combo: bool, singular: bool,
+                  void: bool = False) -> tuple[int, int, int] | None:
+    """Aura colour for a card whose keyword is ready (Combo > Vacío > Singular), or None."""
+    if combo and card.combo_effects():
+        return KEYWORD_READY_GLOW
+    if void and card.void_effects():
+        return VOID_READY_GLOW
+    if singular and card.singular_effects():
+        return SINGULAR_READY_GLOW
+    return None
+
+
+def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = False,
+                   singular: bool = False, void: bool = False) -> list[str]:
     """Spanish effect lines built from the card's data (effective values).
 
-    ``combo``: the card's Combo is ready, so its numbers already include the combo
-    layer and the keyword line says so.
+    ``combo`` / ``singular``: that keyword is ready, so the numbers already include
+    its layer and the keyword line says so.
     """
     lines: list[str] = []
-    draw = card.total_draw(combo)
-    mana = card.total_mana_gain(combo)
+    draw = card.total_draw(combo, singular, void)
+    mana = card.total_mana_gain(combo, singular, void)
     if card.card_type == CardType.ATTACK and damage > 0:
         lines.append(f"Inflige {BigValue.format_int(damage)} de daño.")
     if block > 0:
@@ -121,10 +136,17 @@ def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = Fa
         lines.append(f"Roba {draw} carta{'s' if draw > 1 else ''}.")
     if mana > 0:
         lines.append(f"+{mana} de maná.")
-    if card.card_type == CardType.POWER:
+    for fx in card.all_effects():          # on_play effects described in words
+        if fx.text:
+            lines.append(fx.text[0].upper() + fx.text[1:] + ("" if fx.text.endswith(".") else "."))
+    if card.card_type == CardType.POWER and not any(fx.text for fx in card.all_effects()):
         lines.append("Poder permanente.")
     if card.combo_effects():
         lines.append("¡Combo activo!" if combo else f"Combo: {combo_text(card)}.")
+    if card.singular_effects():
+        lines.append("¡Singular activo!" if singular else f"Singular: {singular_text(card)}.")
+    if card.void_effects():
+        lines.append("¡Vacío activo!" if void else f"Vacío: {void_text(card)}.")
     return lines[:4]
 
 
@@ -176,20 +198,26 @@ def _backdrop(card_type: CardType, size: tuple[int, int]) -> pygame.Surface:
 
 def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: int = CARD_H,
                         affordable: bool = True, bonus_damage: int = 0,
-                        bonus_block: int = 0, combo: bool = False) -> pygame.Surface:
+                        bonus_block: int = 0, combo: bool = False,
+                        singular: bool = False, void: bool = False,
+                        cost: int | None = None) -> pygame.Surface:
     """Compose the static part of a card (cached by every value it displays).
 
-    ``combo``: its Combo is ready — numbers include the combo layer (shown in green).
+    ``combo`` / ``singular``: that keyword is ready — numbers include its layer (shown boosted).
     """
     combo = combo and bool(card.combo_effects())
-    raw_damage, raw_block = card.total_damage(combo), card.total_block(combo)
+    singular = singular and bool(card.singular_effects())
+    void = void and bool(card.void_effects())
+    raw_damage = card.total_damage(combo, singular, void)
+    raw_block = card.total_block(combo, singular, void)
     damage = raw_damage + bonus_damage if raw_damage > 0 else 0
     block = raw_block + bonus_block if raw_block > 0 else 0
-    combo_dmg = combo and raw_damage > card.total_damage()
-    combo_blk = combo and raw_block > card.total_block()
+    combo_dmg = (combo or singular or void) and raw_damage > card.total_damage()
+    combo_blk = (combo or singular or void) and raw_block > card.total_block()
     rarity = (card.rarity or CardRarity.COMMON).name
-    key = (card.id, card.name, card.card_type, rarity, card.cost, damage, block, bonus_damage > 0 or combo_dmg,
-           bonus_block > 0 or combo_blk, tuple(_ability_lines(card, damage, block, combo)), affordable,
+    shown_cost = card.cost if cost is None else cost
+    key = (card.id, card.name, card.card_type, rarity, shown_cost, damage, block, bonus_damage > 0 or combo_dmg,
+           bonus_block > 0 or combo_blk, tuple(_ability_lines(card, damage, block, combo, singular, void)), affordable,
            card.is_broken, card.chroma, w, h, id(fonts))
     cached = _cache.get(key)
     if cached is not None:
@@ -224,8 +252,10 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     # 4. text
     c, r = _circle(z["mana"], w, h)
     mana_col = _MANA_INK if affordable else (235, 80, 80)
-    cost = _outlined(fonts.get(max(10, round(r * 2.1))), str(card.cost), mana_col)
-    surf.blit(cost, cost.get_rect(center=c))
+    if affordable and shown_cost < card.cost:
+        mana_col = (110, 235, 130)          # discounted this turn
+    cost_s = _outlined(fonts.get(max(10, round(r * 2.1))), str(shown_cost), mana_col)
+    surf.blit(cost_s, cost_s.get_rect(center=c))
 
     name_rect = _rect(z["name"], w, h)
     size = max(8, round(name_rect.h * 0.78))
@@ -244,7 +274,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
         plate = _outlined(fonts.get(max(7, round(h * 0.048))), label, st.bright, outline=st.dark)
         surf.blit(plate, plate.get_rect(centerx=text_rect.centerx, bottom=text_rect.bottom))
         text_rect = pygame.Rect(text_rect.x, text_rect.y, text_rect.w, max(1, text_rect.h - plate.get_height()))
-    lines = _ability_lines(card, damage, block, combo)
+    lines = _ability_lines(card, damage, block, combo, singular, void)
     if lines:
         font = fonts.get(max(8, round(h * 0.052)))
         wrapped: list[str] = []
@@ -299,14 +329,19 @@ def draw_card(
     bonus_damage: int = 0,
     bonus_block: int = 0,
     combo: bool = False,
+    singular: bool = False,
+    void: bool = False,
+    cost: int | None = None,
 ) -> pygame.Rect:
     """Draw a card and return its bounding Rect (lifted when hovered or selected)."""
     lift = -20 if (selected or hovered) else 0
     rect = pygame.Rect(x, y + lift, CARD_W, CARD_H)
-    body = render_card_surface(card, fonts, affordable=affordable,
-                               bonus_damage=bonus_damage, bonus_block=bonus_block, combo=combo)
-    if combo and card.combo_effects():
-        chroma_fx.draw_silhouette_aura(surface, body, rect.center, KEYWORD_READY_GLOW, chroma_fx.now(),
+    body = render_card_surface(card, fonts, affordable=affordable, bonus_damage=bonus_damage,
+                               bonus_block=bonus_block, combo=combo, singular=singular, void=void,
+                               cost=cost)
+    glow = _keyword_glow(card, combo, singular, void)
+    if glow is not None:
+        chroma_fx.draw_silhouette_aura(surface, body, rect.center, glow, chroma_fx.now(),
                                        key=(CARD_W, CARD_H, card.rarity), speed=4.0)
     if card.chroma is not None:
         t = chroma_fx.now()
@@ -357,6 +392,9 @@ def draw_card_at(
     bonus_block: int = 0,
     outline: tuple[int, int, int] | None = None,
     combo: bool = False,
+    singular: bool = False,
+    void: bool = False,
+    cost: int | None = None,
 ) -> pygame.Rect:
     """Draw a card centred on ``center``; returns its (unrotated) rect.
 
@@ -366,11 +404,13 @@ def draw_card_at(
     A broken card's slash is part of the cached face.
     """
     w, h = card_size(scale)
-    body = render_card_surface(card, fonts, w=w, h=h, affordable=affordable,
-                               bonus_damage=bonus_damage, bonus_block=bonus_block, combo=combo)
+    body = render_card_surface(card, fonts, w=w, h=h, affordable=affordable, bonus_damage=bonus_damage,
+                               bonus_block=bonus_block, combo=combo, singular=singular, void=void,
+                               cost=cost)
     tilt = int(round(angle))
-    if combo and card.combo_effects():   # keyword ready: pulsing aura hugging the card
-        chroma_fx.draw_silhouette_aura(surface, body, (round(center[0]), round(center[1])), KEYWORD_READY_GLOW,
+    glow = _keyword_glow(card, combo, singular, void)
+    if glow is not None:   # keyword ready: pulsing aura hugging the card
+        chroma_fx.draw_silhouette_aura(surface, body, (round(center[0]), round(center[1])), glow,
                                        chroma_fx.now(), key=(w, h, card.rarity), angle=tilt, speed=4.0)
     if card.chroma is not None:
         # Animated each frame, so it bypasses the rotation cache.
