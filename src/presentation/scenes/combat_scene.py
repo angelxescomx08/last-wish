@@ -16,16 +16,19 @@ from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import (
     IDLE_CYCLE_SECONDS, SpriteLoader, has_hero_sprites, hero_animation_seconds, hero_id_for,
+    hero_strike_seconds,
 )
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.fx.bursts import GLOW, SPARK, BurstParticles
 from src.presentation.fx.enemy_animator import EnemyAnimator
+from src.presentation.fx.hero_fx import HeroFx
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_play import CardPlayInput, PlayRequest
 from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
 from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
 from src.presentation.ui.entity_widget import (
     ENEMY_H,
+    PLAYER_H,
     ENEMY_W,
     PLAYER_W,
     draw_enemy,
@@ -108,6 +111,7 @@ _CAST_INTRO: float = 0.35                  # card flies to the stage before the 
 _CAST_GAP: float = 0.65                    # time between casts
 _CAST_OUTRO: float = 0.8                   # linger after the last cast (see the kill)
 _KILL_HOLD: float = 0.7                    # any killing blow: wait before declaring victory
+_DEATH_HOLD: float = 0.35                  # after the hero's death animation, before the defeat screen
 _CAST_STAGE: tuple[float, float] = (560.0, 250.0)
 _GOLD = ((255, 250, 210), (255, 214, 90), (230, 150, 30), (140, 80, 10))
 _ENEMY_HIT_PAD: tuple[int, int] = (40, 70)
@@ -189,7 +193,7 @@ class CombatScene:
         self._sprites             = SpriteLoader()
         self._backdrop            = DungeonBackdrop()
         self._idle_time = 0.0
-        self._hero_action: str | None = None   # attack | guard | hurt
+        self._hero_action: str | None = None   # attack | guard | hurt | cast | death
         self._hero_id = hero_id_for(state.player.name) or "warrior"
         self._hero_action_time = 0.0
         self._is_boss             = is_boss
@@ -218,6 +222,10 @@ class CombatScene:
             if sheet is not None:
                 self._enemy_anims[i] = EnemyAnimator(sheet, seed=31 + 17 * i, phase=0.47 * i)
         self._pending_hero_hurt: float | None = None     # hero flinches when the enemy claws land
+        self._pending_hero_name = "hurt"                # ... or falls ("death")
+        # Code-drawn heroes (sheet with a strike event) get timed particles and a floor shadow.
+        strike = hero_strike_seconds(self._hero_id) if has_hero_sprites(state.player.name) else 0.0
+        self._hero_fx: HeroFx | None = HeroFx(strike=strike, seed=5) if strike > 0 else None
 
         # Hit-test rects (rebuilt each draw call)
         self._card_rects:     list[pygame.Rect]  = []
@@ -280,11 +288,13 @@ class CombatScene:
         self._advance_hero_animation(max(0.0, dt))
         for anim in self._enemy_anims.values():
             anim.update(dt)
+        if self._hero_fx is not None:
+            self._hero_fx.update(dt)
         if self._pending_hero_hurt is not None:
             self._pending_hero_hurt -= max(0.0, dt)
             if self._pending_hero_hurt <= 0:
                 self._pending_hero_hurt = None
-                self._play_hero_action("hurt")
+                self._play_hero_action(self._pending_hero_name)
         self._backdrop.update(max(0.0, dt))
         if self._overlay is not None and self._play.cancel():
             self._state.selected_card_index = None
@@ -342,6 +352,9 @@ class CombatScene:
         """True once the player's HP reaches 0 (latches until acknowledged)."""
         if self.presentation_busy or self._pending_hero_hurt is not None:
             return False
+        if self._hero_action == "death" and \
+                self._hero_action_time < hero_animation_seconds("death", self._hero_id) + _DEATH_HOLD:
+            return False                       # let her fall before the defeat screen
         return not self._state.player.is_alive
 
     @property
@@ -459,6 +472,14 @@ class CombatScene:
             self._draw_active_powers(surface)
 
     def _draw_player(self, surface: pygame.Surface) -> None:
+        center = (_PLAYER_X + PLAYER_W / 2, _PLAYER_Y + PLAYER_H / 2)
+        if self._hero_fx is not None:
+            self._hero_fx.draw_shadow(surface, center)
+        self._draw_player_sprite(surface)
+        if self._hero_fx is not None:
+            self._hero_fx.draw(surface, center)
+
+    def _draw_player_sprite(self, surface: pygame.Surface) -> None:
         self._player_rect = draw_player(
             surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
             sprite=self._sprites.get_player_sprite(self._state.player.name,
@@ -953,14 +974,18 @@ class CombatScene:
             self._play_hero_action("attack")
         elif block_gained > 0:
             self._play_hero_action("guard")
+        else:
+            self._play_hero_action("cast")        # skills and powers (heroes whose sheet has it)
         if block_gained > 0 and self._player_rect:
-            self._fx.add_block_flash(self._player_rect, block_gained)
+            self._fx.add_block_flash(self._player_rect, block_gained, flash=self._hero_fx is None)
             self._sound.play_block()
 
+        # Enemies react when the blade connects (code-drawn hero), not when the card is played.
+        delay = hero_strike_seconds(self._hero_id) if self._hero_action == "attack" and self._hero_fx else 0.0
         for i, (old_hp, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
             dmg = old_hp - enemy.current_hp
             if dmg > 0 and i < len(self._enemy_rects):
-                self._enemy_hit(i, dmg, killed=not enemy.is_alive)
+                self._enemy_hit(i, dmg, killed=not enemy.is_alive, delay=delay)
 
     # ------------------------------------------------------------------
     # Multi-cast replay (golden cards cast twice)
@@ -1050,37 +1075,47 @@ class CombatScene:
         return self._hero_action
 
     def _play_hero_action(self, name: str) -> None:
+        if self._hero_action == "death":
+            return                                   # she stays down
         if hero_animation_seconds(name, self._hero_id) > 0:
             self._hero_action = name
             self._hero_action_time = 0.0
+            if self._hero_fx is not None:
+                self._hero_fx.play(name)
 
     def _advance_hero_animation(self, dt: float) -> None:
         if self._hero_action is None:
             self._idle_time = (self._idle_time + dt) % IDLE_CYCLE_SECONDS
             return
         self._hero_action_time += dt
+        if self._hero_action == "death":
+            return                                   # held on the last frame
         if self._hero_action_time >= hero_animation_seconds(self._hero_action, self._hero_id):
             # every action ends on idle frame 0, so idle restarts without a pop
             self._hero_action = None
             self._hero_action_time = 0.0
             self._idle_time = 0.0
 
-    def _enemy_hit(self, i: int, dmg: int, *, killed: bool, hold: bool = True) -> None:
-        """Damage number, sound and the enemy's reaction (hurt / death animation or flashes)."""
+    def _enemy_hit(self, i: int, dmg: int, *, killed: bool, hold: bool = True,
+                   delay: float = 0.0) -> None:
+        """Damage number, sound and the enemy's reaction (hurt / death animation or flashes).
+
+        ``delay`` (s) postpones the visuals until the hero's blade connects.
+        """
         rect = self._enemy_rects[i]
         anim = self._enemy_anims.get(i)
-        self._fx.add_hit_flash(rect, dmg, flash=anim is None)
+        self._fx.add_hit_flash(rect, dmg, flash=anim is None, delay=delay)
         self._sound.play_attack()
         if killed:
             if anim is not None:
-                anim.play("death")
+                anim.play("death", delay=delay)
             else:
-                self._fx.add_death_flash(rect)
+                self._fx.add_death_flash(rect, delay=delay)
             self._sound.play_death()
             if hold:
-                self._hold_time = _KILL_HOLD      # let the kill be seen before victory
+                self._hold_time = _KILL_HOLD + delay      # let the kill be seen before victory
         elif anim is not None:
-            anim.play("hurt")
+            anim.play("hurt", delay=delay)
 
     def _do_end_turn(self) -> None:
         state  = self._state
@@ -1110,11 +1145,13 @@ class CombatScene:
 
         dmg = old_hp - state.player.current_hp
         wait = strike or 0.0
+        reaction = "hurt" if state.player.is_alive else "death"
         if dmg > 0:
             if wait > 0:
                 self._pending_hero_hurt = wait
+                self._pending_hero_name = reaction
             else:
-                self._play_hero_action("hurt")
+                self._play_hero_action(reaction)
         if dmg > 0 and self._player_rect:
-            self._fx.add_hit_flash(self._player_rect, dmg, delay=wait)
+            self._fx.add_hit_flash(self._player_rect, dmg, delay=wait, flash=self._hero_fx is None)
             self._sound.play_hit()

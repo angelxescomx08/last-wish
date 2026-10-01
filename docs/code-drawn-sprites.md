@@ -2,8 +2,9 @@
 
 Approved by the user (2026-09-30) after the first enemy, **Espectro** (a hooded
 wraith), was drawn and animated entirely by code. Use this method for new
-enemies. Heroes keep their own pipeline (approved illustration → base → sheet,
-see `visual-design.md`).
+enemies. **La Guerrera** was then redrawn the same way (section 10), because the
+illustrated heroine did not match the pixel art; the other heroes still use the
+illustration pipeline (`visual-design.md`) until the user asks otherwise.
 
 Reference implementation:
 
@@ -188,3 +189,48 @@ ellipse with marching dashes, hit flash, dissolve, rising motes.
 5. Add the enemy to `run_manager.generate_enemies` templates.
 6. Generate, preview, test, then add a row to `CLAUDE.md` and to
    `docs/game_design.md`.
+
+## 10. Humanoids (La Guerrera): one mass, exactly like the Espectro
+
+Reference: `scripts/generate_warrior_code_sprites.py`, runtime `fx/hero_fx.py`,
+preview `output/guerrera-preview.gif`.
+
+**Two rejected attempts — do not repeat them:**
+
+1. A joint rig with IK, capsule limbs, joint ellipses and outlines between
+   parts: read as a doll made of pieces.
+2. The same figure with each limb, the torso and the ponytail as separate
+   smooth sweeps stacked on top of each other: no visible joints, but still
+   assembled from pieces ("la estás haciendo por piezas").
+
+**What the user approved is the Espectro technique applied literally:**
+
+* The whole figure is **one silhouette scanned row by row** from the top of the
+  head to the soles (`body_mass`). Each row has a centre line (hips + `lean`,
+  squash `sx`/`sy`, `nod` for the head) and back/front extents from ONE height
+  profile (`Body.extents`): head dome with the face profile (nose, chin),
+  neck, shoulders, breastplate, belt, flaring tabard with a ragged hem.
+* Everything is a **zone painted inside that mass**, decided by row (`ly`) and
+  by the signed distance from the centre line (`u`): hair vs face (bangs line,
+  circlet and gem), gorget, pauldron rim, plate with a specular streak and a
+  centre ridge, belt and buckle, tabard with folds, panel slits, gold hem and
+  emblem. Behind the body, in the same row scan, the **ponytail** hangs down
+  the back and the **cape** fills out to its waving back edge (priority: body >
+  boots > ponytail > cape).
+* Below the tabard the same scan paints the **boots**: two spans per row,
+  anchored to the floor (`ff`, `bf`), so idle boots never move.
+* All zones use the same light (upper-left, `u`-based), folds and Bayer dither
+  (`tone`). One coloured outline goes around the whole mass.
+* **Only the sword and the sword arm are drawn on top**, with a dark rim where
+  they cross the body — the Espectro's front sleeve rule. Face details (eye,
+  brow, mouth, blush) are single pixels painted onto the mass.
+* **Animation deforms the mass**, never limbs: offsets, lean, squash/stretch,
+  head nod, hair/cape wind and phase, a stepped front boot for the lunge, and
+  `kneel` (the mass sinks, the tabard pools on the floor and hides the boots)
+  for death.
+
+Test that pins it: `test_one_mass_without_seams` (the opaque pixels of a frame
+form one connected region). Timing follows section 6; hero extras are `cast`
+and `death` (held). The sheet JSON records `events.attack.strike_frame`; the
+scene delays the enemy's reaction until `hero_strike_seconds()`, and `HeroFx`
+fires its sparks at the same moment.

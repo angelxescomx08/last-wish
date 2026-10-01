@@ -62,6 +62,7 @@ class HeroSheets:
     cell: int                                   # largest cell size (px)
     sheets: dict[int, str]                      # cell size -> file name
     animations: dict[str, HeroAnimation]
+    strike_frame: int | None = None             # attack frame where the weapon connects
 
 
 def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
@@ -71,10 +72,11 @@ def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
         meta = json.loads(path.read_text(encoding="utf-8"))
         cell = int(meta["cell"])
         sheets = {int(k): str(v) for k, v in meta.get("sheets", {str(cell): f"{hero}_sheet.png"}).items()}
+        strike = meta.get("events", {}).get("attack", {}).get("strike_frame")
         return HeroSheets(cell, sheets, {
             name: HeroAnimation(int(a["row"]), tuple(ms / 1000 for ms in a["durations_ms"]), bool(a["loop"]))
             for name, a in meta["animations"].items()
-        })
+        }, int(strike) if strike is not None else None)
     except (OSError, ValueError, KeyError, TypeError):
         return HeroSheets(192, {192: f"{hero}_sheet.png"}, {"idle": HeroAnimation(0, (0.1,) * 16, True)})
 
@@ -102,6 +104,15 @@ def hero_animation_seconds(name: str, hero: str = "warrior") -> float:
     sheets = HEROES.get(hero)
     anim = sheets.animations.get(name) if sheets else None
     return anim.total if anim else 0.0
+
+
+def hero_strike_seconds(hero: str = "warrior") -> float:
+    """Seconds from the start of ``attack`` until the weapon connects (0.0 when the sheet has no event)."""
+    sheets = HEROES.get(hero)
+    anim = sheets.animations.get("attack") if sheets else None
+    if anim is None or sheets.strike_frame is None:
+        return 0.0
+    return sum(anim.durations[:max(0, min(sheets.strike_frame, len(anim.durations)))])
 
 
 _CARD_ASSETS = (

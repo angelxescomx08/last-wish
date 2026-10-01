@@ -145,7 +145,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
 | `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`), `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
-| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
+| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `hero_strike_seconds(hero)` (attack time until the blade connects, from the sheet's `events.attack.strike_frame`; 0 when absent), `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
 
@@ -171,6 +171,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
 | `fx/bursts.py` | `BurstParticles` — pooled one-shot particles in screen px, each with its own palette/size/drag/gravity and style (`SQUARE`, `SPARK` streak, `GLOW` additive): `emit`, `burst` (radial), `implode` (ring → centre), `update`, `draw`; `soft_glow(color, radius)` cached additive light, `scaled(color, k)` |
 | `fx/enemy_animator.py` | `EnemyAnimator(sheet, seed, phase)` — one animated enemy: `play(name, delay=)` (attack/hurt/cast/death; death latches), `update(dt)`, `draw(surface, anchor)` (floor shadow, pulsing additive floor glow, frame, own pooled particles: ambient wisps, claw sparks at `strike_time()`, ectoplasm on hurt, implode + rune motes on cast, soul motes while dissolving), `action`, `busy`, `dead`, `death_done` |
+| `fx/hero_fx.py` | `HeroFx(strike, seed)` — code-drawn hero only: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
 | `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc.; `draw_tooltip(…, beside=rect)` places it next to a hovered card |
@@ -549,6 +550,9 @@ One test file per source module. All test files follow the same structure:
 | `infrastructure/test_enemy_sprites.py` | `infrastructure/enemy_sprites.py` | registry, files, ×2 scale/anchor, cache, idle wrap, death hold at 10^9 s, fallback, actions end on idle 0 |
 | `presentation/fx/test_enemy_animator.py` | `fx/enemy_animator.py` | play/queue/return to idle, death latch, cues (hurt splash, strike sparks), ambient, dt clamp, 10 000-step stress, drawing |
 | `presentation/scenes/test_combat_enemy_animation.py` | `CombatScene` + animated enemies | animators per sheet, hurt/death on hits, victory waits for death, attack/cast by intent, stagger, hero flinch at strike, 100-turn stress |
+| `test_warrior_code_generator.py` | `scripts/generate_warrior_code_sprites.py` (stdlib) | 6 animations, 1.6 s idle, actions end on idle 0, short actions, held kneel, strike frame, idle motion/loop, planted boots, sole row, height, blink, reach, one connected mass (no seams), kneeling hides the boots, sweep helpers (connected, zero width, 10^9 offset), red hair, 100 random poses, sheet meta, legacy copy kept |
+| `presentation/fx/test_hero_fx.py` | `fx/hero_fx.py` | cue timing per action, strike wait, kneel dust, delay queue, no cues before draw, dt clamp, 10 000-step stress, shadow |
+| `presentation/scenes/test_combat_hero_animation.py` | `CombatScene` + code-drawn warrior | HeroFx only for her, cast on skills, enemy reacts at blade contact, death held and defeat screen waits |
 | `test_hero_rogue.py` | rogue sheets in `sprite_loader.py` + `CombatScene` | same contract as the mage, both rogue names |
 | `test_hero_mage.py` | mage sheets in `sprite_loader.py` + `CombatScene` | name→hero mapping, 192/96 sheets, idle motion, planted boots, actions end on idle 0, shared idle clock, attack trigger |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
@@ -565,25 +569,36 @@ One test file per source module. All test files follow the same structure:
 
 ## Visual art and animation — required
 
-Read [docs/visual-design.md](docs/visual-design.md) before visual changes. Last Wish
-uses **detailed pixel art and dungeon fantasy** with strong warm/cold lighting. The
-heroine keeps the approved design of `warrior-source-v2.png`: red ponytail,
-silver/gold armour, dark teal cape. Characters drawn by code were rejected.
+Read [docs/visual-design.md](docs/visual-design.md) and
+[docs/code-drawn-sprites.md](docs/code-drawn-sprites.md) before visual changes. Last Wish uses
+**detailed pixel art and dungeon fantasy** with strong warm/cold lighting, native pixels shown
+×2 (same grain as the baked room).
 
-The runtime hero is the **approved illustration** (`warrior-source-v2.png`)
-reduced to native pixel art (`assets/characters/warrior_base.png`, via the
-one-time `scripts/make_warrior_base.py`) and animated by
-`scripts/generate_warrior_sprites.py` (stdlib) into `warrior_sheet.png` (192 px,
-combat 1:1), `warrior_sheet_96.png` (selection) and `warrior_sheet.json`
-(`idle` loop, `attack`, `guard`, `hurt`). The drawing is never cut into limbs,
-rotated or resampled: idle moves whole pixel rows (breath, ponytail/cape sway,
-blink); actions move the whole figure and add pixel effects. **Code must not
-draw new heroes** (enemies: see the approved code-drawn method in
-`docs/code-drawn-sprites.md`) — get a drawing first (artist, CC0 pack, pixel-art tool);
-code may animate it and make environments/effects. `CombatScene` plays `attack`
-for damage cards, `guard` when block is gained, `hurt` when HP is lost
-(`hero_action`). Regenerate, inspect `output/warrior-animations.gif`, and run
-`tests/test_hero_idle.py` with the full suite.
+**La Guerrera is drawn by code** (user request, 2026-09-30: the illustrated version did not
+match the pixel art). `scripts/generate_warrior_code_sprites.py` (stdlib) uses the Espectro
+technique literally: the whole figure is ONE silhouette scanned row by row (`body_mass`,
+`Body.extents`), with hair, face, armour, tabard, ponytail, cape and boots painted as zones
+inside it; only the sword and the sword arm are drawn on top (rimmed, like the Espectro's
+sleeve). Animation deforms the mass (offset, lean, squash, nod, wind, `kneel`). Two earlier
+versions built from pieces (capsules/IK, then stacked limb sweeps) were rejected — never draw
+characters by parts. A `Pose` gives dx/dy, lean, sx/sy, nod, kneel, boot x positions, sword hand
+and angle, hair/cape phase and wind, eyes and effects. Look kept from the approved
+design: red ponytail and bangs, green eyes, gold circlet, silver plate with gold trim, crimson
+tabard, dark-teal cape, leather boots, long sword. Output: `warrior_sheet_96.png` (native 96 px
+cells), `warrior_sheet.png` (×2, combat) and `warrior_sheet.json` (with
+`events.attack.strike_frame`). Animations: `idle` (16 × 100 ms, boots fixed), `attack` (wind-up,
+lunge, warm slash; blade connects on frame 3), `guard` (upright blade, blue ward), `hurt`,
+`cast` (raised glowing sword, for skills/powers) and `death` (falls to one knee on the planted
+sword; held). The previous illustrated sheets are kept in `assets/characters/warrior_illustrated/`
+(`generate_warrior_sprites.py` now writes there; mage and rogue still import its helpers).
+
+`CombatScene` plays `attack` for damage cards, `guard` when block is gained, `cast` for other
+cards, `hurt` when HP is lost and `death` on a lethal hit (`death_occurred` waits for it plus
+`_DEATH_HOLD`; nothing interrupts it). With the code-drawn hero, enemies react (number, hurt,
+death) only when the blade connects (`hero_strike_seconds`), her hit/block show only numbers
+(flash baked), and `HeroFx` adds the shadow and particles. Regenerate, inspect
+`output/guerrera-preview.gif`, and run `tests/test_hero_idle.py`,
+`tests/test_warrior_code_generator.py` with the full suite.
 
 **El Mago** and **La Pícara** follow the same pipeline: `<hero>-source.png` →
 `scripts/make_hero_base.py <hero>` (one-time: background removal of the dark
@@ -607,7 +622,7 @@ effects in `fx/` reusable and pooled; measure with `scripts/bench_backdrop.py`.
 The user asked for this enemy to be drawn **by code from scratch** and approved the result as
 **the method for new enemies**: read [docs/code-drawn-sprites.md](docs/code-drawn-sprites.md)
 (method, lessons, timing table, checklist) and preview with `scripts/preview_enemy_sheet.py <id>`.
-"Code must not draw new characters" still applies to heroes. `scripts/generate_enemy_sprites.py`
+Heroes other than La Guerrera (also code-drawn, see above) still come from illustrations. `scripts/generate_enemy_sprites.py`
 (stdlib) draws a hooded wraith at native pixel size (cell 128×104, anchor (80, 96) on the
 ground) from shaded shapes with a fixed palette and ordered dither: violet cloak with
 upper-left light and folds, shoulder capelet, hem fraying into 7 waving teal strands, void

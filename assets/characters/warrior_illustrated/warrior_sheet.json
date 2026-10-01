@@ -5,12 +5,6 @@
     "192": "warrior_sheet.png",
     "96": "warrior_sheet_96.png"
   },
-  "source": "scripts/generate_warrior_code_sprites.py",
-  "events": {
-    "attack": {
-      "strike_frame": 3
-    }
-  },
   "animations": {
     "idle": {
       "row": 0,
@@ -37,17 +31,16 @@
     },
     "attack": {
       "row": 1,
-      "frames": 9,
+      "frames": 8,
       "durations_ms": [
-        90,
-        100,
-        50,
-        55,
         70,
-        80,
         90,
+        45,
+        70,
         90,
-        100
+        70,
+        70,
+        80
       ],
       "loop": false
     },
@@ -57,51 +50,23 @@
       "durations_ms": [
         60,
         80,
-        90,
-        90,
         80,
         80,
-        70
+        90,
+        80,
+        80
       ],
       "loop": false
     },
     "hurt": {
       "row": 3,
-      "frames": 6,
-      "durations_ms": [
-        55,
-        65,
-        75,
-        85,
-        90,
-        100
-      ],
-      "loop": false
-    },
-    "cast": {
-      "row": 4,
-      "frames": 7,
-      "durations_ms": [
-        80,
-        90,
-        100,
-        100,
-        90,
-        90,
-        100
-      ],
-      "loop": false
-    },
-    "death": {
-      "row": 5,
-      "frames": 6,
+      "frames": 5,
       "durations_ms": [
         70,
         110,
-        130,
-        160,
-        220,
-        600
+        110,
+        100,
+        90
       ],
       "loop": false
     }

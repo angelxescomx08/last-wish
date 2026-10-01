@@ -36,9 +36,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHAR_DIR = ROOT / "assets" / "characters"
 BASE_PATH = CHAR_DIR / "warrior_base.png"
-SHEET_PATH = CHAR_DIR / "warrior_sheet.png"
-SHEET_96_PATH = CHAR_DIR / "warrior_sheet_96.png"
-META_PATH = CHAR_DIR / "warrior_sheet.json"
+# Superseded at runtime by the code-drawn warrior (scripts/generate_warrior_code_sprites.py),
+# so this illustrated version now writes to its own folder and never overwrites the game sheet.
+LEGACY_DIR = CHAR_DIR / "warrior_illustrated"
+SHEET_PATH = LEGACY_DIR / "warrior_sheet.png"
+SHEET_96_PATH = LEGACY_DIR / "warrior_sheet_96.png"
+META_PATH = LEGACY_DIR / "warrior_sheet.json"
 FRAMES_DIR = CHAR_DIR / "warrior_frames"
 
 CELL = 192

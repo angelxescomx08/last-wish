@@ -14,7 +14,19 @@ code identifiers and comments are English.
 Espectro method: one renderer + numeric poses, native pixels shown ×2, fixed
 hue-shifted ramps, Bayer-dithered shading, coloured outline, timed particles.
 Read [code-drawn-sprites.md](code-drawn-sprites.md) before making a new enemy.
-Heroes still come from approved illustrations (rejection above still applies to them).
+**La Guerrera is now code-drawn too** (user request: the illustrated warrior did not fit the
+pixel art); the other heroes still come from approved illustrations.
+
+## La Guerrera — code-drawn (current runtime asset)
+
+`scripts/generate_warrior_code_sprites.py` (stdlib): Espectro technique — the whole figure is
+one silhouette scanned row by row with every material painted as a zone inside it; only the
+sword and sword arm are separate. Versions built from pieces (capsules/IK, stacked limb sweeps)
+were rejected. Red ponytail and bangs, green eyes, gold circlet,
+silver plate with gold trim, long crimson tabard, dark-teal cape, leather boots, long sword. Native 96 px cells shown ×2; idle 16 × 100 ms with fixed boots; attack, guard, hurt,
+cast, death (kneel, held). Runtime particles in `fx/hero_fx.py`; enemies react at blade contact.
+Preview: `output/guerrera-preview.gif`. The sections below about the illustrated warrior (v2,
+v7) are history; those sheets live in `assets/characters/warrior_illustrated/`.
 
 ## Enemy "Espectro" — code-drawn wraith (approved method)
 

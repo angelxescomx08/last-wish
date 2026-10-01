@@ -29,8 +29,8 @@ def _combat_scene():
 
 
 class TestSheet:
-    def test_sheet_has_the_four_hero_animations(self):
-        assert set(HERO_ANIMATIONS) == {"idle", "attack", "guard", "hurt"}
+    def test_sheet_has_the_six_hero_animations(self):
+        assert set(HERO_ANIMATIONS) == {"idle", "attack", "guard", "hurt", "cast", "death"}
 
     def test_only_idle_loops(self):
         assert [n for n, a in HERO_ANIMATIONS.items() if a.loop] == ["idle"]
@@ -61,7 +61,7 @@ class TestIdle:
 
     def test_idle_soles_share_one_baseline(self):
         bottoms = {f.get_bounding_rect(min_alpha=32).bottom for f in SpriteLoader().get_player_idle_frames(192)}
-        assert bottoms == {191}
+        assert bottoms == {192}          # native soles on row 95, shown ×2
 
     def test_selection_size_uses_its_own_sheet(self):
         from src.infrastructure.sprite_loader import HERO_SHEETS
@@ -69,7 +69,7 @@ class TestIdle:
 
     def test_idle_boots_are_identical_throughout_cycle(self):
         frames = SpriteLoader().get_player_idle_frames(192)
-        assert len({_bytes(f.subsurface((0, 150, 192, 42))) for f in frames}) == 1
+        assert len({_bytes(f.subsurface((0, 168, 192, 24))) for f in frames}) == 1
 
     def test_idle_has_motion(self):
         frames = SpriteLoader().get_player_idle_frames(96)
@@ -85,7 +85,7 @@ class TestIdle:
 
 
 class TestActions:
-    @pytest.mark.parametrize("name", ["attack", "guard", "hurt"])
+    @pytest.mark.parametrize("name", ["attack", "guard", "hurt", "cast"])
     def test_action_ends_exactly_on_idle_frame_zero(self, name):
         loader = SpriteLoader()
         assert _bytes(loader.get_player_animation_frames(name, 96)[-1]) == _bytes(loader.get_player_idle_frames(96)[0])

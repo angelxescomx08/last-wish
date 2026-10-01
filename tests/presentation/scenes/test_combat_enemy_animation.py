@@ -67,6 +67,7 @@ class TestHits:
         _drawn(scene)
         _attack_first(scene)
         scene._do_play_card(0, 0)
+        _steps(scene, 0.3)                     # the blade connects after the wind-up
         assert scene.enemy_animators[0].action == "hurt"
 
     def test_kill_plays_death(self):
@@ -74,6 +75,7 @@ class TestHits:
         _drawn(scene)
         _attack_first(scene)
         scene._do_play_card(0, 0)
+        _steps(scene, 0.3)
         assert scene.enemy_animators[0].dead is True
 
     def test_victory_waits_for_the_death_animation(self):
@@ -89,7 +91,7 @@ class TestHits:
         _drawn(scene)
         _attack_first(scene)
         scene._do_play_card(0, 0)
-        _steps(scene, scene.enemy_animators[0].seconds("death") + 0.2)
+        _steps(scene, scene.enemy_animators[0].seconds("death") + 0.6)
         assert scene.combat_won is True
 
     def test_dead_espectro_still_draws(self):

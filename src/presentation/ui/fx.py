@@ -84,8 +84,9 @@ class FxLayer:
             f"-{damage}", (255, 90, 90), self._font, delay=delay,
         ))
 
-    def add_block_flash(self, rect: pygame.Rect, amount: int) -> None:
-        self._effects.append(_HitFlash(rect, (60, 140, 255), lifetime=0.30))
+    def add_block_flash(self, rect: pygame.Rect, amount: int, *, flash: bool = True) -> None:
+        if flash:
+            self._effects.append(_HitFlash(rect, (60, 140, 255), lifetime=0.30))
         self._effects.append(_FloatingNumber(
             rect.centerx, rect.top + 20,
             f"+{amount} BLQ", (100, 190, 255), self._font,
@@ -96,8 +97,8 @@ class FxLayer:
         """Floating label, e.g. "¡COMBO!" over the hero."""
         self._effects.append(_FloatingNumber(x, y, text, color, self._font, lifetime=lifetime))
 
-    def add_death_flash(self, rect: pygame.Rect) -> None:
-        self._effects.append(_HitFlash(rect, (255, 255, 255), lifetime=0.40))
+    def add_death_flash(self, rect: pygame.Rect, *, delay: float = 0.0) -> None:
+        self._effects.append(_HitFlash(rect, (255, 255, 255), lifetime=0.40, delay=delay))
 
     # ------------------------------------------------------------------
     # Frame hooks
