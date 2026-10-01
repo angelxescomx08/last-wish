@@ -10,6 +10,24 @@ Environments use dark stone, blue/purple shadows and warm torchlight. Preserve
 crisp pixels, coloured outlines and consistent upper-left lighting. UI is Spanish;
 code identifiers and comments are English.
 
+**Enemies drawn by code are approved** (user, 2026-09-30) when they follow the
+Espectro method: one renderer + numeric poses, native pixels shown ×2, fixed
+hue-shifted ramps, Bayer-dithered shading, coloured outline, timed particles.
+Read [code-drawn-sprites.md](code-drawn-sprites.md) before making a new enemy.
+Heroes still come from approved illustrations (rejection above still applies to them).
+
+## Enemy "Espectro" — code-drawn wraith (approved method)
+
+`scripts/generate_enemy_sprites.py` (stdlib) → `assets/enemies/wraith_sheet.png/json`
+(cell 128×104, ×2 at load) → `EnemyAnimator` (shadow, pulsing additive floor glow,
+pooled particles timed to the action). Animations: idle loop, attack (lunge +
+triple claw slash), hurt (baked flash), cast (rune circle), death (bottom-up
+dissolve). The full method, lessons learned (strands instead of a dithered hem,
+Bézier arms with a dark crossing rim, capelet over the shoulder joint, periodic
+phase terms, dither amplitude 0.55) and the checklist for a new enemy are in
+[code-drawn-sprites.md](code-drawn-sprites.md). Preview: `output/espectro-preview.gif`,
+`scripts/preview_enemy_sheet.py`.
+
 ## Dungeon environment pack (combat backdrop)
 
 User liked the cold/warm dungeon test and its torch; asked for reusable assets,

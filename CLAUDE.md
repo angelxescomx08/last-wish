@@ -578,7 +578,8 @@ combat 1:1), `warrior_sheet_96.png` (selection) and `warrior_sheet.json`
 (`idle` loop, `attack`, `guard`, `hurt`). The drawing is never cut into limbs,
 rotated or resampled: idle moves whole pixel rows (breath, ponytail/cape sway,
 blink); actions move the whole figure and add pixel effects. **Code must not
-draw new characters** — get a drawing first (artist, CC0 pack, pixel-art tool);
+draw new heroes** (enemies: see the approved code-drawn method in
+`docs/code-drawn-sprites.md`) — get a drawing first (artist, CC0 pack, pixel-art tool);
 code may animate it and make environments/effects. `CombatScene` plays `attack`
 for damage cards, `guard` when block is gained, `hurt` when HP is lost
 (`hero_action`). Regenerate, inspect `output/warrior-animations.gif`, and run
@@ -601,10 +602,12 @@ never lights pixels: `DungeonBackdrop` blits the baked room once per frame and
 adds only moving things (flames, glow via `BLEND_RGB_ADD`, particles). Keep new
 effects in `fx/` reusable and pooled; measure with `scripts/bench_backdrop.py`.
 
-## Animated enemies — "Espectro" (code-drawn, user-approved exception)
+## Animated enemies — "Espectro" (code-drawn, approved method)
 
-The user explicitly asked for this enemy to be drawn **by code from scratch**, so it is the one
-exception to "code must not draw new characters". `scripts/generate_enemy_sprites.py`
+The user asked for this enemy to be drawn **by code from scratch** and approved the result as
+**the method for new enemies**: read [docs/code-drawn-sprites.md](docs/code-drawn-sprites.md)
+(method, lessons, timing table, checklist) and preview with `scripts/preview_enemy_sheet.py <id>`.
+"Code must not draw new characters" still applies to heroes. `scripts/generate_enemy_sprites.py`
 (stdlib) draws a hooded wraith at native pixel size (cell 128×104, anchor (80, 96) on the
 ground) from shaded shapes with a fixed palette and ordered dither: violet cloak with
 upper-left light and folds, shoulder capelet, hem fraying into 7 waving teal strands, void
