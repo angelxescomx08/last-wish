@@ -74,6 +74,7 @@ def generate_enemies(run: Run, room_id: str) -> list[Enemy]:
         ("Esqueleto", _scale(35,  floor), IntentType.ATTACK, _scale(8,  floor)),
         ("Golem",     _scale(70,  floor), IntentType.BLOCK,  _scale(12, floor)),
         ("Asesino",   _scale(30,  floor), IntentType.ATTACK, _scale(14, floor)),
+        ("Espectro",  _scale(42,  floor), IntentType.ATTACK, _scale(11, floor)),
     ]
 
     # Pick 1–3 enemies; higher floors → more enemies

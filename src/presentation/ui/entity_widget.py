@@ -136,7 +136,9 @@ def draw_enemy(
     targeted: bool = False,
     highlighted: bool = False,
     sprite: pygame.Surface | None = None,
+    framed: bool = True,
 ) -> pygame.Rect:
+    """Draw one enemy. ``framed=False`` skips the body panel (animated sprites draw themselves)."""
     rect = pygame.Rect(x, y, ENEMY_W, ENEMY_H)
 
     # Defeated state — draw greyed-out silhouette and return
@@ -170,13 +172,15 @@ def draw_enemy(
         border   = colors.ENEMY_ACCENT
         bw       = 1
 
-    pygame.draw.rect(surface, body_col, rect, border_radius=_CORNER)
+    if framed:
+        pygame.draw.rect(surface, body_col, rect, border_radius=_CORNER)
 
     # Sprite centred inside body (drawn before border so border overlaps edges)
     if sprite is not None:
         surface.blit(sprite, sprite.get_rect(center=rect.center))
 
-    pygame.draw.rect(surface, border, rect, bw, border_radius=_CORNER)
+    if framed:
+        pygame.draw.rect(surface, border, rect, bw, border_radius=_CORNER)
 
     # Targeting crosshair corners when highlighted
     if highlighted:

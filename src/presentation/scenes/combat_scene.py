@@ -9,6 +9,8 @@ from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
+from src.domain.entities import IntentType
+from src.infrastructure.enemy_sprites import sheet_for_enemy
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
@@ -17,11 +19,13 @@ from src.infrastructure.sprite_loader import (
 )
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.fx.bursts import GLOW, SPARK, BurstParticles
+from src.presentation.fx.enemy_animator import EnemyAnimator
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.card_play import CardPlayInput, PlayRequest
 from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
 from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
 from src.presentation.ui.entity_widget import (
+    ENEMY_H,
     ENEMY_W,
     PLAYER_W,
     draw_enemy,
@@ -207,6 +211,13 @@ class CombatScene:
         self._shown_player_block: int | None = None
         self._bursts = BurstParticles(400, seed=11)
         self._fx_time = 0.0
+        # Animated enemies (sprite sheets in assets/enemies/), keyed by enemy index
+        self._enemy_anims: dict[int, EnemyAnimator] = {}
+        for i, enemy in enumerate(state.enemies):
+            sheet = sheet_for_enemy(enemy.name)
+            if sheet is not None:
+                self._enemy_anims[i] = EnemyAnimator(sheet, seed=31 + 17 * i, phase=0.47 * i)
+        self._pending_hero_hurt: float | None = None     # hero flinches when the enemy claws land
 
         # Hit-test rects (rebuilt each draw call)
         self._card_rects:     list[pygame.Rect]  = []
@@ -267,6 +278,13 @@ class CombatScene:
 
     def update(self, dt: float) -> None:
         self._advance_hero_animation(max(0.0, dt))
+        for anim in self._enemy_anims.values():
+            anim.update(dt)
+        if self._pending_hero_hurt is not None:
+            self._pending_hero_hurt -= max(0.0, dt)
+            if self._pending_hero_hurt <= 0:
+                self._pending_hero_hurt = None
+                self._play_hero_action("hurt")
         self._backdrop.update(max(0.0, dt))
         if self._overlay is not None and self._play.cancel():
             self._state.selected_card_index = None
@@ -322,20 +340,29 @@ class CombatScene:
     @property
     def death_occurred(self) -> bool:
         """True once the player's HP reaches 0 (latches until acknowledged)."""
-        if self.presentation_busy:
+        if self.presentation_busy or self._pending_hero_hurt is not None:
             return False
         return not self._state.player.is_alive
 
     @property
     def combat_won(self) -> bool:
         """True when all enemies are dead and victory hasn't been acknowledged."""
-        if self._victory_acknowledged or self.presentation_busy:
+        if self._victory_acknowledged or self.presentation_busy or self.enemies_dying:
             return False
         if self._initial_enemy_count == 0:
             return False
         return len(self._state.enemies) == 0 or all(
             not e.is_alive for e in self._state.enemies
         )
+
+    @property
+    def enemies_dying(self) -> bool:
+        """An animated enemy is still playing its death (victory waits for it)."""
+        return any(a.dead and not a.death_done for a in self._enemy_anims.values())
+
+    @property
+    def enemy_animators(self) -> dict[int, EnemyAnimator]:
+        return self._enemy_anims
 
     @property
     def is_boss(self) -> bool:
@@ -400,12 +427,21 @@ class CombatScene:
             if shown is not None and i < len(shown):      # replay: show HP/block cast by cast
                 saved = (enemy.current_hp, enemy.block)
                 enemy.current_hp, enemy.block = shown[i]
+            anim = self._enemy_anims.get(i)
             try:
-                rect = draw_enemy(
-                    surface, enemy, ex, ey, self._fonts,
-                    targeted    = self._state.targeted_enemy_index == i,
-                    sprite      = self._sprites.get_enemy_sprite(enemy.name),
-                )
+                if anim is not None:
+                    rect = pygame.Rect(ex, ey, ENEMY_W, ENEMY_H)
+                    anim.draw(surface, (rect.centerx, rect.bottom + 6))
+                    if enemy.is_alive:
+                        rect = draw_enemy(surface, enemy, ex, ey, self._fonts,
+                                          targeted=self._state.targeted_enemy_index == i,
+                                          framed=False)
+                else:
+                    rect = draw_enemy(
+                        surface, enemy, ex, ey, self._fonts,
+                        targeted    = self._state.targeted_enemy_index == i,
+                        sprite      = self._sprites.get_enemy_sprite(enemy.name),
+                    )
             finally:
                 if saved is not None:
                     enemy.current_hp, enemy.block = saved
@@ -924,12 +960,7 @@ class CombatScene:
         for i, (old_hp, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
             dmg = old_hp - enemy.current_hp
             if dmg > 0 and i < len(self._enemy_rects):
-                self._fx.add_hit_flash(self._enemy_rects[i], dmg)
-                self._sound.play_attack()
-                if not enemy.is_alive:
-                    self._fx.add_death_flash(self._enemy_rects[i])
-                    self._sound.play_death()
-                    self._hold_time = _KILL_HOLD      # let the kill be seen before victory
+                self._enemy_hit(i, dmg, killed=not enemy.is_alive)
 
     # ------------------------------------------------------------------
     # Multi-cast replay (golden cards cast twice)
@@ -994,11 +1025,8 @@ class CombatScene:
         self._shown_enemies = list(zip(hp_after, blk_after)) or self._shown_enemies
         for i, hit in enumerate(result.cast_hits[k] if k < len(result.cast_hits) else []):
             if hit > 0 and i < len(self._enemy_rects):
-                self._fx.add_hit_flash(self._enemy_rects[i], hit)
-                self._sound.play_attack()
-                if i < len(hp_after) and hp_after[i] <= 0 < seq["prev_hp"][i]:
-                    self._fx.add_death_flash(self._enemy_rects[i])
-                    self._sound.play_death()
+                killed = i < len(hp_after) and hp_after[i] <= 0 < seq["prev_hp"][i]
+                self._enemy_hit(i, hit, killed=killed, hold=False)
         seq["prev_hp"] = list(hp_after) or seq["prev_hp"]
 
     def _draw_cast_stage(self, surface: pygame.Surface) -> None:
@@ -1037,17 +1065,56 @@ class CombatScene:
             self._hero_action_time = 0.0
             self._idle_time = 0.0
 
+    def _enemy_hit(self, i: int, dmg: int, *, killed: bool, hold: bool = True) -> None:
+        """Damage number, sound and the enemy's reaction (hurt / death animation or flashes)."""
+        rect = self._enemy_rects[i]
+        anim = self._enemy_anims.get(i)
+        self._fx.add_hit_flash(rect, dmg, flash=anim is None)
+        self._sound.play_attack()
+        if killed:
+            if anim is not None:
+                anim.play("death")
+            else:
+                self._fx.add_death_flash(rect)
+            self._sound.play_death()
+            if hold:
+                self._hold_time = _KILL_HOLD      # let the kill be seen before victory
+        elif anim is not None:
+            anim.play("hurt")
+
     def _do_end_turn(self) -> None:
         state  = self._state
         old_hp = state.player.current_hp
+        old_enemy_hps = [e.current_hp for e in state.enemies]
+        acting = [(i, e.intent.intent_type) for i, e in enumerate(state.enemies)
+                  if e.is_alive and i in self._enemy_anims]
 
         self._play.cancel()
         self._sound.play_end_turn()
         end_player_turn(state)
 
+        # Animated enemies act out their intent: claws for attacks, a spell otherwise.
+        strike: float | None = None
+        for k, (i, itype) in enumerate(acting):
+            anim = self._enemy_anims[i]
+            delay = 0.14 * k
+            if itype == IntentType.ATTACK:
+                anim.play("attack", delay=delay)
+                landed = delay + anim.strike_time()
+                strike = landed if strike is None else min(strike, landed)
+            else:
+                anim.play("cast", delay=delay)
+        for i, (old, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
+            if old - enemy.current_hp > 0 and i < len(self._enemy_rects):   # e.g. poison
+                self._enemy_hit(i, old - enemy.current_hp, killed=not enemy.is_alive)
+
         dmg = old_hp - state.player.current_hp
+        wait = strike or 0.0
         if dmg > 0:
-            self._play_hero_action("hurt")
+            if wait > 0:
+                self._pending_hero_hurt = wait
+            else:
+                self._play_hero_action("hurt")
         if dmg > 0 and self._player_rect:
-            self._fx.add_hit_flash(self._player_rect, dmg)
+            self._fx.add_hit_flash(self._player_rect, dmg, delay=wait)
             self._sound.play_hit()

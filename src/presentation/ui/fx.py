@@ -72,9 +72,13 @@ class FxLayer:
     # ------------------------------------------------------------------
 
     def add_hit_flash(self, rect: pygame.Rect, damage: int, *, dx: float = 0.0,
-                      delay: float = 0.0) -> None:
-        """Red flash + "-N"; ``dx``/``delay`` separate repeated hits (golden cards cast twice)."""
-        self._effects.append(_HitFlash(rect, (220, 40, 40), delay=delay))
+                      delay: float = 0.0, flash: bool = True) -> None:
+        """Red flash + "-N"; ``dx``/``delay`` separate repeated hits (golden cards cast twice).
+
+        ``flash=False`` shows only the number (animated sprites bake their own hit flash).
+        """
+        if flash:
+            self._effects.append(_HitFlash(rect, (220, 40, 40), delay=delay))
         self._effects.append(_FloatingNumber(
             rect.centerx + dx, rect.top + 20,
             f"-{damage}", (255, 90, 90), self._font, delay=delay,

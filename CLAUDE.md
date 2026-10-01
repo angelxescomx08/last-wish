@@ -144,6 +144,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
+| `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`), `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
@@ -165,10 +166,11 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)`, `draw_card_at(surface, card, center, fonts, *, scale, angle, …, outline)` (free placement: scale quantised to 5 %, tilt rotated once and cached) and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 256) |
 | `ui/card_play.py` | `CardPlayInput`, `Mode`, `PlayRequest` — pygame-free Slay the Spire style card-play state machine: pick, drag, aim, release, sticky click, keyboard (1–9, ←/→/Tab, Enter), cancel (right click / ESC) |
 | `ui/targeting.py` | `draw_arrow(surface, start, end, *, hot, phase)` chevron arrow (pure curve helpers `control_point`, `sample_curve`, `segment_placements`, `head_placement`; cached pre-rotated pixel sprites) and `draw_reticle(surface, rect, color, t)` |
-| `ui/entity_widget.py` | `draw_player()`, `draw_enemy()` |
+| `ui/entity_widget.py` | `draw_player()`, `draw_enemy(…, framed=True)` (`framed=False`: no body panel, used by animated enemies) |
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
 | `fx/bursts.py` | `BurstParticles` — pooled one-shot particles in screen px, each with its own palette/size/drag/gravity and style (`SQUARE`, `SPARK` streak, `GLOW` additive): `emit`, `burst` (radial), `implode` (ring → centre), `update`, `draw`; `soft_glow(color, radius)` cached additive light, `scaled(color, k)` |
+| `fx/enemy_animator.py` | `EnemyAnimator(sheet, seed, phase)` — one animated enemy: `play(name, delay=)` (attack/hurt/cast/death; death latches), `update(dt)`, `draw(surface, anchor)` (floor shadow, pulsing additive floor glow, frame, own pooled particles: ambient wisps, claw sparks at `strike_time()`, ectoplasm on hurt, implode + rune motes on cast, soul motes while dissolving), `action`, `busy`, `dead`, `death_done` |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
 | `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc.; `draw_tooltip(…, beside=rect)` places it next to a hovered card |
@@ -543,6 +545,10 @@ One test file per source module. All test files follow the same structure:
 | `infrastructure/test_card_assets.py` | `infrastructure/card_assets.py` | layout rarities/zones/packs, files exist, frame size & cache, pack aspect, placeholders |
 | `presentation/ui/test_card_play.py` | `ui/card_play.py` | pick, drag threshold, play line boundary, aim/target, release/click, sticky, keyboard cycle/confirm, cancel, 10 000-move stress |
 | `presentation/ui/test_targeting.py` | `ui/targeting.py` | curve ends, bend, spacing, growth, flow period, head, colours, blit count, sprite cache bound, reticle |
+| `test_enemy_sprite_generator.py` | `scripts/generate_enemy_sprites.py` (stdlib) | 5 animations, actions end on idle 0, idle motion and loop, fits the cell, dissolve 0/1, death empty, flash, lunge, 100 random poses, sheet files match |
+| `infrastructure/test_enemy_sprites.py` | `infrastructure/enemy_sprites.py` | registry, files, ×2 scale/anchor, cache, idle wrap, death hold at 10^9 s, fallback, actions end on idle 0 |
+| `presentation/fx/test_enemy_animator.py` | `fx/enemy_animator.py` | play/queue/return to idle, death latch, cues (hurt splash, strike sparks), ambient, dt clamp, 10 000-step stress, drawing |
+| `presentation/scenes/test_combat_enemy_animation.py` | `CombatScene` + animated enemies | animators per sheet, hurt/death on hits, victory waits for death, attack/cast by intent, stagger, hero flinch at strike, 100-turn stress |
 | `test_hero_rogue.py` | rogue sheets in `sprite_loader.py` + `CombatScene` | same contract as the mage, both rogue names |
 | `test_hero_mage.py` | mage sheets in `sprite_loader.py` + `CombatScene` | name→hero mapping, 192/96 sheets, idle motion, planted boots, actions end on idle 0, shared idle clock, attack trigger |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
@@ -594,6 +600,30 @@ of a room layout (`ROOMS`) into `room_combat.png` (640×360, shown ×2). Runtime
 never lights pixels: `DungeonBackdrop` blits the baked room once per frame and
 adds only moving things (flames, glow via `BLEND_RGB_ADD`, particles). Keep new
 effects in `fx/` reusable and pooled; measure with `scripts/bench_backdrop.py`.
+
+## Animated enemies — "Espectro" (code-drawn, user-approved exception)
+
+The user explicitly asked for this enemy to be drawn **by code from scratch**, so it is the one
+exception to "code must not draw new characters". `scripts/generate_enemy_sprites.py`
+(stdlib) draws a hooded wraith at native pixel size (cell 128×104, anchor (80, 96) on the
+ground) from shaded shapes with a fixed palette and ordered dither: violet cloak with
+upper-left light and folds, shoulder capelet, hem fraying into 7 waving teal strands, void
+hood with slanted glowing eyes, pulsing soul flame, rusty chest chain and broken shackle,
+bony claws in bell sleeves. Each frame is a `Pose` fed to one renderer:
+`idle` (12-frame hover loop), `attack` (wind-up, lunge left with a triple claw-slash arc),
+`hurt` (white flash, knock-back), `cast` (arms up, rune circle) and `death` (recoil, eye
+flare, bottom-up dissolve with motes; ends empty). Non-death actions end on idle frame 0.
+
+Runtime: `infrastructure/enemy_sprites.py` loads the sheet (×2), `fx/enemy_animator.py`
+plays it with its own particles. `CombatScene` creates an animator for every enemy whose
+name is in `ENEMY_SHEET_IDS`, draws it unframed (`draw_enemy(framed=False)`) at
+`(rect.centerx, rect.bottom + 6)`, and drives it: HP loss → `hurt` (number only, no red
+rect: the flash is baked), kill → `death` (`combat_won` waits on `enemies_dying`), end
+turn → `attack` for ATTACK intents and `cast` otherwise, staggered 0.14 s per enemy; the
+hero's `hurt` and hit number are delayed until the first claws land (`strike_time()`).
+"Espectro" is in `run_manager.generate_enemies` templates (42 HP, attacks 11, floor-scaled).
+New animated enemy: add a renderer/poses (or reuse the script), a sheet id in
+`ENEMY_SHEET_IDS`. Preview: `output/espectro-preview.gif`.
 
 ## Run pause and abandonment
 
