@@ -4,8 +4,10 @@ import random
 
 from src.application import relic_effects
 from src.application.drawing import draw_cards
+from src.domain.card_pool import hidden_dagger
 from src.domain.combat import CombatState
-from src.domain.entities import WEAK, Enemy, Intent, IntentType, StatusEffect, add_status, tick_status, weakened
+from src.domain.entities import (MARKED, POISON, WEAK, Enemy, Intent, IntentType, add_status,
+                                 deal_damage, tick_status, weakened)
 from src.domain.tuning import TUNING
 
 _HAND_DRAW_SIZE: int = 5
@@ -29,13 +31,21 @@ def end_player_turn(state: CombatState) -> None:
 
 
 def draw_opening_hand(state: CombatState) -> None:
-    """Apply combat-start relic effects and draw the opening hand."""
+    """Apply combat-start relic effects and draw the opening hand.
+
+    Bolsa de Dagas shuffles its daggers in first; Botas Silenciosas draw extra;
+    then the usual start-of-turn hand effects (Bolsillo Roto, Nada que Perder).
+    """
+    for _ in range(relic_effects.dagger_pouch_count(state.relics)):
+        state.draw_pile.cards.append(hidden_dagger())
     random.shuffle(state.draw_pile.cards)
     bonus_mana = relic_effects.bonus_starting_mana(state.relics)
     if bonus_mana > 0:
         state.mana.maximum += bonus_mana
         state.mana.refill()
-    draw_cards(state, cards_per_turn(state))
+    state.turn_start_alive = len(state.living_enemies())
+    draw_cards(state, cards_per_turn(state) + relic_effects.opening_extra_draw(state.relics))
+    _after_hand_drawn(state)
 
 
 # ---------------------------------------------------------------------------
@@ -43,12 +53,19 @@ def draw_opening_hand(state: CombatState) -> None:
 # ---------------------------------------------------------------------------
 
 def _discard_hand(state: CombatState) -> None:
+    # Hilo de Araña: ending the turn with an empty hand gives block (it absorbs this enemy turn).
+    if state.hand.count == 0:
+        state.player.block += relic_effects.spider_thread_block(state.relics)
+    relic_effects.settle_pickpocket(state)
     state.discard_pile.cards.extend(state.hand.cards)
     state.hand.cards.clear()
     # End of the hero's turn: one turn of Débil wears off; "this turn" bonuses expire.
     state.player.status_effects = tick_status(state.player.status_effects, WEAK)
     state.next_card_discount = 0
     state.next_damage_bonus = 0
+    state.pickpocket_gold = 0
+    for enemy in state.enemies:                     # Marcado lasts only your turn
+        enemy.status_effects = [se for se in enemy.status_effects if se.name != MARKED]
 
 
 def _run_enemy_turn(state: CombatState) -> None:
@@ -56,6 +73,7 @@ def _run_enemy_turn(state: CombatState) -> None:
         if enemy.is_alive:
             _tick_status_effects(enemy)   # poison/burn deal damage before acting
             if not enemy.is_alive:        # killed by status? skip action
+                relic_effects.spread_poison(state)   # Colmillo de Víbora
                 continue
             enemy.block = 0              # reset block at the START of each enemy's action
             _execute_intent(state, enemy)
@@ -72,10 +90,15 @@ def _execute_intent(state: CombatState, enemy: Enemy) -> None:
     match enemy.intent.intent_type:
         case IntentType.ATTACK:
             dmg = weakened(enemy.intent.value, enemy.status_effects)
+            if _redirect_to_decoy(state, enemy, dmg):
+                return
             absorbed = min(state.player.block, dmg)
             state.player.block = max(0, state.player.block - absorbed)
             if not TUNING.invincible:          # Pruebas: invincible hero
                 state.player.current_hp = max(0, state.player.current_hp - (dmg - absorbed))
+            # Contraataque: a hit fully blocked deals damage back to the attacker.
+            if dmg > 0 and absorbed == dmg and state.counter_damage:
+                deal_damage(enemy, state.counter_damage)
             relic_effects.try_revive(state)
 
         case IntentType.BLOCK:
@@ -94,10 +117,22 @@ def _execute_intent(state: CombatState, enemy: Enemy) -> None:
             pass
 
 
+def _redirect_to_decoy(state: CombatState, attacker: Enemy, dmg: int) -> bool:
+    """Señuelo: the attack hits another living enemy instead of the hero (if there is one)."""
+    if state.decoys <= 0:
+        return False
+    others = [e for e in state.enemies if e.is_alive and e is not attacker]
+    if not others:
+        return False
+    state.decoys -= 1
+    deal_damage(random.choice(others), dmg)
+    return True
+
+
 def _tick_status_effects(enemy: Enemy) -> None:
     """Apply per-turn status effects and reduce their stacks by 1."""
     for se in enemy.status_effects:
-        if se.name == "Veneno":
+        if se.name == POISON:
             enemy.current_hp = max(0, enemy.current_hp - se.stacks)
             se.stacks -= 1
     enemy.status_effects = [se for se in enemy.status_effects if se.stacks > 0]
@@ -117,15 +152,42 @@ def _roll_intent(enemy: Enemy) -> Intent:
 
 
 def _begin_player_turn(state: CombatState) -> None:
-    state.player.block = 0           # block resets at the START of the new turn
+    if state.retain_block:           # Capa de Sombras: this turn the block is kept
+        state.retain_block = False
+    else:
+        state.player.block = 0       # block resets at the START of the new turn
     state.turn += 1
-    state.cards_played_this_turn = 0  # Combo needs a card played earlier this turn
+    _reset_turn_counters(state)
     state.mana.maximum += relic_effects.max_mana_per_turn(state.relics)   # Fuente Eterna
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None
     _trigger_powers(state)
     draw_cards(state, cards_per_turn(state))
+    _after_hand_drawn(state)
+    relic_effects.spread_poison(state)
+
+
+def _reset_turn_counters(state: CombatState) -> None:
+    state.cards_played_this_turn = 0  # Combo needs a card played earlier this turn
+    state.discards_this_turn = 0      # Despojo needs a discard earlier this turn
+    state.spoils_this_turn = 0
+    state.attacks_this_turn = 0
+    state.double_combo_used = False
+    state.decoys = 0
+    state.counter_damage = 0
+    state.pickpocket_gold = 0
+    state.last_random_target = None
+    state.lucky_coin_used = False
+    state.turn_start_alive = len(state.living_enemies())
+
+
+def _after_hand_drawn(state: CombatState) -> None:
+    """Once the hand is drawn: Bolsillo Roto (discard 1, draw 1) and Nada que Perder
+    (discard 1, draw 2). Each discard turns Despojo on for the turn."""
+    for draws in [1] * relic_effects.torn_pocket_rummages(state.relics) + list(state.turn_rummages):
+        if state.discard_random() is not None:
+            draw_cards(state, draws)
 
 
 def _trigger_powers(state: CombatState) -> None:
@@ -135,3 +197,5 @@ def _trigger_powers(state: CombatState) -> None:
             if fx.on_turn_start is not None:
                 for _ in range(power.casts()):
                     fx.on_turn_start(state)
+                    draws, state.pending_draws = state.pending_draws, 0
+                    draw_cards(state, draws)

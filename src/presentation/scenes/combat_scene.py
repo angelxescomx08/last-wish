@@ -531,6 +531,7 @@ class CombatScene:
                 combo        = self._combo_ready(card),
                 singular     = self._state.singular_ready(card),
                 void         = self._state.void_ready(card),
+                spoil        = self._state.spoil_ready(card),
             )
 
         self._draw_pile_rect = draw_pile_widget(
@@ -580,14 +581,15 @@ class CombatScene:
     def _ready_damage(self, card) -> int:
         """Printed damage of ``card`` with every keyword layer that would resolve now."""
         return card.total_damage(self._combo_ready(card), self._state.singular_ready(card),
-                                 self._state.void_ready(card))
+                                 self._state.void_ready(card), self._state.spoil_ready(card))
 
     def _bonuses(self, card) -> tuple[int, int]:
         combo, singular = self._combo_ready(card), self._state.singular_ready(card)
-        void = self._state.void_ready(card)
+        void, spoil = self._state.void_ready(card), self._state.spoil_ready(card)
+        scarf = relic_effects.combo_scarf_bonus(self._state.relics) if combo else 0
         dmg = (relic_effects.extra_attack_damage(self._state.relics) + self._state.player.attack_bonus
-               + self._state.next_damage_bonus) if card.total_damage(combo, singular, void) > 0 else 0
-        blk = self._state.player.dexterity if card.total_block(combo, singular, void) > 0 else 0
+               + self._state.next_damage_bonus + scarf) if card.total_damage(combo, singular, void, spoil) > 0 else 0
+        blk = (self._state.player.dexterity + scarf) if card.total_block(combo, singular, void, spoil) > 0 else 0
         return dmg, blk
 
     def _held_index(self) -> int | None:
@@ -679,7 +681,8 @@ class CombatScene:
                             bonus_damage=dmg, bonus_block=blk,
                             outline=_PLAYABLE if ready else _HELD, combo=self._combo_ready(card),
                             singular=self._state.singular_ready(card),
-                            void=self._state.void_ready(card), cost=self._state.card_cost(card))
+                            void=self._state.void_ready(card), spoil=self._state.spoil_ready(card),
+                            cost=self._state.card_cost(card))
         if self._play.aiming:
             draw_arrow(surface, (rect.centerx, rect.top + 6), self._arrow_end(),
                        hot=self._play.target is not None, phase=self._fx_time)
@@ -731,7 +734,8 @@ class CombatScene:
             return card_tooltip(card, bonus_damage=bonus_dmg, bonus_block=bonus_blk,
                                 combo_active=self._combo_ready(card),
                                 singular_active=self._state.singular_ready(card),
-                                void_active=self._state.void_ready(card))
+                                void_active=self._state.void_ready(card),
+                                spoil_active=self._state.spoil_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             return enemy_tooltip(self._state.enemies[self._hovered_enemy])
@@ -947,7 +951,8 @@ class CombatScene:
                               (90, 235, 180), lifetime=1.1)
         shown = 1 if result.combo else 0
         for flag, label, color in ((result.singular, "¡SINGULAR!", (185, 140, 255)),
-                                   (result.void, "¡VACÍO!", (90, 170, 255))):
+                                   (result.void, "¡VACÍO!", (90, 170, 255)),
+                                   (result.spoil, "¡DESPOJO!", (240, 150, 60))):
             if flag and self._player_rect:
                 self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10 - 24 * shown,
                                   label, color, lifetime=1.1)

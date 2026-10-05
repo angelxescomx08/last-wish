@@ -109,13 +109,13 @@ Every file in this layer is pygame-free and has a corresponding test file.
 |---|---|---|
 | `numbers.py` | `BigValue`, `Operation` | Arbitrary-precision arithmetic: base + flat additions + multipliers |
 | `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list. `CardEffect.needs_target` forces an enemy target; `CardEffect.hits_all_enemies` marks area effects (UI hint only) |
-| `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY` | Passive items with a tag identifying their mechanic (8 tags total). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged) |
+| `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY`, `relic_total(relics, tag, amount)` | Passive items with a tag identifying their mechanic (34 tags). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged). `relic_total` = amount × chroma per active relic with that tag (domain code uses it directly) |
 | `rarity.py` | `Rarity`, `RARITY_LABEL`, `rarity_weight`, `rarity_odds`, `luck_chroma_multiplier`, `weighted_sample` | Five tiers shared by cards and relics (`CardRarity` is an alias). Luck-weighted tier odds and chroma boost |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
-| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck` (luck only affects drop odds, see Luck & rarity) |
+| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect`, `deal_damage`, `status_stacks`, `POISON`, `MARKED`, `WEAK` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck`. **Every hit on an enemy goes through `deal_damage(enemy, amount)`** (Marcado bonus, then block absorbs; returns HP lost) |
 | `pile.py` | `DrawPile`, `DiscardPile`, `Hand` | Card containers with `count` and `is_full` |
 | `mana.py` | `Mana` | Mana resource with `spend`, `gain`, `refill`, `can_afford` |
-| `combat.py` | `CombatState` | Single source of truth for the entire battle state |
+| `combat.py` | `CombatState` | Single source of truth for the entire battle state. Effect helpers: `pick_random_enemy` / `hit_random_enemy` (every "al azar" effect; Moneda de la Suerte), `discard_from_hand` / `discard_random` (every effect discard: counts for Despojo, Rapiña hits), `kills_this_turn`, `spoil_ready`, `has_relic` |
 | `map_node.py` | `MapNode`, `RoomType` | Single node on the run map: id, room_type, row, col, connections, visited, available |
 | `game_map.py` | `GameMap` | Floor map: nodes dict, boss_id, rows, cols; `available_nodes()`, `mark_visited()` |
 | `run.py` | `Run` | Persistent state across rooms: character, seed, floor, gold, hp, deck, relics, map; `add_card`, `add_relic`, `apply_combat_result` |
@@ -131,7 +131,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
-| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory`, `generate_event_gold`, `pick_treasure_relic`, `pick_boss_relics`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
+| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory(run, hp, enemies, bonus_gold=0)`, `generate_event_gold`, `pick_treasure_relic`, `pick_treasure_relics` (2 with Llave Maestra), `pick_boss_relics`, `shop_price(run, base)`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
 | `card_rewards.py` | `allowed_card_classes(run)`; `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]` | Seeded card reward selection after combat and pack opening, filtered to the run's allowed classes (packs topped up from other themes if ever short) |
 
 ### Infrastructure layer — `src/infrastructure/`
@@ -158,8 +158,8 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/death_scene.py` | Death screen: Nueva Partida / Menú Principal. Sets `requested_action: DeathAction` |
 | `scenes/map_scene.py` | STS-style node map. Signals `selected_node: MapNode \| None` |
 | `scenes/combat_reward_scene.py` | Gold display + 3 card choices after a non-boss combat. Signals `cleared: bool`, `chosen_card: Card \| None` |
-| `scenes/treasure_scene.py` | Show a relic, take or skip. Signals `cleared: bool`, `took_relic: bool` |
-| `scenes/shop_scene.py` | 4 pack tiles with gold cost. Signals `selected_pack: PackTheme \| None`, `cleared: bool` |
+| `scenes/treasure_scene.py` | Show one relic or several (Llave Maestra): click a box to pick, take or skip. Accepts a `Relic` or `list[Relic]`. Signals `cleared: bool`, `took_relic: bool`, `chosen_relic: Relic \| None` |
+| `scenes/shop_scene.py` | 3 relics + 3 packs; prices via `run_manager.shop_price` (Máscara del Ladrón). Signals `selected_pack: PackTheme \| None`, `cleared: bool` |
 | `scenes/pack_opening_scene.py` | Animated opening (intro → idle float → click → charge with imploding sparks → tear: flash, shake, top strip flies off, particle explosion, light rays → cards dealt face-down → flipped one by one with rarity bursts; rare+ get an anticipation glow, legendary gold confetti) then 5-card pick-1 with rarity halos/sparkles and an outro for the chosen card. Any click/Space skips the animation. Ctor kwargs `theme` (PackTheme value, picks pack art + colours) and `seed`. `phase`, `is_animating`, `skip_animation()`, `choose(i)`. Signals `cleared: bool` (after the outro), `chosen_card: Card \| None` |
 | `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
@@ -668,10 +668,11 @@ Cards and relics share **five tiers**: Común, Poco común, Rara, Épica, Legend
 | Tier | Relics |
 |---|---|
 | Común | Poción de Sangre, Anillo de Oro, Amuleto de Vitalidad |
-| Poco común | Corazón de Hierro, Orbe de Fuego, Broche de Evasión (Pícara), Cuchillo Arrojadizo (Pícara) |
-| Rara | Tótem Roto, Piedra de Energía |
-| Épica | Amuleto de Combate |
-| Legendaria | Escudo Espectral, Trébol de Siete Hojas, Ankh, Espejo Singular |
+| Común | Saco de Trapos (Pícara), Bolsa de Dagas (Pícara), Máscara del Ladrón |
+| Poco común | Corazón de Hierro, Orbe de Fuego, Broche de Evasión, Cuchillo Arrojadizo, Pañuelo del Duelista, Garfio, Vaina Afilada, Frasco de Veneno (Pícara); Moneda de la Suerte, Herradura de Plata |
+| Rara | Tótem Roto, Piedra de Energía, Cinta Roja, Bolsillo Roto, Colmillo de Víbora (Pícara), Guante de Seda, Botas Silenciosas |
+| Épica | Amuleto de Combate, Hilo de Araña, Llave Maestra |
+| Legendaria | Escudo Espectral, Trébol de Siete Hojas, Ankh, Espejo Singular, Panacea, Fuente Eterna, Daga Partida (Pícara), Reloj Roto |
 
 Luck = `run.character.stats.luck` (Guerrera 2, Mago 5, Pícara 8). It no longer draws cards.
 
@@ -796,3 +797,56 @@ none exist yet). Same layer pattern as Combo/Singular: `CardEffect.void`, `Card.
 - `CardEffect.text` is shown on the card face and tooltip; every on_play card now has one.
 - Rogue cards live in `_ROGUE_ACERO/_ESCUDO/_MAGIA/_EPICO` in `card_pool.py` (helper `_r`).
 
+
+---
+
+## Keyword Despojo and La Pícara expansion (2026-10-04)
+
+**Design rule (user):** a keyword *is* the condition. A keyword layer never adds a second
+condition ("Combo: si además…" is not allowed). `tests/application/test_rogue_expansion.py`
+checks that no keyword layer text contains " si ". Rogue relics only touch her themes
+(Combo, Despojo, daggers, poison); anything else is neutral.
+
+**Despojo** (`Keyword.SPOIL`, "Despojo: efecto extra si ya descartaste una carta este turno.").
+Same layer pattern as Combo/Singular/Vacío: `CardEffect.spoil`, `Card.spoil_effects()`, `spoil=`
+as 4th flag on every `total_*` / `active_effects`, helper `card_pool._add_spoil`,
+`CombatState.spoil_ready(card)`, `PlayResult.spoil`, orange aura `SPOIL_READY_GLOW`
+(Combo > Despojo > Vacío > Singular), "¡Despojo activo!", floating "¡DESPOJO!".
+`CombatState.discards_this_turn` counts discards made by effects through
+`discard_from_hand` / `discard_random` (Golpe Desesperado, Rodar, Deshacerse, Vaciar
+Bolsillos, Bolsillo Roto, Nada que Perder); the end-of-turn discard does not count. Reset in
+`end_turn._reset_turn_counters` with the other per-turn counters.
+
+**Engine pieces added**
+- `CombatState.pending_draws`: callbacks (domain, cannot call `draw_cards`) ask for draws;
+  `play_card._resolve_cast` and `end_turn._trigger_powers` draw them right after.
+- Powers that change rules for the combat set a field when played: `discard_damage` (Rapiña),
+  `daggers_on_draw` (Maestra de Dagas), `double_combo` (Sombra Gemela), `echo_every_fifth`
+  (Cadena Perfecta: extra casts → `PlayResult.casts`, replayed like golden casts),
+  `execute_threshold` (Asesina, `relic_effects.execute_wounded`), `turn_rummages` (Nada que
+  Perder). Fortuna Audaz uses `on_turn_start`.
+- Per-turn fields: `spoils_this_turn`, `attacks_this_turn`, `double_combo_used`, `decoys`
+  (Señuelo, `end_turn._redirect_to_decoy`), `counter_damage` (Contraataque), `retain_block`
+  (Capa de Sombras), `turn_start_alive` + `pickpocket_gold` (Carterista →
+  `relic_effects.settle_pickpocket` → `CombatState.gold_earned`, added by
+  `apply_combat_victory(..., bonus_gold=state.gold_earned)` in `main.py`), `last_random_target` /
+  `lucky_coin_used` (Moneda de la Suerte).
+- `play_card._resolve_layers`: re-resolves keyword layers with printed values (Sombra Gemela,
+  Daga Partida). `_cast_target` retargets a living enemy when the target died mid-play.
+- Status **Marcado** (`entities.MARKED`, Marcar Objetivo): +stacks per hit in `deal_damage`;
+  cleared at the end of your turn. Poison uses `entities.POISON` and `add_status`.
+- `end_turn._after_hand_drawn` (opening hand and each turn): Bolsillo Roto, then Nada que Perder.
+  `draw_opening_hand` also adds Bolsa de Dagas daggers and Botas Silenciosas draws.
+- `relic_effects`: `on_card_played(state, card, combo, rng=None, *, spoil=False)` (Combo relics +
+  Saco de Trapos, Garfio), `combo_scarf_bonus`, `split_dagger_repeats`, `dagger_pouch_count`,
+  `torn_pocket_rummages`, `poison_on_attack` (Frasco de Veneno, Hoja Envenenada), `spread_poison`
+  (Colmillo de Víbora; called after plays, poison deaths and turn start), `execute_wounded`,
+  `settle_pickpocket`, `try_broken_clock` (per-combat charges in `CombatState.clock_uses`),
+  `spider_thread_block`, `opening_extra_draw`, `combat_gold_multiplier`, `shop_price`,
+  `treasure_choices`; `luck_bonus` includes Herradura de Plata.
+- Cinta Roja lives in `CombatState.combo_active` (turn 1) and Guante de Seda in `card_cost`
+  (third card of the turn is free), both through `has_relic`.
+- Luck in combat: `card_pool.lucky_crit_chance(luck)` (Corte Afortunado) and
+  `lucky_roll_count(luck)` (Tirar los Dados).
+
+Every new card, relic and status is listed in `docs/game_design.md`.

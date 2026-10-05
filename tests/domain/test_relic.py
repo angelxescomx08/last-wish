@@ -25,8 +25,8 @@ class TestRelicTag:
         assert RelicTag.IRON_HEART   in tags
         assert RelicTag.BLOOD_POTION in tags
 
-    def test_sixteen_tags_total(self):
-        assert len(list(RelicTag)) == 16
+    def test_thirty_four_tags_total(self):
+        assert len(list(RelicTag)) == 34
 
     def test_tags_are_unique(self):
         values = [t.value for t in RelicTag]

@@ -25,6 +25,11 @@ class StatusEffect:
     is_buff: bool
 
 
+# Status "Veneno": loses its stacks in HP at the start of its turn, then 1 stack wears off.
+POISON: str = "Veneno"
+# Status "Marcado": every hit it takes deals its stacks as extra damage (cleared when your turn ends).
+MARKED: str = "Marcado"
+
 # Status "Débil": the one who has it deals 25 % less attack damage (rounded down).
 WEAK: str = "Débil"
 WEAK_FACTOR_NUM, WEAK_FACTOR_DEN = 3, 4
@@ -71,6 +76,22 @@ class Enemy:
     @property
     def hp_ratio(self) -> float:
         return self.current_hp / self.max_hp if self.max_hp > 0 else 0.0
+
+
+def deal_damage(enemy: "Enemy", amount: int) -> int:
+    """One hit on ``enemy``: Marcado adds its stacks, block absorbs first. Returns HP lost."""
+    if amount <= 0 or not enemy.is_alive:
+        return 0
+    amount += sum(se.stacks for se in enemy.status_effects if se.name == MARKED)
+    absorbed = min(enemy.block, amount)
+    enemy.block -= absorbed
+    lost = min(enemy.current_hp, amount - absorbed)
+    enemy.current_hp -= lost
+    return lost
+
+
+def status_stacks(status_effects: list[StatusEffect], name: str) -> int:
+    return sum(se.stacks for se in status_effects if se.name == name)
 
 
 @dataclass

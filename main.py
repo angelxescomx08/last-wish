@@ -15,7 +15,7 @@ from src.application.run_manager import (
     generate_enemies,
     generate_event_gold,
     pick_boss_relics,
-    pick_treasure_relic,
+    pick_treasure_relics,
     create_run,
 )
 from src.domain.card_pool import PackTheme
@@ -265,8 +265,8 @@ class SceneManager:
             self.push(CombatScene(state, self._fonts, is_boss=True, sound=self._sound))
 
         elif node.room_type == RoomType.TREASURE:
-            relic = pick_treasure_relic(run, node.id)
-            self.push(TreasureScene(run, relic, self._fonts, sound=self._sound))
+            relics = pick_treasure_relics(run, node.id)   # 2+ with Llave Maestra
+            self.push(TreasureScene(run, relics, self._fonts, sound=self._sound))
 
         elif node.room_type == RoomType.SHOP:
             self.push(ShopScene(run, self._fonts, sound=self._sound))
@@ -288,12 +288,12 @@ class SceneManager:
             enemies = scene.state.enemies   # already-dead list for gold calc
             if scene.is_boss:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
-                                                scene.state.enemies)
+                                                scene.state.enemies, scene.state.gold_earned)
                 relics   = pick_boss_relics(run)
                 self.push(BossRewardScene(run, gold, relics, self._fonts, sound=self._sound))
             else:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
-                                                scene.state.enemies)
+                                                scene.state.enemies, scene.state.gold_earned)
                 cards    = pick_reward_cards(run, run.current_room_id or "unknown")
                 self.push(CombatRewardScene(run, gold, cards, self._fonts, sound=self._sound))
 
@@ -318,8 +318,8 @@ class SceneManager:
             return
         scene.cleared = False
         run = self._run
-        if scene.took_relic:
-            acquire_relic(run, scene._relic)
+        if scene.chosen_relic is not None:
+            acquire_relic(run, scene.chosen_relic)
         self.pop()
 
     def _t_shop(self, scene: ShopScene) -> None:

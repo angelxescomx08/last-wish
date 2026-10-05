@@ -7,7 +7,7 @@ import pygame
 from src.domain.card import Card, CardClass, CardType, ModifierTag
 from src.domain.card_pool import CARD_CLASS_LABEL
 from src.domain.chroma import chroma_def, chroma_title
-from src.domain.keywords import Keyword, combo_text, keyword_def, singular_text, void_text
+from src.domain.keywords import Keyword, combo_text, keyword_def, singular_text, spoil_text, void_text
 from src.domain.entities import Enemy, IntentType, Player
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
@@ -60,10 +60,12 @@ def card_tooltip(
     combo_active: bool = False,
     singular_active: bool = False,
     void_active: bool = False,
+    spoil_active: bool = False,
 ) -> TooltipContent:
     combo = combo_active and bool(card.combo_effects())
     singular = singular_active and bool(card.singular_effects())
     void = void_active and bool(card.void_effects())
+    spoil = spoil_active and bool(card.spoil_effects())
     title = chroma_title(card.name, card.chroma) + (" (Rota)" if card.is_broken else "")
     lines: list[str] = [
         f"{_CARD_TYPE_NAME[card.card_type]}  ·  Coste: {card.cost} maná",
@@ -71,8 +73,8 @@ def card_tooltip(
         "",
     ]
 
-    dmg = card.total_damage(combo, singular, void)
-    blk = card.total_block(combo, singular, void)
+    dmg = card.total_damage(combo, singular, void, spoil)
+    blk = card.total_block(combo, singular, void, spoil)
     if dmg > 0:
         effective = dmg + bonus_damage
         if bonus_damage > 0:
@@ -88,7 +90,7 @@ def card_tooltip(
         else:
             lines.append(f"Otorga {BigValue.format_int(blk)} puntos de bloqueo.")
 
-    base_draw = card.total_draw(combo, singular, void)
+    base_draw = card.total_draw(combo, singular, void, spoil)
     if base_draw > 0:
         lines.append(f"Roba {base_draw} carta(s) adicional(es).")
 
@@ -127,6 +129,7 @@ def card_tooltip(
             Keyword.COMBO: (combo, combo_text(card)),
             Keyword.SINGULAR: (singular, singular_text(card)),
             Keyword.VOID: (void, void_text(card)),
+            Keyword.SPOIL: (spoil, spoil_text(card)),
         }[kw]
         lines += ["", keyword_def(kw).rule]
         lines.append(f"  {'¡Activo! ' if active else ''}{text}.")

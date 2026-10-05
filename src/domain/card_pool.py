@@ -22,7 +22,7 @@ from typing import Callable, Iterable
 
 from src.domain.card import Card, CardClass, CardEffect, CardRarity, CardType
 from src.domain.chroma import Chroma
-from src.domain.entities import WEAK, StatusEffect, add_status
+from src.domain.entities import MARKED, POISON, WEAK, add_status, deal_damage
 from src.domain.numbers import BigValue
 
 
@@ -129,6 +129,14 @@ def _add_void(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: in
     """Give ``card`` the VOID keyword ("Vacío"): an extra layer if it spends your last mana."""
     card.base_effect.void = CardEffect(name="Vacío", damage=BigValue(dmg), block=BigValue(blk),
                                        draw=draw, mana_gain=mana, on_play=on_play, text=text)
+    return card
+
+
+def _add_spoil(card: Card, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: int = 0,
+               on_play=None, text: str = "") -> Card:
+    """Give ``card`` the SPOIL keyword ("Despojo"): an extra layer if you discarded this turn."""
+    card.base_effect.spoil = CardEffect(name="Despojo", damage=BigValue(dmg), block=BigValue(blk),
+                                        draw=draw, mana_gain=mana, on_play=on_play, text=text)
     return card
 
 
@@ -329,7 +337,7 @@ _C, _U, _RA, _E, _L = (CardRarity.COMMON, CardRarity.UNCOMMON, CardRarity.RARE,
 
 def hidden_dagger() -> Card:
     """Token "Daga Oculta": played by itself when drawn (4 damage to a random enemy), then gone."""
-    card = _r("t_daga_oculta", "Daga Oculta", _A, 0, _C, on_play=_on_random_hit_4,
+    card = _r("t_daga_oculta", "Daga Oculta", _A, 0, _C, on_play=_on_dagger,
               text="al robarla: inflige 4 de daño a un enemigo al azar")
     card.play_on_draw = True
     return card
@@ -352,6 +360,19 @@ _ROGUE_ACERO: list[Callable[[], Card]] = [
     lambda: _add_singular(_r("r_abanico_de_cuchillas", "Abanico de Cuchillas", _A, 2, _E,
                              on_play=_on_all_hit_5, text="inflige 5 de daño a todos los enemigos",
                              hits_all=True), blk=5, draw=1),
+    lambda: _add_combo(_r("r_punalada_trapera", "Puñalada Trapera", _A, 1, _U, dmg=5), dmg=5),
+    lambda: _add_combo(_r("r_tajo_veloz", "Tajo Veloz", _A, 1, _C, dmg=6), mana=1),
+    lambda: _add_spoil(_r("r_tirar_y_cortar", "Tirar y Cortar", _A, 1, _C, dmg=6), dmg=6),
+    lambda: _r("r_rafaga_de_cortes", "Ráfaga de Cortes", _A, 1, _RA, on_play=_on_flurry,
+               text="inflige 2 de daño por cada carta jugada este turno (esta incluida)",
+               needs_target=True),
+    lambda: _r("r_lanzar_la_daga", "Lanzar la Daga", _A, 0, _C, dmg=4, on_play=_on_hide_one_dagger,
+               text="mete 1 Daga Oculta en tu pila de robo"),
+    lambda: _r("r_corte_afortunado", "Corte Afortunado", _A, 1, _RA, dmg=6, on_play=_on_lucky_cut,
+               text="crítico según tu Suerte: inflige 6 de daño más"),
+    lambda: _r("r_abrir_la_guardia", "Abrir la Guardia", _A, 1, _C, dmg=4, on_play=_on_break_guard,
+               text="luego le quita todo su escudo"),
+    lambda: _add_singular(_r("r_hoja_unica", "Hoja Única", _A, 1, _RA, dmg=8), dmg=8),
 ]
 
 _ROGUE_ESCUDO: list[Callable[[], Card]] = [
@@ -359,6 +380,23 @@ _ROGUE_ESCUDO: list[Callable[[], Card]] = [
     lambda: _add_combo(_r("r_guardia_evasiva", "Guardia Evasiva", _S, 2, _U, blk=10),
                        on_play=_on_weaken_all, text="los enemigos infligen 25% menos de daño este turno"),
     lambda: _r("r_muro_de_humo", "Muro de Humo", _S, 2, _U, blk=14),
+    lambda: _add_combo(_r("r_quiebro", "Quiebro", _S, 1, _C, blk=6), draw=1),
+    lambda: _add_combo(_r("r_finta_doble", "Finta Doble", _S, 0, _C, blk=3, hits_all=True),
+                       on_play=_on_random_hit_3, text="inflige 3 de daño a un enemigo al azar"),
+    lambda: _add_combo(_r("r_sombra_esquiva", "Sombra Esquiva", _S, 1, _U, blk=7),
+                       on_play=_on_hide_one_dagger, text="mete 1 Daga Oculta en tu pila de robo"),
+    lambda: _add_spoil(_r("r_manto_raido", "Manto Raído", _S, 1, _U, blk=7), blk=7),
+    lambda: _r("r_rodar", "Rodar", _S, 0, _C, blk=2, draw=1, on_play=_on_discard_random,
+               text="descarta una carta al azar de tu mano"),
+    lambda: _r("r_deshacerse", "Deshacerse", _S, 0, _C, blk=4, on_play=_on_discard_random,
+               text="descarta una carta al azar de tu mano"),
+    lambda: _r("r_senuelo", "Señuelo", _S, 1, _U, blk=5, on_play=_on_decoy,
+               text="el siguiente ataque enemigo de este turno golpea a otro enemigo"),
+    lambda: _r("r_capa_de_sombras", "Capa de Sombras", _S, 2, _RA, blk=8, on_play=_on_retain_block,
+               text="tu escudo no se pierde al empezar tu siguiente turno"),
+    lambda: _r("r_contraataque", "Contraataque", _S, 1, _U, blk=4, on_play=_on_counter,
+               text="cada golpe que bloquees por completo este turno le hace 3 de daño al atacante"),
+    lambda: _add_singular(_r("r_estilo_propio", "Estilo Propio", _S, 2, _E, blk=12), draw=2),
 ]
 
 _ROGUE_MAGIA: list[Callable[[], Card]] = [
@@ -376,6 +414,19 @@ _ROGUE_MAGIA: list[Callable[[], Card]] = [
                text="gana 1 de destreza este combate"),
     lambda: _r("r_danza_de_sombras", "Danza de Sombras", _P, 2, _E, on_play=_on_combo_always,
                text="este combate, tus Combos se activan sin jugar otra carta antes"),
+    lambda: _add_spoil(_r("r_chatarra", "Chatarra", _S, 0, _C, draw=1), mana=1),
+    lambda: _r("r_vaciar_bolsillos", "Vaciar Bolsillos", _S, 1, _RA, on_play=_on_empty_pockets,
+               text="descarta tu mano y roba esa misma cantidad de cartas"),
+    lambda: _r("r_juego_de_manos", "Juego de Manos", _S, 0, _U, on_play=_on_sleight_of_hand,
+               text="devuelve a tu mano la última carta de tu descarte"),
+    lambda: _r("r_carterista", "Carterista", _S, 1, _C, draw=1, on_play=_on_pickpocket,
+               text="si un enemigo muere este turno, ganas 10 de oro"),
+    lambda: _r("r_hoja_envenenada", "Hoja Envenenada", _S, 1, _U, on_play=_on_poison_blade,
+               text="tus próximos 3 ataques aplican 2 de Veneno"),
+    lambda: _r("r_tirar_los_dados", "Tirar los Dados", _S, 0, _RA, on_play=_on_roll_dice,
+               text="gana de 0 a 3 de maná al azar (la Suerte da tiradas extra)"),
+    lambda: _r("r_marcar_objetivo", "Marcar Objetivo", _S, 1, _C, on_play=_on_mark_target,
+               text="este turno, cada golpe a ese enemigo hace 3 de daño más", needs_target=True),
 ]
 
 _ROGUE_EPICO: list[Callable[[], Card]] = [
@@ -385,6 +436,22 @@ _ROGUE_EPICO: list[Callable[[], Card]] = [
                              on_turn_start=_on_turn_blades,
                              text="al inicio de cada turno, inflige 3 de daño a todos los enemigos"),
                           text="5 de daño en vez de 3"),
+    lambda: _r("r_rapina", "Rapiña", _P, 1, _E, on_play=_on_scavenge,
+               text="este combate, cada carta que descartes inflige 3 de daño a un enemigo al azar"),
+    lambda: _r("r_maestra_de_dagas", "Maestra de Dagas", _P, 1, _E, on_play=_on_dagger_master,
+               text="este combate, cada Daga Oculta que robes mete otra en tu pila de robo"),
+    lambda: _r("r_sombra_gemela", "Sombra Gemela", _P, 2, _E, on_play=_on_twin_shadow,
+               text="la primera carta de cada turno que active su Combo lo activa dos veces"),
+    lambda: _r("r_fortuna_audaz", "Fortuna Audaz", _P, 1, _E, on_turn_start=_on_bold_fortune,
+               text="al inicio de cada turno: 50 % roba 1 carta, 50 % gana 4 de escudo"),
+    lambda: _r("r_nada_que_perder", "Nada que Perder", _P, 2, _L, on_play=_on_nothing_to_lose,
+               text="al inicio de cada turno, tras robar, descarta una carta al azar y roba 2"),
+    lambda: _r("r_cadena_perfecta", "Cadena Perfecta", _P, 2, _L, on_play=_on_perfect_chain,
+               text="cada quinta carta que juegues en un turno se lanza una vez más"),
+    lambda: _r("r_asesina", "Asesina", _P, 3, _L, on_play=_on_assassin,
+               text="tus ataques rematan a los enemigos que queden por debajo del 25 % de vida"),
+    lambda: _r("r_mil_cortes", "Mil Cortes", _A, 3, _L, on_play=_on_thousand_cuts, hits_all=True,
+               text="por cada carta en tu descarte, 3 de daño a un enemigo al azar"),
 ]
 
 
@@ -394,9 +461,8 @@ _ROGUE_EPICO: list[Callable[[], Card]] = [
 # ---------------------------------------------------------------------------
 
 def _apply_block_absorbed_damage(enemy, dmg: int) -> None:
-    absorbed = min(enemy.block, dmg)
-    enemy.block = max(0, enemy.block - absorbed)
-    enemy.current_hp = max(0, enemy.current_hp - (dmg - absorbed))
+    """One hit (block absorbs first, Marcado adds its stacks) — see ``entities.deal_damage``."""
+    deal_damage(enemy, dmg)
 
 
 # ACERO effects
@@ -434,7 +500,7 @@ def _on_veneno(state) -> None:
     """Apply 3 stacks of POISON to the targeted enemy."""
     idx = state.targeted_enemy_index
     if idx is not None and idx < len(state.enemies) and state.enemies[idx].is_alive:
-        state.enemies[idx].status_effects.append(StatusEffect("Veneno", 3, is_buff=False))
+        add_status(state.enemies[idx].status_effects, POISON, 3, is_buff=False)
 
 
 def _on_vision_del_caos(state) -> None:
@@ -479,7 +545,7 @@ def _on_tormenta_veneno(state) -> None:
     """Apply POISON 5 to ALL enemies."""
     for e in state.enemies:
         if e.is_alive:
-            e.status_effects.append(StatusEffect("Veneno", 5, is_buff=False))
+            add_status(e.status_effects, POISON, 5, is_buff=False)
 
 
 # ROGUE effects
@@ -490,9 +556,7 @@ def _alive(state) -> list:
 
 def _on_random_hit_4(state) -> None:
     """4 damage to a random living enemy."""
-    alive = _alive(state)
-    if alive:
-        _apply_block_absorbed_damage(random.choice(alive), 4)
+    state.hit_random_enemy(4)
 
 
 def _on_two_random_10(state) -> None:
@@ -507,10 +571,8 @@ def _on_all_hit_5(state) -> None:
 
 
 def _on_discard_random(state) -> None:
-    """Discard a random card from the hand (this card has already left it)."""
-    if state.hand.cards:
-        card = state.hand.cards.pop(random.randrange(state.hand.count))
-        state.discard_pile.cards.append(card)
+    """Discard a random card from the hand (this card has already left it). Turns Despojo on."""
+    state.discard_random()
 
 
 def _on_refund_on_kill(state) -> None:
@@ -577,6 +639,162 @@ def _on_turn_blades(state) -> None:
         _apply_block_absorbed_damage(e, dmg)
 
 
+# --- La Pícara: daggers, poison, discard, luck --------------------------------
+
+DAGGER_DAMAGE: int = 4
+SHEATH_BONUS: int = 2          # Vaina Afilada: +2 per dagger (golden: +4)
+FLURRY_PER_CARD: int = 2       # Ráfaga de Cortes
+LUCKY_CUT_BONUS: int = 6       # Corte Afortunado critical
+THOUSAND_CUTS_HIT: int = 3     # Mil Cortes, per card in the discard pile
+MARK_BONUS: int = 3            # Marcar Objetivo
+COUNTER_DAMAGE: int = 3        # Contraataque
+PICKPOCKET_GOLD: int = 10      # Carterista
+POISON_BLADE_ATTACKS: int = 3  # Hoja Envenenada: attacks that apply poison...
+POISON_BLADE_STACKS: int = 2   # ...and how much each
+SCAVENGE_DAMAGE: int = 3       # Rapiña
+BOLD_FORTUNE_BLOCK: int = 4    # Fortuna Audaz
+EXECUTE_RATIO: float = 0.25    # Asesina
+
+
+def lucky_roll_count(luck: int, rng=None) -> int:
+    """How many rolls luck gives (keep the best): 1, +1 per 20 luck, +1 more with luck%20 × 5 %.
+
+    Pícara (8 luck): 1 roll, 40 % chance of 2. Capped at 4 rolls.
+    """
+    luck = max(0, luck)
+    extra = luck // 20 + (1 if (rng or random).random() < (luck % 20) / 20 else 0)
+    return min(4, 1 + extra)
+
+
+def lucky_crit_chance(luck: int) -> float:
+    """Corte Afortunado: 10 % + 2.5 % per point of luck, at most 75 %."""
+    return min(0.75, 0.10 + 0.025 * max(0, luck))
+
+
+def _target(state):
+    idx = state.targeted_enemy_index
+    if idx is not None and 0 <= idx < len(state.enemies) and state.enemies[idx].is_alive:
+        return state.enemies[idx]
+    return None
+
+
+def _on_dagger(state) -> None:
+    """Daga Oculta: 4 damage at random (+ Vaina Afilada); Maestra de Dagas hides more."""
+    from src.domain.relic import RelicTag, relic_total
+    state.hit_random_enemy(DAGGER_DAMAGE + relic_total(state.relics, RelicTag.SHARP_SHEATH, SHEATH_BONUS))
+    if state.daggers_on_draw:
+        _hide_daggers(state, state.daggers_on_draw)
+
+
+def _on_random_hit_3(state) -> None:
+    state.hit_random_enemy(3)
+
+
+def _on_flurry(state) -> None:
+    """2 damage to the target per card played this turn, this one included."""
+    enemy = _target(state)
+    if enemy is not None:
+        deal_damage(enemy, FLURRY_PER_CARD * (state.cards_played_this_turn + 1))
+
+
+def _on_lucky_cut(state) -> None:
+    enemy = _target(state)
+    if enemy is not None and random.random() < lucky_crit_chance(state.player.luck):
+        deal_damage(enemy, LUCKY_CUT_BONUS)
+
+
+def _on_break_guard(state) -> None:
+    enemy = _target(state)
+    if enemy is not None:
+        enemy.block = 0
+
+
+def _on_thousand_cuts(state) -> None:
+    for _ in range(state.discard_pile.count):
+        state.hit_random_enemy(THOUSAND_CUTS_HIT)
+
+
+def _on_decoy(state) -> None:
+    state.decoys += 1
+
+
+def _on_retain_block(state) -> None:
+    state.retain_block = True
+
+
+def _on_counter(state) -> None:
+    state.counter_damage += COUNTER_DAMAGE
+
+
+def _on_empty_pockets(state) -> None:
+    """Discard the whole hand, then draw that many cards."""
+    n = state.hand.count
+    for _ in range(n):
+        state.discard_from_hand(state.hand.count - 1)
+    state.pending_draws += n
+
+
+def _on_sleight_of_hand(state) -> None:
+    """Back to the hand: the newest card of the discard pile that is not a Juego de Manos."""
+    if state.hand.is_full:
+        return
+    for i in range(state.discard_pile.count - 1, -1, -1):
+        if state.discard_pile.cards[i].id != "r_juego_de_manos":
+            state.hand.cards.append(state.discard_pile.cards.pop(i))
+            return
+
+
+def _on_pickpocket(state) -> None:
+    state.pickpocket_gold += PICKPOCKET_GOLD
+
+
+def _on_poison_blade(state) -> None:
+    state.poison_attacks += POISON_BLADE_ATTACKS
+
+
+def _on_roll_dice(state) -> None:
+    """0–3 mana; luck gives extra rolls and the best one is kept."""
+    best = max(random.randint(0, 3) for _ in range(lucky_roll_count(state.player.luck)))
+    state.mana.gain(best)
+
+
+def _on_mark_target(state) -> None:
+    enemy = _target(state)
+    if enemy is not None:
+        add_status(enemy.status_effects, MARKED, MARK_BONUS, is_buff=False)
+
+
+def _on_scavenge(state) -> None:
+    state.discard_damage += SCAVENGE_DAMAGE
+
+
+def _on_dagger_master(state) -> None:
+    state.daggers_on_draw += 1
+
+
+def _on_twin_shadow(state) -> None:
+    state.double_combo += 1
+
+
+def _on_bold_fortune(state) -> None:
+    if random.random() < 0.5:
+        state.pending_draws += 1
+    else:
+        state.player.block += BOLD_FORTUNE_BLOCK
+
+
+def _on_nothing_to_lose(state) -> None:
+    state.turn_rummages.append(2)
+
+
+def _on_perfect_chain(state) -> None:
+    state.echo_every_fifth += 1
+
+
+def _on_assassin(state) -> None:
+    state.execute_threshold = True
+
+
 # ---------------------------------------------------------------------------
 # Classes
 # ---------------------------------------------------------------------------
@@ -623,6 +841,16 @@ CARD_CLASS_BY_ID: dict[str, CardClass] = {
     "r_preparacion": _R, "r_rebuscar": _R, "r_astucia": _R, "r_dagas_ocultas": _R, "r_afilar": _R,
     "r_reflejos": _R, "r_danza_de_sombras": _R,
     "r_abanico_de_cuchillas": _R, "r_ritmo_letal": _R, "r_tormenta_de_acero": _R,
+    # La Pícara — Combo, Despojo, dagas, veneno y suerte
+    "r_punalada_trapera": _R, "r_tajo_veloz": _R, "r_tirar_y_cortar": _R, "r_rafaga_de_cortes": _R,
+    "r_lanzar_la_daga": _R, "r_corte_afortunado": _R, "r_abrir_la_guardia": _R, "r_hoja_unica": _R,
+    "r_quiebro": _R, "r_finta_doble": _R, "r_sombra_esquiva": _R, "r_manto_raido": _R,
+    "r_rodar": _R, "r_deshacerse": _R, "r_senuelo": _R, "r_capa_de_sombras": _R,
+    "r_contraataque": _R, "r_estilo_propio": _R,
+    "r_chatarra": _R, "r_vaciar_bolsillos": _R, "r_juego_de_manos": _R, "r_carterista": _R,
+    "r_hoja_envenenada": _R, "r_tirar_los_dados": _R, "r_marcar_objetivo": _R,
+    "r_rapina": _R, "r_maestra_de_dagas": _R, "r_sombra_gemela": _R, "r_fortuna_audaz": _R,
+    "r_nada_que_perder": _R, "r_cadena_perfecta": _R, "r_asesina": _R, "r_mil_cortes": _R,
 }
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pygame
 
-from src.application.run_manager import acquire_relic, pick_shop_stock
+from src.application.run_manager import acquire_relic, pick_shop_stock, shop_price
 from src.domain.card_pool import PackTheme
 from src.domain.chroma import chroma_def, chroma_title
 from src.domain.run import Run
@@ -68,7 +68,7 @@ class ShopScene:
                 rect = pygame.Rect(start_x + i * (_TILE_W + _GAP), top, _TILE_W, _TILE_H)
                 rects.append(rect)
                 is_pack = kind == 'Sobres'
-                cost = item.cost if is_pack else _RELIC_COST
+                cost = shop_price(self._run, item.cost if is_pack else _RELIC_COST)
                 sprite = (pack_art(item.theme.value, 150) if is_pack
                           else self._sprites.get_relic_sprite(item.name, 64))
                 if is_pack and item.chroma is not None and sprite is not None:
@@ -138,9 +138,10 @@ class ShopScene:
         for i, rect in enumerate(self._pack_rects):
             if rect.collidepoint(pos):
                 pack = self._packs[i]
-                if not self._purchase_allowed(i in self._sold_packs, pack.cost):
+                price = shop_price(self._run, pack.cost)
+                if not self._purchase_allowed(i in self._sold_packs, price):
                     return
-                self._run.gold -= pack.cost
+                self._run.gold -= price
                 self._sold_packs.add(i)
                 self.selected_pack = pack.theme
                 self.selected_pack_chroma = pack.chroma
@@ -149,9 +150,10 @@ class ShopScene:
                 return
         for i, rect in enumerate(self._relic_rects):
             if rect.collidepoint(pos):
-                if not self._purchase_allowed(i in self._sold_relics, _RELIC_COST):
+                price = shop_price(self._run, _RELIC_COST)
+                if not self._purchase_allowed(i in self._sold_relics, price):
                     return
-                self._run.gold -= _RELIC_COST
+                self._run.gold -= price
                 self._sold_relics.add(i)
                 acquire_relic(self._run, self._relics[i])
                 self._sound.play_purchase()

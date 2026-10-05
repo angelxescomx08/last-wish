@@ -81,14 +81,15 @@ class CardEffect:
     void: optional extra layer (keyword VOID, "Vacío") that also resolves when
     paying the card's cost leaves the mana at exactly 0.
 
+    spoil: optional extra layer (keyword SPOIL, "Despojo") that also resolves
+    when a card was discarded by an effect earlier this turn.
+
     on_turn_start: for POWER cards, runs at the start of each of your turns while
     the power is in play (golden: twice).
 
     text: Spanish description of what on_play does, shown on the card face and in
     its tooltip (for keyword layers, shown after "Combo:" etc.).
 
-    text: optional Spanish description of what on_play does (shown for combo
-    layers, e.g. "aplica 3 de Veneno más").
     """
     name: str
     damage: BigValue = field(default_factory=lambda: BigValue(0))
@@ -101,6 +102,7 @@ class CardEffect:
     combo: CardEffect | None = None
     singular: CardEffect | None = None
     void: CardEffect | None = None
+    spoil: CardEffect | None = None
     on_turn_start: Callable[[CombatState], None] | None = None
     text: str = ""
 
@@ -185,13 +187,18 @@ class Card:
         """Vacío layers of the chain (keyword VOID)."""
         return [fx.void for fx in self.all_effects() if fx.void is not None]
 
+    def spoil_effects(self) -> list[CardEffect]:
+        """Despojo layers of the chain (keyword SPOIL)."""
+        return [fx.spoil for fx in self.all_effects() if fx.spoil is not None]
+
     def active_effects(self, combo: bool = False, singular: bool = False,
-                       void: bool = False) -> list[CardEffect]:
-        """Effects that resolve: the chain, plus its combo / singular / void layers when on."""
+                       void: bool = False, spoil: bool = False) -> list[CardEffect]:
+        """Effects that resolve: the chain, plus its keyword layers that are on."""
         return (self.all_effects()
                 + (self.combo_effects() if combo else [])
                 + (self.singular_effects() if singular else [])
-                + (self.void_effects() if void else []))
+                + (self.void_effects() if void else [])
+                + (self.spoil_effects() if spoil else []))
 
     def keywords(self) -> frozenset[Keyword]:
         out = set()
@@ -201,6 +208,8 @@ class Card:
             out.add(Keyword.SINGULAR)
         if self.void_effects():
             out.add(Keyword.VOID)
+        if self.spoil_effects():
+            out.add(Keyword.SPOIL)
         return frozenset(out)
 
     def effect_multiplier(self) -> int:
@@ -214,23 +223,27 @@ class Card:
         """
         return self.effect_multiplier()
 
-    def total_damage(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
+    def total_damage(self, combo: bool = False, singular: bool = False, void: bool = False,
+                     spoil: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo, singular, void):
+        for fx in self.active_effects(combo, singular, void, spoil):
             total = total.add_flat(fx.damage.resolve())
         return total.resolve()
 
-    def total_block(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
+    def total_block(self, combo: bool = False, singular: bool = False, void: bool = False,
+                    spoil: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo, singular, void):
+        for fx in self.active_effects(combo, singular, void, spoil):
             total = total.add_flat(fx.block.resolve())
         return total.resolve()
 
-    def total_draw(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
-        return sum(fx.draw for fx in self.active_effects(combo, singular, void))
+    def total_draw(self, combo: bool = False, singular: bool = False, void: bool = False,
+                   spoil: bool = False) -> int:
+        return sum(fx.draw for fx in self.active_effects(combo, singular, void, spoil))
 
-    def total_mana_gain(self, combo: bool = False, singular: bool = False, void: bool = False) -> int:
-        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void))
+    def total_mana_gain(self, combo: bool = False, singular: bool = False, void: bool = False,
+                        spoil: bool = False) -> int:
+        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void, spoil))
 
     def effect_count(self) -> int:
         return len(self.stacked_effects)

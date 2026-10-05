@@ -24,9 +24,9 @@ altos y las versiones doradas (ver `src/domain/rarity.py`).
 
 | Tipo | Qué pasa al jugarla | Cartas en el pool | Estado |
 |---|---|---|---|
-| **Ataque** | Hace su efecto y va al descarte. | 31 | ✅ |
-| **Habilidad** | Hace su efecto y va al descarte. | 31 | ✅ |
-| **Poder** | Hace su efecto y se queda en juego el resto del combate; puede tener un efecto al inicio de cada turno. | 6 | ✅ |
+| **Ataque** | Hace su efecto y va al descarte. | 40 | ✅ |
+| **Habilidad** | Hace su efecto y va al descarte. | 48 | ✅ |
+| **Poder** | Hace su efecto y se queda en juego el resto del combate; puede tener un efecto al inicio de cada turno. | 13 | ✅ |
 | **Hechizo** | Por definir: ¿en qué se distingue de una Habilidad? | 0 | ⏳ idea |
 
 Los mazos iniciales solo tienen Ataques y Habilidades.
@@ -47,6 +47,10 @@ al robarla se juega sola gratis y desaparece del combate.
 | **Combo** | Efecto extra si ya jugaste otra carta este turno. | Solo Pícara | ✅ |
 | **Singular** | Efecto extra si tu mazo inicial no contiene cartas repetidas. | Pícara por ahora (Abanico de Cuchillas, Tormenta de Acero) | ✅ |
 | **Vacío** | Efecto extra si al jugar la carta te quedas con 0 de maná (ej.: te queda 1 de maná y juegas una carta de 1). Las cartas de coste 0 no lo activan. | Solo Mago (aún no hay cartas con Vacío) | ✅ |
+| **Despojo** | Efecto extra si ya descartaste una carta este turno. Solo cuentan los descartes de cartas o reliquias, no el descarte del final del turno. | Solo Pícara | ✅ |
+
+**Regla de diseño:** la palabra clave *es* la condición. Un efecto de palabra clave nunca
+añade otra condición propia ("Combo: si además…" no vale). Lo comprueba un test.
 
 La columna **Clases** indica qué clases tienen cartas con esa palabra: *Todas*, *Solo X*
 o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier carta.
@@ -59,6 +63,7 @@ o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier c
 |---|---|---|---|
 | **Veneno** | Pierde X de vida al inicio de su turno; baja 1 por turno. | Cartas (enemigos) | ✅ |
 | **Débil** | Inflige 25% menos de daño. | Guardia Evasiva (a enemigos, 1 turno); intención DEBUFF de enemigos (al héroe, 2 turnos) | ✅ |
+| **Marcado** | Cada golpe que recibe hace X de daño más. Se quita al terminar tu turno. | Marcar Objetivo (Pícara) | ✅ |
 
 ---
 
@@ -97,6 +102,39 @@ o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier c
 | Afilar | Habilidad | 1 | Tu siguiente carta que haga daño este turno inflige 6 más. | Común | ✅ |
 | Muro de Humo | Habilidad | 2 | Gana 14 de escudo. | Poco común* | ✅ |
 | Cuchillada Errante | Ataque | 1 | Inflige 4 de daño a un enemigo al azar. **Combo:** hazlo de nuevo. | Común | ✅ |
+| Puñalada Trapera | Ataque | 1 | Inflige 5 de daño. **Combo:** +5 de daño. | Poco común | ✅ |
+| Tajo Veloz | Ataque | 1 | Inflige 6 de daño. **Combo:** +1 de maná. | Común | ✅ |
+| Tirar y Cortar | Ataque | 1 | Inflige 6 de daño. **Despojo:** +6 de daño. | Común | ✅ |
+| Ráfaga de Cortes | Ataque | 1 | 2 de daño por cada carta jugada este turno (esta incluida). | Rara | ✅ |
+| Lanzar la Daga | Ataque | 0 | Inflige 4 de daño; mete 1 Daga Oculta en tu pila de robo. | Común | ✅ |
+| Corte Afortunado | Ataque | 1 | Inflige 6 de daño; crítico de +6 con probabilidad 10% + 2,5% por punto de Suerte (máx. 75%). | Rara | ✅ |
+| Abrir la Guardia | Ataque | 1 | Inflige 4 de daño y luego le quita todo el escudo. | Común | ✅ |
+| Hoja Única | Ataque | 1 | Inflige 8 de daño. **Singular:** +8 de daño. | Rara | ✅ |
+| Mil Cortes | Ataque | 3 | Por cada carta en tu descarte, 3 de daño a un enemigo al azar. | Legendaria | ✅ |
+| Quiebro | Habilidad | 1 | Gana 6 de escudo. **Combo:** roba 1. (Iba a llamarse "Esquiva", pero ya es la carta inicial.) | Común | ✅ |
+| Finta Doble | Habilidad | 0 | Gana 3 de escudo. **Combo:** 3 de daño a un enemigo al azar. | Común | ✅ |
+| Sombra Esquiva | Habilidad | 1 | Gana 7 de escudo. **Combo:** mete 1 Daga Oculta en tu pila de robo. | Poco común | ✅ |
+| Manto Raído | Habilidad | 1 | Gana 7 de escudo. **Despojo:** +7 de escudo. | Poco común | ✅ |
+| Rodar | Habilidad | 0 | Gana 2 de escudo; descarta una carta al azar y roba 1. | Común | ✅ |
+| Deshacerse | Habilidad | 0 | Descarta una carta al azar y gana 4 de escudo. | Común | ✅ |
+| Señuelo | Habilidad | 1 | Gana 5 de escudo; el siguiente ataque enemigo de este turno golpea a otro enemigo. | Poco común | ✅ |
+| Capa de Sombras | Habilidad | 2 | Gana 8 de escudo; tu escudo no se pierde al empezar tu siguiente turno. | Rara | ✅ |
+| Contraataque | Habilidad | 1 | Gana 4 de escudo; cada golpe que bloquees por completo este turno hace 3 de daño al atacante. | Poco común | ✅ |
+| Estilo Propio | Habilidad | 2 | Gana 12 de escudo. **Singular:** roba 2. | Épica | ✅ |
+| Chatarra | Habilidad | 0 | Roba 1. **Despojo:** +1 de maná. | Común | ✅ |
+| Vaciar Bolsillos | Habilidad | 1 | Descarta tu mano y roba esa misma cantidad. | Rara | ✅ |
+| Juego de Manos | Habilidad | 0 | Devuelve a tu mano la última carta de tu descarte. | Poco común | ✅ |
+| Carterista | Habilidad | 1 | Roba 1; si un enemigo muere este turno, ganas 10 de oro. | Común | ✅ |
+| Hoja Envenenada | Habilidad | 1 | Tus próximos 3 ataques aplican 2 de Veneno. | Poco común | ✅ |
+| Tirar los Dados | Habilidad | 0 | Gana de 0 a 3 de maná al azar; la Suerte da tiradas extra (te quedas con la mejor). | Rara | ✅ |
+| Marcar Objetivo | Habilidad | 1 | Este turno, cada golpe a ese enemigo hace 3 de daño más (Marcado). | Común | ✅ |
+| Rapiña | Poder | 1 | Cada carta que descartes inflige 3 de daño a un enemigo al azar. | Épica | ✅ |
+| Maestra de Dagas | Poder | 1 | Cada Daga Oculta que robes mete otra en tu pila de robo. | Épica | ✅ |
+| Sombra Gemela | Poder | 2 | La primera carta de cada turno que active su Combo lo activa dos veces. | Épica | ✅ |
+| Fortuna Audaz | Poder | 1 | Al inicio de cada turno: 50% roba 1, 50% gana 4 de escudo. | Épica | ✅ |
+| Nada que Perder | Poder | 2 | Al inicio de cada turno, tras robar, descarta una carta al azar y roba 2. | Legendaria | ✅ |
+| Cadena Perfecta | Poder | 2 | Cada quinta carta que juegues en un turno se lanza una vez más. | Legendaria | ✅ |
+| Asesina | Poder | 3 | Tus ataques rematan a los enemigos que queden por debajo del 25% de vida. | Legendaria | ✅ |
 
 \* Rareza elegida por mí (no venía en la lista); cámbiala si quieres.
 
@@ -117,6 +155,14 @@ Torbellino, Veneno, Lluvia de Golpes, Tormenta de Veneno, Mazo Impecable y Finta
 | Espejo Singular | Al obtenerla, elimina todas tus cartas repetidas: te quedas con una copia de cada carta. | Legendaria | ✅ |
 | Panacea | Eres inmune a cualquier debuff de los enemigos (p. ej. Débil). | Legendaria | ✅ |
 | Fuente Eterna | Al inicio de cada turno ganas 1 de maná máximo. | Legendaria | ✅ |
+| Máscara del Ladrón | +25% de oro en combates; la tienda es un 10% más barata. | Común | ✅ |
+| Moneda de la Suerte | Si un efecto al azar golpea dos veces seguidas al mismo enemigo, +1 de maná. Una vez por turno y solo con 2+ enemigos vivos. | Poco común | ✅ |
+| Herradura de Plata | +30 de suerte. | Poco común | ✅ |
+| Guante de Seda | La tercera carta que juegas cada turno cuesta 0. | Rara | ✅ |
+| Botas Silenciosas | En el primer turno de cada combate robas 2 cartas extra. | Rara | ✅ |
+| Hilo de Araña | Si terminas el turno sin cartas en la mano, ganas 6 de escudo. | Épica | ✅ |
+| Llave Maestra | Las salas del tesoro te dejan elegir entre 2 reliquias. | Épica | ✅ |
+| Reloj Roto | Una vez por combate, al quedarte en 0 de maná con cartas en la mano, recuperas todo el maná. | Legendaria | ✅ |
 
 ### Pícara
 
@@ -124,6 +170,19 @@ Torbellino, Veneno, Lluvia de Golpes, Tormenta de Veneno, Mazo Impecable y Finta
 |---|---|---|---|
 | Broche de Evasión | Cada vez que activas un Combo, ganas 1 de bloqueo. | Poco común | ✅ |
 | Cuchillo Arrojadizo | Cada vez que activas un Combo, inflige 1 de daño a un enemigo al azar. | Poco común | ✅ |
+| Pañuelo del Duelista | Cuando una carta activa su Combo, hace +2 de daño y da +2 de escudo (solo sobre lo que ya hace). | Poco común | ✅ |
+| Cinta Roja | En el primer turno de cada combate, tus Combos se activan sin jugar otra carta antes. | Rara | ✅ |
+| Saco de Trapos | Cada vez que activas un Despojo, ganas 2 de escudo. | Común | ✅ |
+| Garfio | La primera vez que activas un Despojo cada turno, robas 1. | Poco común | ✅ |
+| Bolsillo Roto | Al inicio de cada turno, tras robar, descarta una carta al azar y roba 1. | Rara | ✅ |
+| Daga Partida | Tus efectos de Despojo se activan dos veces. | Legendaria | ✅ |
+| Bolsa de Dagas | Al inicio de cada combate, mete 2 Dagas Ocultas en tu pila de robo. | Común | ✅ |
+| Vaina Afilada | Tus Dagas Ocultas hacen +2 de daño. | Poco común | ✅ |
+| Frasco de Veneno | Tu primer ataque de cada turno aplica 1 de Veneno. | Poco común | ✅ |
+| Colmillo de Víbora | Cuando un enemigo muere envenenado, su Veneno pasa a otro enemigo al azar. | Rara | ✅ |
+
+Regla: las reliquias de la Pícara solo tocan sus temas (Combo, Despojo, dagas y veneno);
+lo demás es neutral.
 
 ### Ya existentes (antes de esta lista)
 
@@ -180,7 +239,7 @@ Las cartas mejorables varias veces cuestan más en cada nivel: precio × (nivel 
 
 | Clase | Arquetipos |
 |---|---|
-| Pícara | Combo · Suerte |
+| Pícara | Combo · Despojo · Dagas · Veneno · Suerte |
 | Mago | Vacío · Cartas de elementos |
 | Guerrera | Bloqueo · Fuerza · Curación |
 

@@ -115,17 +115,21 @@ def generate_boss(run: Run) -> list[Enemy]:
 # ---------------------------------------------------------------------------
 
 def _combat_gold(run: Run, enemies: list[Enemy]) -> int:
+    """Gold for a victory: enemies' worth + Anillo de Oro, x Máscara del Ladrón, x Pruebas."""
     base = sum(max(1, e.max_hp // 8) for e in enemies)
     base += relic_effects.bonus_gold_reward(run.relics)
-    return round(base * TUNING.gold_multiplier)
+    return round(base * relic_effects.combat_gold_multiplier(run.relics) * TUNING.gold_multiplier)
 
 
-def apply_combat_victory(run: Run, hp_after: int, enemies: list[Enemy]) -> int:
-    """Update run state after winning a combat.  Returns gold earned."""
+def apply_combat_victory(run: Run, hp_after: int, enemies: list[Enemy], bonus_gold: int = 0) -> int:
+    """Update run state after winning a combat.  Returns gold earned.
+
+    ``bonus_gold``: gold won during the fight (``CombatState.gold_earned``, e.g. Carterista).
+    """
     heal   = relic_effects.post_combat_heal(run.relics)
     new_hp = min(hp_after + heal, run.player_max_hp)
     run.apply_combat_result(new_hp)
-    gold = _combat_gold(run, enemies)
+    gold = _combat_gold(run, enemies) + max(0, bonus_gold)
     run.gold += gold
     return gold
 
@@ -182,6 +186,58 @@ def _all_relic_defs() -> list[Relic]:
         Relic("r_knife",    "Cuchillo Arrojadizo",
               "Cada vez que activas un Combo, inflige 1 de daño a un enemigo al azar.",
               tag=RelicTag.THROWING_KNIFE, relic_class=CardClass.ROGUE),
+        # La Pícara — Combo, Despojo, dagas y veneno
+        Relic("r_rag_sack", "Saco de Trapos",
+              "Cada vez que activas un Despojo, ganas 2 de escudo.",
+              tag=RelicTag.RAG_SACK, relic_class=CardClass.ROGUE),
+        Relic("r_scarf",    "Pañuelo del Duelista",
+              "Cuando una carta activa su Combo, hace +2 de daño y da +2 de escudo.",
+              tag=RelicTag.DUELIST_SCARF, relic_class=CardClass.ROGUE),
+        Relic("r_hook",     "Garfio",
+              "La primera vez que activas un Despojo cada turno, robas 1 carta.",
+              tag=RelicTag.GRAPPLING_HOOK, relic_class=CardClass.ROGUE),
+        Relic("r_ribbon",   "Cinta Roja",
+              "En el primer turno de cada combate, tus Combos se activan sin jugar otra carta antes.",
+              tag=RelicTag.CRIMSON_RIBBON, relic_class=CardClass.ROGUE),
+        Relic("r_pocket",   "Bolsillo Roto",
+              "Al inicio de cada turno, tras robar, descarta una carta al azar y roba 1.",
+              tag=RelicTag.TORN_POCKET, relic_class=CardClass.ROGUE),
+        Relic("r_split",    "Daga Partida",
+              "Tus efectos de Despojo se activan dos veces.",
+              tag=RelicTag.SPLIT_DAGGER, relic_class=CardClass.ROGUE),
+        Relic("r_pouch",    "Bolsa de Dagas",
+              "Al inicio de cada combate, mete 2 Dagas Ocultas en tu pila de robo.",
+              tag=RelicTag.DAGGER_POUCH, relic_class=CardClass.ROGUE),
+        Relic("r_sheath",   "Vaina Afilada",
+              "Tus Dagas Ocultas hacen +2 de daño.",
+              tag=RelicTag.SHARP_SHEATH, relic_class=CardClass.ROGUE),
+        Relic("r_vial",     "Frasco de Veneno",
+              "Tu primer ataque de cada turno aplica 1 de Veneno.",
+              tag=RelicTag.POISON_VIAL, relic_class=CardClass.ROGUE),
+        Relic("r_fang",     "Colmillo de Víbora",
+              "Cuando un enemigo muere envenenado, su Veneno pasa a otro enemigo al azar.",
+              tag=RelicTag.VIPER_FANG, relic_class=CardClass.ROGUE),
+        # Neutrales
+        Relic("r_mask",     "Máscara del Ladrón",
+              "+25% de oro en los combates y la tienda es un 10% más barata.",
+              tag=RelicTag.THIEF_MASK),
+        Relic("r_coin",     "Moneda de la Suerte",
+              "Si un efecto al azar golpea dos veces seguidas al mismo enemigo, ganas 1 de maná "
+              "(una vez por turno).", tag=RelicTag.LUCKY_COIN),
+        Relic("r_horseshoe", "Herradura de Plata",
+              "+30 de suerte.", tag=RelicTag.SILVER_HORSESHOE),
+        Relic("r_glove",    "Guante de Seda",
+              "La tercera carta que juegas cada turno cuesta 0.", tag=RelicTag.SILK_GLOVE),
+        Relic("r_boots",    "Botas Silenciosas",
+              "En el primer turno de cada combate robas 2 cartas extra.", tag=RelicTag.SILENT_BOOTS),
+        Relic("r_thread",   "Hilo de Araña",
+              "Si terminas el turno sin cartas en la mano, ganas 6 de escudo.",
+              tag=RelicTag.SPIDER_THREAD),
+        Relic("r_key",      "Llave Maestra",
+              "Las salas del tesoro te dejan elegir entre 2 reliquias.", tag=RelicTag.MASTER_KEY),
+        Relic("r_clock",    "Reloj Roto",
+              "Una vez por combate, al quedarte en 0 de maná con cartas en la mano, recuperas todo el maná.",
+              tag=RelicTag.BROKEN_CLOCK),
     ]
 
 
@@ -228,10 +284,21 @@ def _with_chroma(relics: list[Relic], rng: random.Random, luck: int = 0) -> list
 
 def pick_treasure_relic(run: Run, room_id: str) -> Relic:
     """Choose a relic not already owned by the player."""
-    pool = _relic_pool(run)
+    return pick_treasure_relics(run, room_id)[0]
+
+
+def pick_treasure_relics(run: Run, room_id: str) -> list[Relic]:
+    """Relics offered by a treasure room: 1, or more with Llave Maestra (pick one)."""
+    count = relic_effects.treasure_choices(run.relics)
+    pool = _relic_pool(run, count)
     rng = random.Random(_enemy_seed(run, room_id) ^ 0x1234)
-    relics = _pick_relics(pool, 1, rng, run_luck(run))
-    return _with_chroma(relics, rng, run_luck(run))[0]
+    relics = _pick_relics(pool, min(count, len(pool)), rng, run_luck(run))
+    return _with_chroma(relics, rng, run_luck(run))
+
+
+def shop_price(run: Run, base: int) -> int:
+    """What a shop item costs this run (Máscara del Ladrón discounts it)."""
+    return relic_effects.shop_price(run.relics, base)
 
 
 def pick_boss_relics(run: Run, count: int = 3) -> list[Relic]:

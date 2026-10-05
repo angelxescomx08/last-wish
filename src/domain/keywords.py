@@ -13,6 +13,13 @@ its rule. Current keywords:
 * VOID ("Vacío") — an extra effect layer (``CardEffect.void``) that also resolves
   when paying the card's cost leaves your mana at exactly 0 (the card must cost at
   least 1). Mage cards only (see ``card_pool``).
+* SPOIL ("Despojo") — an extra effect layer (``CardEffect.spoil``) that also
+  resolves when you already discarded a card this turn with a card or relic
+  effect (``CombatState.discards_this_turn``; the end-of-turn discard does not
+  count). Rogue cards only (see ``card_pool``).
+
+Design rule: the keyword *is* the condition. A keyword layer never adds a second
+condition of its own ("Combo: si además…" is not allowed).
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ class Keyword(Enum):
     COMBO = "combo"
     SINGULAR = "singular"
     VOID = "void"
+    SPOIL = "spoil"
 
 
 @dataclass(frozen=True)
@@ -49,6 +57,10 @@ KEYWORD_DEFS: dict[Keyword, KeywordDef] = {
     Keyword.VOID: KeywordDef(
         Keyword.VOID, "Vacío",
         "Vacío: efecto extra si al jugarla te quedas con 0 de maná.",
+    ),
+    Keyword.SPOIL: KeywordDef(
+        Keyword.SPOIL, "Despojo",
+        "Despojo: efecto extra si ya descartaste una carta este turno.",
     ),
 }
 
@@ -76,6 +88,11 @@ def singular_text(card: "Card") -> str:
 def void_text(card: "Card") -> str:
     """Spanish summary of a card's Vacío layers as printed."""
     return layer_text(card.void_effects())
+
+
+def spoil_text(card: "Card") -> str:
+    """Spanish summary of a card's Despojo layers as printed."""
+    return layer_text(card.spoil_effects())
 
 
 def void_triggers(cost: int, mana_before: int) -> bool:
