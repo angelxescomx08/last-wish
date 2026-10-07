@@ -40,6 +40,7 @@ _FILL_AVAIL: dict[RoomType, pygame.Color] = {
     RoomType.EVENT:    pygame.Color(110,  50, 170),
     RoomType.BOSS:     pygame.Color(200,  25,  25),
     RoomType.WARLOCK:  pygame.Color( 30, 140, 110),
+    RoomType.GACHA:    pygame.Color(205,  70, 150),
 }
 _FILL_LOCKED: dict[RoomType, pygame.Color] = {
     t: pygame.Color(max(c.r - 130, 14), max(c.g - 130, 14), max(c.b - 130, 14))
@@ -62,6 +63,7 @@ _LABELS: dict[RoomType, str] = {
     RoomType.EVENT:    "Evento",
     RoomType.BOSS:     "JEFE",
     RoomType.WARLOCK:  "Brujo",
+    RoomType.GACHA:    "Gacha",
 }
 
 # ---------------------------------------------------------------------------
@@ -120,6 +122,7 @@ class MapScene:
         self.selected_node: MapNode | None = None
         self._overlay: CollectionViewer | None = None
         self._relic_collection_rect = pygame.Rect(24, 16, 194, 36)
+        self.gold_hud_pos = ("topright", (1048, 11))     # left of "Ver mazo"
         self._deck_collection_rect = pygame.Rect(1062, 16, 194, 36)
 
     # ------------------------------------------------------------------
@@ -167,10 +170,7 @@ class MapScene:
         t = self._fonts.get(22).render(f"PISO {run.floor}", True, colors.TEXT_ACCENT)
         surface.blit(t, t.get_rect(centerx=cx, centery=22))
 
-        info = "  |  ".join([
-            f"HP: {run.player_current_hp}/{run.player_max_hp}",
-            f"Oro: {run.gold}",
-        ])
+        info = f"HP: {run.player_current_hp}/{run.player_max_hp}"   # gold: the shared GoldHud
         s = self._fonts.get(13).render(info, True, colors.TEXT_PRIMARY)
         surface.blit(s, s.get_rect(centerx=cx, centery=52))
 

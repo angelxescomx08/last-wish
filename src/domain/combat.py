@@ -11,6 +11,22 @@ from src.domain.relic import Relic, RelicTag, relic_total
 
 
 @dataclass
+class EnemyAction:
+    """What one enemy did during the last enemy turn (read by the combat screen).
+
+    ``index`` is the enemy's position in ``CombatState.enemies`` *before* dead
+    enemies were removed at the end of that turn. ``hits`` holds the HP the hero
+    lost on each hit, in order (0 = fully blocked or redirected).
+    """
+    index: int
+    move_id: str = ""
+    move: str = ""
+    hits: list[int] = field(default_factory=list)
+    cards: list[tuple[str, int, str]] = field(default_factory=list)
+    debuffs: list[tuple[str, int]] = field(default_factory=list)
+
+
+@dataclass
 class CombatState:
     player: Player
     enemies: list[Enemy]
@@ -55,6 +71,8 @@ class CombatState:
     turn_rummages: list[int] = field(default_factory=list)   # Nada que Perder: discard 1, draw N
     clock_uses: int = 0               # Reloj Roto charges spent this combat
     gold_earned: int = 0              # gold won during the fight (added to the run on victory)
+    enemy_log: list[EnemyAction] = field(default_factory=list)   # last enemy turn, per acting enemy
+    exhausted: list[Card] = field(default_factory=list)          # cards removed for this combat
 
     @property
     def combo_active(self) -> bool:
@@ -150,3 +168,24 @@ class CombatState:
     def kills_this_turn(self) -> int:
         """Enemies that died since the turn began (dead ones stay listed until the enemy turn)."""
         return max(0, self.turn_start_alive - len(self.living_enemies()))
+
+    def add_status_cards(self, card_id: str, count: int, pile: str,
+                         rng: random.Random | None = None) -> int:
+        """Put ``count`` new status cards in a pile: ``"draw"`` (shuffled in at random
+        places), ``"discard"`` or ``"hand"`` (overflow goes to the discard pile).
+        Returns how many were added."""
+        from src.domain.status_cards import make_status_card   # local: status_cards imports card
+        rng = rng or random
+        added = 0
+        for _ in range(max(0, count)):
+            card = make_status_card(card_id)
+            if card is None:
+                break
+            if pile == "draw":
+                self.draw_pile.cards.insert(rng.randint(0, self.draw_pile.count), card)
+            elif pile == "hand" and not self.hand.is_full:
+                self.hand.cards.append(card)
+            else:
+                self.discard_pile.cards.append(card)
+            added += 1
+        return added

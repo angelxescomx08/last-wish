@@ -58,6 +58,7 @@ _TYPE_BACKDROP: dict[CardType, tuple[tuple[int, int, int], tuple[int, int, int]]
     CardType.ATTACK: ((70, 18, 22), (150, 44, 40)),
     CardType.SKILL:  ((16, 30, 66), (44, 90, 150)),
     CardType.POWER:  ((40, 16, 64), (110, 56, 160)),
+    CardType.STATUS: ((26, 36, 14), (82, 110, 34)),      # sickly green: junk added by enemies
 }
 
 _INK_DARK = (34, 24, 18)            # name on the parchment plate

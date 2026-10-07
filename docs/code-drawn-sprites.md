@@ -234,3 +234,37 @@ form one connected region). Timing follows section 6; hero extras are `cast`
 and `death` (held). The sheet JSON records `events.attack.strike_frame`; the
 scene delays the enemy's reaction until `hero_strike_seconds()`, and `HeroFx`
 fires its sparks at the same moment.
+
+
+## 11. Bosses (floor 1): bigger cells, a shared kit, move clips and floating weapons
+
+Reference: `scripts/pixel_kit.py` + `scripts/generate_boss_{mycelid,weaver,knight}.py`,
+runtime `infrastructure/enemy_sprites.py` and `fx/enemy_animator.py`, previews
+`scripts/export_boss_previews.py` → `output/boss-<id>-preview.gif` (Pillow).
+
+* **Shared kit.** `pixel_kit.py` is the Espectro toolbox with the canvas size as a parameter
+  (`Canvas(w, h)`, `ramp`, `glow`, `outline`, `flash`, `dissolve(upward=…)`, `stroke`,
+  `build_sheet`, `save_sheet`). New enemies should import it instead of copying helpers.
+* **Cell 224×124**, anchor `(CX, GROUND + 2)`, ~90 native px tall (~180 on screen). The cell
+  extends far to the left so attacks (root wave, spore cloud, silk) travel towards the hero.
+* **`stroke` lesson.** Tubes (legs, hyphae arms) first looked like chains of beads: samples
+  were further apart than the radius and later discs overwrote earlier ones. The kit now
+  resamples the polyline every 0.5 px and each pixel keeps the axis sample it is closest to.
+* **Silhouettes:** Reina Micélida = dome cap (ellipse + scalloped drooping rim) + gill
+  crescent hiding a mask-like face + lace veil lattice over a row-scanned stalk; La Tejedora
+  = two shaded ellipses (glossy abdomen with hourglass, cephalothorax with eight eyes) and
+  eight two-segment legs whose tips stay planted (far legs darker, behind; head drawn over the
+  near legs' roots); Caballero Hueco = row-scanned plate torso + tabard strands burning into
+  ash + floating crowned helm over an ember-lit empty collar + floating gauntlets.
+* **JSON extras** (all optional, the Espectro sheet has none): `events.<anim>.strikes`
+  (frames where hits land; `EnemySheet.strike_seconds`), `moves` (boss move id →
+  animation; `EnemySheet.animation_for_move`), `boss: true` (big slot) and `blade`
+  (a strip of rotated weapon sprites).
+* **Floating weapons are runtime, not baked**, because their number changes during the
+  fight: `EnemyAnimator.blades` (the scene copies the boss's `Espadas` stacks) orbit on an
+  ellipse (back half drawn before the sprite, front half after); during `command` the
+  animator throws one per hit (`BLADE_FIRST + k·BLADE_GAP`, flight `BLADE_FLIGHT`, motion
+  trail), sparks on impact, and re-forms them from embers. `strike_times("command", hits)`
+  gives the scene the exact impact times.
+* **Per-enemy particles:** `EnemyFxStyle` / `STYLES[sheet_id]` (palettes, cue points,
+  shadow width, ambient behaviour): toxic spores, falling silk motes, rising embers.

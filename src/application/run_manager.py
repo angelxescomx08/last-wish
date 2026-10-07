@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 from dataclasses import replace
 
-from src.application import relic_effects
+from src.application import enemy_ai, relic_effects
 from src.application.map_generator import generate_map
 from src.domain.card import CardClass
 from src.domain.card_pool import ALL_PACKS, PackDef, class_for_character, starter_deck
@@ -63,7 +63,9 @@ def _scale(base: int, floor: int) -> int:
 
 
 def generate_enemies(run: Run, room_id: str) -> list[Enemy]:
-    """Return a list of enemies appropriate for the floor."""
+    """Return a list of enemies appropriate for the floor (Pruebas: the floor boss)."""
+    if TUNING.boss_rooms:
+        return generate_boss(run)
     rng   = random.Random(_enemy_seed(run, room_id))
     floor = run.floor
 
@@ -94,9 +96,27 @@ def generate_enemies(run: Run, room_id: str) -> list[Enemy]:
     return enemies
 
 
+def floor_boss_ai(run: Run) -> str | None:
+    """Pattern-AI boss of this floor (floor 1: one of three, by seed or Pruebas), or None."""
+    if run.floor != 1:
+        return None
+    forced = TUNING.forced_boss
+    if 1 <= forced <= len(enemy_ai.FLOOR1_BOSSES):
+        return enemy_ai.FLOOR1_BOSSES[forced - 1]
+    rng = random.Random((run.seed * _ENEMY_PRIME) ^ 0xB055)
+    return rng.choice(enemy_ai.FLOOR1_BOSSES)
+
+
 def generate_boss(run: Run) -> list[Enemy]:
-    """Return the boss enemy for the current floor."""
+    """Return the boss enemy for the current floor.
+
+    Floor 1: La Reina Micélida, La Tejedora or El Caballero Hueco (seeded, see
+    ``application/enemy_ai.py``). Later floors: the Señor de la Cripta.
+    """
     floor = run.floor
+    ai = floor_boss_ai(run)
+    if ai is not None:
+        return [enemy_ai.create_boss(ai, floor, enemy_id=f"boss_f{floor}")]
     hp    = _scale(120, floor)
     dmg   = _scale(18,  floor)
     return [

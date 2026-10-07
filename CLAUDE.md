@@ -112,8 +112,10 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY`, `relic_total(relics, tag, amount)` | Passive items with a tag identifying their mechanic (34 tags). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged). `relic_total` = amount × chroma per active relic with that tag (domain code uses it directly) |
 | `rarity.py` | `Rarity`, `RARITY_LABEL`, `rarity_weight`, `rarity_odds`, `luck_chroma_multiplier`, `weighted_sample` | Five tiers shared by cards and relics (`CardRarity` is an alias). Luck-weighted tier odds and chroma boost |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
-| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect`, `deal_damage`, `status_stacks`, `POISON`, `MARKED`, `WEAK` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck`. **Every hit on an enemy goes through `deal_damage(enemy, amount)`** (Marcado bonus, then block absorbs; returns HP lost) |
+| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect`, `deal_damage`, `status_stacks`, `enemy_hit_damage`, `vulnerable`, `frail`, `POISON`, `MARKED`, `WEAK`, `VULNERABLE`, `FRAIL`, `ENTANGLED`, `STRENGTH`, `BLADES`, `STATUS_TEXT` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck`. **Every hit on an enemy goes through `deal_damage(enemy, amount)`** (Marcado bonus, then block absorbs; returns HP lost) |
 | `pile.py` | `DrawPile`, `DiscardPile`, `Hand` | Card containers with `count` and `is_full` |
+| `gacha.py` | `PullKind`, `PULLS`, `PRICE_GROWTH`, `pull_price(kind, pulls)`, `tier_weight`, `pull_odds(kind, luck, tiers)`, `roll_pull(items, kind, rng, rarity_of, luck)` | Gachapón rules: normal / stellar pull odds and rising prices (see *Gachapón*) |
+| `status_cards.py` | `spore()`, `mold()`, `make_status_card(id)`, `STATUS_CARD_FACTORIES` | Status cards enemies add to the piles for one combat (Espora, Moho) |
 | `mana.py` | `Mana` | Mana resource with `spend`, `gain`, `refill`, `can_afford` |
 | `combat.py` | `CombatState` | Single source of truth for the entire battle state. Effect helpers: `pick_random_enemy` / `hit_random_enemy` (every "al azar" effect; Moneda de la Suerte), `discard_from_hand` / `discard_random` (every effect discard: counts for Despojo, Rapiña hits), `kills_this_turn`, `spoil_ready`, `has_relic` |
 | `map_node.py` | `MapNode`, `RoomType` | Single node on the run map: id, room_type, row, col, connections, visited, available |
@@ -128,6 +130,8 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `relic_effects.py` | `extra_draw_per_turn`, `extra_attack_damage`, `bonus_starting_mana`, `try_spectral_shield`, `bonus_gold_reward`, `post_combat_heal`, `max_hp_bonus` | Pure query functions — read relics, return bonuses or mutate state |
 | `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult`; `requires_target(card)`, `target_kind(card)` → `TargetKind` (`ENEMY` / `ALL_ENEMIES` / `SELF`) | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block. `target_kind` tells the UI what a card will act on |
 | `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus (luck does not affect draws) |
+| `gacha.py` | `gacha_price(run, kind)`, `can_pull`, `gacha_odds`, `pull(run, kind)` → `PullResult`, `accept(run, result)`, `decline(result)` | Pay and roll a gachapón relic (seeded by run seed + pull count); the hero then keeps or declines it |
+| `enemy_ai.py` | `BOSSES`, `FLOOR1_BOSSES`, `create_boss(ai, floor)`, `next_intent(enemy, player)`, `has_pattern`, `intent_hit_damage` | Pattern AI of the floor-1 bosses (see *Floor-1 bosses*) |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
@@ -144,7 +148,8 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
-| `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`), `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
+| `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py` and `scripts/generate_boss_*.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`, bosses → `mycelid`/`weaver`/`knight`), `BOSS_SHEET_IDS`; boss data on `EnemySheet`: `strike_seconds(anim)`, `animation_for_move(move_id, fallback)`, `is_boss`, `blade_frames`, `top`, `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
+| `gacha_assets.py` | `load_gacha_assets()` → `GachaAssets` (cached, ×2 nearest): machine, glass overlay, crank frames, pile capsules, prize capsules per tier (drop size; stage size closed/top/bottom), coin, chute flap, `meta`; `point(name)` / `rect(name)` anchors; `None` when missing |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `hero_strike_seconds(hero)` (attack time until the blade connects, from the sheet's `events.attack.strike_frame`; 0 when absent), `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
@@ -161,6 +166,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/treasure_scene.py` | Show one relic or several (Llave Maestra): click a box to pick, take or skip. Accepts a `Relic` or `list[Relic]`. Signals `cleared: bool`, `took_relic: bool`, `chosen_relic: Relic \| None` |
 | `scenes/shop_scene.py` | 3 relics + 3 packs; prices via `run_manager.shop_price` (Máscara del Ladrón). Signals `selected_pack: PackTheme \| None`, `cleared: bool` |
 | `scenes/pack_opening_scene.py` | Animated opening (intro → idle float → click → charge with imploding sparks → tear: flash, shake, top strip flies off, particle explosion, light rays → cards dealt face-down → flipped one by one with rarity bursts; rare+ get an anticipation glow, legendary gold confetti) then 5-card pick-1 with rarity halos/sparkles and an outro for the chosen card. Any click/Space skips the animation. Ctor kwargs `theme` (PackTheme value, picks pack art + colours) and `seed`. `phase`, `is_animating`, `skip_animation()`, `choose(i)`. Signals `cleared: bool` (after the outro), `chosen_card: Card \| None` |
+| `scenes/gacha_scene.py` | Gachapón room: two pull buttons with live prices, odds table, and the show (coin → crank → drop → present → open → reveal → collect) with pooled particles. `start_pull(kind)`, `advance()`, `skip_to_reveal()`, `phase`, `result`. Signals `cleared` |
 | `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)`, `draw_card_at(surface, card, center, fonts, *, scale, angle, …, outline)` (free placement: scale quantised to 5 %, tilt rotated once and cached) and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 256) |
@@ -170,9 +176,10 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
 | `fx/bursts.py` | `BurstParticles` — pooled one-shot particles in screen px, each with its own palette/size/drag/gravity and style (`SQUARE`, `SPARK` streak, `GLOW` additive): `emit`, `burst` (radial), `implode` (ring → centre), `update`, `draw`; `soft_glow(color, radius)` cached additive light, `scaled(color, k)` |
-| `fx/enemy_animator.py` | `EnemyAnimator(sheet, seed, phase)` — one animated enemy: `play(name, delay=)` (attack/hurt/cast/death; death latches), `update(dt)`, `draw(surface, anchor)` (floor shadow, pulsing additive floor glow, frame, own pooled particles: ambient wisps, claw sparks at `strike_time()`, ectoplasm on hurt, implode + rune motes on cast, soul motes while dissolving), `action`, `busy`, `dead`, `death_done` |
+| `fx/enemy_animator.py` | `EnemyAnimator(sheet, seed, phase)` — one animated enemy: `play(name, delay=, hits=)`, `strike_times(anim, hits)`, `style` (`EnemyFxStyle` from `STYLES[sheet_id]`: palettes and cue points per enemy), `blades`/`target` (floating swords of the Caballero Hueco, thrown one per hit during `command`) (attack/hurt/cast/death; death latches), `update(dt)`, `draw(surface, anchor)` (floor shadow, pulsing additive floor glow, frame, own pooled particles: ambient wisps, claw sparks at `strike_time()`, ectoplasm on hurt, implode + rune motes on cast, soul motes while dissolving), `action`, `busy`, `dead`, `death_done` |
 | `fx/hero_fx.py` | `HeroFx(strike, seed)` — code-drawn hero only: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
+| `ui/gold_hud.py` | `GoldHud` (one instance in `SceneManager`): plate + spinning pixel coin + big outlined amount that counts towards the real gold, `+N`/`−N` labels, sparkles and border flash on change; `sync`, `update(dt, amount)`, `draw(surface, anchor, pos)`, `rect`; `format_gold`, `DEFAULT_POS` |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
 | `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc.; `draw_tooltip(…, beside=rect)` places it next to a hovered card |
 | `ui/pile_viewer.py` | Modal overlay for browsing a pile's cards |
@@ -350,6 +357,7 @@ A full roguelike run persists state across rooms via the `Run` domain object and
 | `relics` | `list[Relic]` | Acquired relics (active from the moment they are added) |
 | `current_map` | `GameMap` | The current floor's node map |
 | `current_room_id` | `str \| None` | ID of the room the player is currently in |
+| `gacha_pulls` | `int` | Gachapón pulls made this run (every pull raises the next price) |
 
 Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_after)`.
 
@@ -374,6 +382,8 @@ Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_
 | `SHOP` | `ShopScene` → `PackOpeningScene` | Spend gold to buy a card pack (pick 1 of 5 cards) |
 | `EVENT` | `EventScene` | Narrative event with gold reward |
 | `BOSS` | `CombatScene(is_boss=True)` | Fight boss → `BossRewardScene` (gold + epic pack + relic choice) |
+| `WARLOCK` | `WarlockScene` | Upgrade cards for gold (one per floor) |
+| `GACHA` | `GachaScene` | Pay for random relics; prices rise with every pull (one per floor) |
 
 ### Card packs (`src/domain/card_pool.py`)
 
@@ -555,6 +565,12 @@ One test file per source module. All test files follow the same structure:
 | `presentation/scenes/test_combat_hero_animation.py` | `CombatScene` + code-drawn warrior | HeroFx only for her, cast on skills, enemy reacts at blade contact, death held and defeat screen waits |
 | `test_hero_rogue.py` | rogue sheets in `sprite_loader.py` + `CombatScene` | same contract as the mage, both rogue names |
 | `test_hero_mage.py` | mage sheets in `sprite_loader.py` + `CombatScene` | name→hero mapping, 192/96 sheets, idle motion, planted boots, actions end on idle 0, shared idle clock, attack trigger |
+| `application/test_floor1_bosses.py` | `enemy_ai`, `status_cards`, boss parts of `end_turn`/`play_card`/`drawing`, `generate_boss` | status math, multi-hit + block per hit, extras, Panacea, hero Veneno/Enredado/timed debuffs, Frágil, Espora/Moho, patterns, enrage once, Banquete per debuff, swords cap, seeded boss choice, Pruebas overrides, 300-turn stress |
+| `test_boss_sprite_generators.py` | `scripts/generate_boss_*.py`, `scripts/pixel_kit.py` | Espectro art contract per boss, strike events, move → animation, sword strip, kit (gapless strokes, dissolve, PNG) |
+| `presentation/scenes/test_combat_bosses.py` | boss sheets, `EnemyAnimator` styles/swords, `CombatScene` boss slot | loader extras, styles, strike times, sword count/throw/re-form/death, big slot, move clip, cards added, one number per hit, hero waits for the first sword, unplayable card, 60-turn stress |
+| `application/test_gacha.py` | `domain/gacha.py`, `application/gacha.py` | prices (growth, rounding, shared counter, Máscara, 10^3 pulls), odds (sum 1, stellar never Común and better, luck, subsets), roll distribution, paying, refusing, determinism, no duplicates until the pool is empty, max HP, stellar golden boost |
+| `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
+| `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
 
 ### Testing rules
@@ -642,6 +658,101 @@ hero's `hurt` and hit number are delayed until the first claws land (`strike_tim
 "Espectro" is in `run_manager.generate_enemies` templates (42 HP, attacks 11, floor-scaled).
 New animated enemy: add a renderer/poses (or reuse the script), a sheet id in
 `ENEMY_SHEET_IDS`. Preview: `output/espectro-preview.gif`.
+
+## Floor-1 bosses (2026-10-07)
+
+Three bosses, each with its own identity, drawn by code with the Espectro method
+(`docs/code-drawn-sprites.md` §11) and driven by a readable pattern AI
+(`application/enemy_ai.py`). Numbers and move tables: `docs/game_design.md` → *Jefes*.
+
+| Boss (`ai`) | Identity | Sheet / generator | Clips beyond the five basics |
+|---|---|---|---|
+| Reina Micélida (`micelida`) | Toxic cards (Espora, Moho) + Veneno | `mycelid` / `generate_boss_mycelid.py` | `spores` |
+| La Tejedora (`tejedora`) | Debuffs; Banquete bites once more per distinct debuff | `weaver` / `generate_boss_weaver.py` | `feast` (3 bites), `web` |
+| Caballero Hueco (`caballero`) | Multi-hit; floating swords = `Espadas` stacks | `knight` / `generate_boss_knight.py` (+ `knight_blade.png`) | `double`, `command` |
+
+**Rules engine**
+- `Intent` gained `hits`, `move`, `move_id`, `block`, `debuffs`, `buffs`, `cards`,
+  `description` (defaults keep the old `Intent(type, value)` behaviour). `end_turn._execute_intent`
+  resolves the main action (ATTACK hits `hits` times through `_enemy_attack`: Señuelo, block per
+  hit, Contraataque per fully blocked hit, death saves), then block → buffs → debuffs (Panacea
+  blocks them) → status cards (`CombatState.add_status_cards(id, n, "draw"|"discard"|"hand")`).
+  Named BUFF/DEBUFF moves skip the generic behaviour. Each enemy's turn is logged in
+  `CombatState.enemy_log` (`EnemyAction`: index, move, HP lost per hit, cards, debuffs).
+- Per-hit damage = `entities.enemy_hit_damage`: value + Fuerza, ×0.75 Débil (enemy),
+  ×1.5 Vulnerable (hero).
+- Hero statuses: Veneno ticks at the start of your turn (`_poison_hero`, ignores block,
+  Pruebas invincible respected); Débil/Vulnerable/Frágil tick at the end of your turn
+  (`HERO_TIMED_DEBUFFS`); Enredado is spent on the next turn's draw; Frágil reduces card block.
+- Status cards (`CardType.STATUS`, `domain/status_cards.py`): `Card.unplayable`, `exhaust`
+  (played → `CombatState.exhausted`), `ethereal` (fades at end of turn), `on_draw`
+  (`drawing.draw_one`), `on_turn_end_in_hand` (`_discard_hand`). They live only in the
+  combat piles. Art: `scripts/generate_status_card_art.py` → `assets/cards-v2/art/status_*.png`.
+- `Enemy.ai/ai_step/ai_used/is_boss/floor`. Bosses roll with `enemy_ai.next_intent` (others keep
+  `_roll_intent`). Each has a one-shot move at ≤50 % HP (`_enraged`).
+- `run_manager.generate_boss`: floor 1 → `floor_boss_ai(run)` (seeded; `TUNING.forced_boss`
+  1–3 fixes it); later floors keep the Señor de la Cripta. `TUNING.boss_rooms` turns every
+  combat room into the floor boss. Both are rows in the Pruebas screen (right column).
+
+**Presentation**
+- `CombatScene`: a boss with a `boss` sheet stands in `_BOSS_*` (centre 905, ground 314, width
+  230); `_boss_rect` puts the name and intent above the sprite's top (`EnemySheet.top`). End of
+  turn plays `sheet.animation_for_move(move_id, attack|cast)` with `hits`, shows one damage
+  number per hit at its `strike_times` (leftover = Veneno), the hero flinches at the first one,
+  and `_announce_extras` floats the debuffs and status cards ("+2 Espora", feedback line).
+  The scene copies `Espadas` into the knight's animator every update.
+- Intent bubble: `entity_widget.intent_label` ("ATQ 5x3", "+DEB", "+CARTAS", "+BLQ"), width
+  fits the text, per-hit damage after modifiers. `enemy_tooltip(enemy, hit_damage)` shows the
+  move name, description and numbers; status lines include `STATUS_TEXT`.
+- Previews: `uv run --with pillow scripts/export_boss_previews.py` → `output/boss-<id>-preview.gif`.
+
+## Gachapón (2026-10-07)
+
+A room (`RoomType.GACHA`, "Gacha", one per floor, placed after El Brujo in a middle row,
+avoiding the shop's row when possible) with a code-drawn gachapon machine that sells random
+relics. Rules in `domain/gacha.py`, use cases in `application/gacha.py`, screen
+`scenes/gacha_scene.py`, art `scripts/generate_gacha_sprites.py` → `assets/gacha/`.
+
+- **Two pulls.** *Tirada normal* (base 80): the usual relic tier weights 50/28/14/6/2.
+  *Tirada estelar* (base 190): never Común, weights 0/40/34/18/8, double golden chance
+  (chroma luck `2·luck + 10`). Luck lifts high tiers in both (`tier_weight`, same formula as
+  `rarity_weight`). Tiers with no relic left in the pool drop out (`roll_pull`).
+- **Rising prices.** `price = base × 1.5^Run.gacha_pulls` (rounded to 5), the counter is shared
+  by both pulls and lasts the whole run; Máscara del Ladrón discounts it (`shop_price`).
+- **Paying rolls the relic** (`pull`: gold, counter, relic from `_relic_pool`, chroma); the
+  reveal then offers **Quedármela** (Enter / button → `accept` → `acquire_relic`) or
+  **Rechazar** (R / button → `decline`: nothing is added, the gold is not returned, the price
+  still rises; the relic stays in the pool). Owned relics come back only when the pool is empty
+  (`PullResult.duplicate` → "¡Repetida!").
+- **Show:** the room darkens around the machine (cached vignette, `_focus`) → a big coin flies
+  from the gold counter into the slot (sparks, shockwave ring, every bulb flashes) → the crank
+  turns three times, accelerating, with a squash pulse per quarter turn; the machine leans in
+  (zoom) and shakes harder; the capsules lift into a whirling vortex (`_swirl`, depth-sorted);
+  two searchlights sweep from the crown; electric arcs crackle on the glass (real tier-coloured
+  lightning for Épica+, plus a tease implosion); the glowing prize sinks through the vortex →
+  KA-CHUNK (`THUNK_AT`): the machine hops, screen shake, shockwave, burst at the chute → the
+  capsule pops out (sparks, ring), bounces twice (dust rings), hops to the stage (sparkle trail
+  for Poco común+) → presented in a
+  tier halo, shaking once per tier step; click / Space / 6 s → flash, halves fly apart, burst
+  sized by tier, rotating rays for Rara+, screen shake for Épica+, gold confetti for
+  Legendaria → name, tier, description (golden note), Quedármela / Rechazar → the relic flies
+  to the relic counter, or crumbles into grey dust (`discard`). Clicks skip ahead (not past the
+  decision). Keys 1 / 2 pull. Static surfaces are cached.
+- Pruebas: "Todas las salas: gachapón" (`TUNING.gacha_rooms`) opens the machine from every
+  combat room. Preview: `uv run --with pillow scripts/export_gacha_preview.py` →
+  `output/gacha-preview.gif`.
+
+## Gold counter (2026-10-07)
+
+`ui/gold_hud.GoldHud`, owned by `SceneManager` (`gold_hud` property), is drawn on every run
+screen (same rule as the pause button: a run exists and the top scene is not menu/selection/
+settings/Pruebas/death). It syncs silently when a new run starts and animates every change, so
+gold won in a fight counts up on the reward screen and gacha/shop purchases count down. A scene
+picks the spot with `gold_hud_pos = (anchor, (x, y))` (default top right `(1268, 12)`): map
+`("topright", (1048, 11))` next to "Ver mazo", combat `("topleft", (12, 476))` above the mana
+orb, Brujo `("bottomright", (1268, 708))`; `show_gold_hud = False` hides it. The old small
+"Oro: N" labels (map header, shop, gachapón, Brujo title) were removed. Tests:
+`tests/presentation/ui/test_gold_hud.py`.
 
 ## Run pause and abandonment
 

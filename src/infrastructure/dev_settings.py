@@ -42,6 +42,9 @@ def apply_dict(data: object, target: Tuning = TUNING) -> None:
     target.extra_luck = _num(data.get("extra_luck"), 0, 0, 1_000, integer=True)
     target.extra_damage = _num(data.get("extra_damage"), 0, 0, 10_000, integer=True)
     target.extra_dexterity = _num(data.get("extra_dexterity"), 0, 0, 10_000, integer=True)
+    target.forced_boss = _num(data.get("forced_boss"), 0, 0, 3, integer=True)
+    target.boss_rooms = bool(data.get("boss_rooms", False))
+    target.gacha_rooms = bool(data.get("gacha_rooms", False))
 
 
 def load_dev_settings(path: Path = _FILE) -> None:

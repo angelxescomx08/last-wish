@@ -39,6 +39,10 @@ from src.presentation.scenes.settings_scene import SettingsScene
 from src.presentation.scenes.dev_settings_scene import DevSettingsScene
 from src.presentation.scenes.shop_scene import ShopScene
 from src.presentation.scenes.treasure_scene import TreasureScene
+from src.domain.tuning import TUNING
+from src.presentation.scenes.gacha_scene import GachaScene
+from src.presentation.ui.gold_hud import DEFAULT_POS as GOLD_HUD_POS
+from src.presentation.ui.gold_hud import GoldHud
 from src.presentation.scenes.warlock_scene import WarlockScene
 from src.presentation.ui.pause_menu import PauseMenu, PauseAction, draw_pause_button, pause_button_rect
 
@@ -99,6 +103,8 @@ class SceneManager:
         self._run            = None           # set when character is selected
         self.quit_requested: bool = False
         self._pause: PauseMenu | None = None
+        self._gold_hud = GoldHud(fonts)       # shared gold counter on every run screen
+        self._gold_run_id: int | None = None
 
     # ------------------------------------------------------------------
     # Stack operations
@@ -165,9 +171,27 @@ class SceneManager:
         top = self._top()
         top.update(dt)
         self._handle_transitions(top)
+        self._update_gold(dt)
+
+    def _update_gold(self, dt: float) -> None:
+        run = self._run
+        if run is None:
+            self._gold_run_id = None
+            return
+        if self._gold_run_id != id(run):          # a new run: show its gold without counting
+            self._gold_run_id = id(run)
+            self._gold_hud.sync(run.gold)
+        self._gold_hud.update(dt, run.gold)
+
+    @property
+    def gold_hud(self) -> GoldHud:
+        return self._gold_hud
 
     def draw(self, surface: pygame.Surface) -> None:
         self._top().draw(surface)
+        if self._can_pause() and self._run is not None and getattr(self._top(), 'show_gold_hud', True):
+            anchor, pos = getattr(self._top(), 'gold_hud_pos', GOLD_HUD_POS)
+            self._gold_hud.draw(surface, anchor, pos)
         button = pause_button_rect(self._top()) if self._can_pause() else None
         if button is not None:
             draw_pause_button(surface, self._fonts, button)
@@ -200,6 +224,10 @@ class SceneManager:
         elif isinstance(top, BossRewardScene):
             self._t_boss_reward(top)
         elif isinstance(top, WarlockScene):
+            if top.cleared:
+                top.cleared = False
+                self.pop()
+        elif isinstance(top, GachaScene):
             if top.cleared:
                 top.cleared = False
                 self.pop()
@@ -254,7 +282,10 @@ class SceneManager:
             run.current_map.mark_visited(node.id)
         run.current_room_id = node.id
 
-        if node.room_type == RoomType.COMBAT:
+        if node.room_type == RoomType.COMBAT and TUNING.gacha_rooms:   # Pruebas: test the machine
+            self.push(GachaScene(run, self._fonts, sound=self._sound))
+
+        elif node.room_type == RoomType.COMBAT:
             enemies = generate_enemies(run, node.id)
             state   = create_combat_from_run(run, enemies)
             self.push(CombatScene(state, self._fonts, sound=self._sound))
@@ -277,6 +308,9 @@ class SceneManager:
 
         elif node.room_type == RoomType.WARLOCK:
             self.push(WarlockScene(run, self._fonts, sound=self._sound))
+
+        elif node.room_type == RoomType.GACHA:
+            self.push(GachaScene(run, self._fonts, sound=self._sound))
 
     def _t_combat(self, scene: CombatScene) -> None:
         run = self._run

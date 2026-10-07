@@ -8,7 +8,8 @@ from src.domain.card import Card, CardClass, CardType, ModifierTag
 from src.domain.card_pool import CARD_CLASS_LABEL
 from src.domain.chroma import chroma_def, chroma_title
 from src.domain.keywords import Keyword, combo_text, keyword_def, singular_text, spoil_text, void_text
-from src.domain.entities import Enemy, IntentType, Player
+from src.domain.entities import STATUS_TEXT, Enemy, IntentType, Player
+from src.domain.status_cards import make_status_card
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
 from src.domain.rarity import rarity_label
@@ -34,6 +35,7 @@ _CARD_TYPE_NAME: dict[CardType, str] = {
     CardType.ATTACK: "Ataque",
     CardType.SKILL:  "Habilidad",
     CardType.POWER:  "Poder",
+    CardType.STATUS: "Estado",
 }
 
 _MOD_DESCRIPTIONS: dict[ModifierTag, str] = {
@@ -140,7 +142,45 @@ def card_tooltip(
     return TooltipContent(title=title, lines=lines)
 
 
-def enemy_tooltip(enemy: Enemy) -> TooltipContent:
+_CARD_PILE = {"draw": "tu pila de robo", "discard": "tu pila de descarte", "hand": "tu mano"}
+
+
+def _status_lines(effects) -> list[str]:
+    out: list[str] = []
+    for fx in effects:
+        tag = "[+]" if fx.is_buff else "[-]"
+        out.append(f"{tag} {fx.name} x{fx.stacks}")
+        rule = STATUS_TEXT.get(fx.name)
+        if rule:
+            out.append(f"     {rule}")
+    return out
+
+
+def _move_lines(enemy: Enemy, hit_damage: int | None) -> list[str]:
+    """A boss's named move: name, what it does and its numbers."""
+    it = enemy.intent
+    lines = [f"Próximo: {it.move}"]
+    if it.description:
+        lines.append(f"  {it.description}")
+    if it.intent_type == IntentType.ATTACK:
+        dmg = hit_damage if hit_damage is not None else it.value
+        lines.append(f"[ATQ]  {dmg} de daño" + (f" x{it.hits} golpes ({dmg * it.hits})." if it.hits > 1 else "."))
+    elif it.intent_type == IntentType.BLOCK:
+        lines.append(f"[BLQ]  {it.value} de bloqueo.")
+    if it.block > 0:
+        lines.append(f"[BLQ]  +{it.block} de bloqueo.")
+    for name, n in it.buffs:
+        lines.append(f"[+]  Gana {name} x{n}.")
+    for name, n in it.debuffs:
+        lines.append(f"[-]  Te aplica {name} x{n}.")
+    for card_id, n, pile in it.cards:
+        card = make_status_card(card_id)
+        label = card.name if card else card_id
+        lines.append(f"[!]  {n}x {label} a {_CARD_PILE.get(pile, pile)}.")
+    return lines
+
+
+def enemy_tooltip(enemy: Enemy, hit_damage: int | None = None) -> TooltipContent:
     lines: list[str] = [
         f"Vida: {enemy.current_hp} / {enemy.max_hp}",
     ]
@@ -148,21 +188,23 @@ def enemy_tooltip(enemy: Enemy) -> TooltipContent:
         lines.append(f"Bloqueo: {enemy.block} -- Absorbe el siguiente daño")
 
     lines.append("")
-    intent_desc = _INTENT_DESCRIPTION.get(enemy.intent.intent_type, "???")
-    if enemy.intent.intent_type == IntentType.ATTACK:
-        lines.append(f"[ATQ]  {intent_desc} por {enemy.intent.value} de daño.")
-    elif enemy.intent.intent_type == IntentType.BLOCK:
-        lines.append(f"[BLQ]  {intent_desc} con {enemy.intent.value} de bloqueo.")
+    if enemy.intent.move:
+        lines += _move_lines(enemy, hit_damage)
     else:
-        lines.append(f"[*]  {intent_desc}.")
+        intent_desc = _INTENT_DESCRIPTION.get(enemy.intent.intent_type, "???")
+        if enemy.intent.intent_type == IntentType.ATTACK:
+            dmg = hit_damage if hit_damage is not None else enemy.intent.value
+            lines.append(f"[ATQ]  {intent_desc} por {dmg} de daño.")
+        elif enemy.intent.intent_type == IntentType.BLOCK:
+            lines.append(f"[BLQ]  {intent_desc} con {enemy.intent.value} de bloqueo.")
+        else:
+            lines.append(f"[*]  {intent_desc}.")
 
     if enemy.status_effects:
         lines.append("")
-        for fx in enemy.status_effects:
-            tag = "[+]" if fx.is_buff else "[-]"
-            lines.append(f"{tag} {fx.name} x{fx.stacks}")
+        lines += _status_lines(enemy.status_effects)
 
-    return TooltipContent(title=enemy.name, lines=lines)
+    return TooltipContent(title=enemy.name + (" (Jefe)" if enemy.is_boss else ""), lines=lines)
 
 
 def relic_tooltip(relic: Relic) -> TooltipContent:
@@ -226,9 +268,7 @@ def player_tooltip(player: Player) -> TooltipContent:
 
     if player.status_effects:
         lines.append("")
-        for fx in player.status_effects:
-            tag = "[+]" if fx.is_buff else "[-]"
-            lines.append(f"{tag} {fx.name} x{fx.stacks}")
+        lines += _status_lines(player.status_effects)
 
     return TooltipContent(title=player.name, lines=lines)
 

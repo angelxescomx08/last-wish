@@ -175,6 +175,13 @@ def generate_map(seed: int, floor: int) -> GameMap:
     if warlock_id:
         nodes[warlock_id].room_type = RoomType.WARLOCK
 
+    # Gachapón: one per floor, in a middle row not already holding the shop when possible.
+    shop_row = nodes[shop_id].row if shop_id else -1
+    gacha_id = (_pick_from_rows([r for r in mid_rows if r != shop_row], mutable_pool)
+                or _pick_from_rows(mid_rows, mutable_pool))
+    if gacha_id:
+        nodes[gacha_id].room_type = RoomType.GACHA
+
     return GameMap(
         floor=floor,
         nodes=nodes,

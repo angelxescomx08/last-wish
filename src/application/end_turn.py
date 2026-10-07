@@ -5,9 +5,11 @@ import random
 from src.application import relic_effects
 from src.application.drawing import draw_cards
 from src.domain.card_pool import hidden_dagger
-from src.domain.combat import CombatState
-from src.domain.entities import (MARKED, POISON, WEAK, Enemy, Intent, IntentType, add_status,
-                                 deal_damage, tick_status, weakened)
+from src.application import enemy_ai
+from src.domain.combat import CombatState, EnemyAction
+from src.domain.entities import (ENTANGLED, HERO_TIMED_DEBUFFS, MARKED, POISON, WEAK, Enemy, Intent,
+                                 IntentType, add_status, deal_damage, enemy_hit_damage,
+                                 status_stacks, tick_status)
 from src.domain.tuning import TUNING
 
 _HAND_DRAW_SIZE: int = 5
@@ -57,10 +59,17 @@ def _discard_hand(state: CombatState) -> None:
     if state.hand.count == 0:
         state.player.block += relic_effects.spider_thread_block(state.relics)
     relic_effects.settle_pickpocket(state)
-    state.discard_pile.cards.extend(state.hand.cards)
+    # Status cards still in hand act (Espora: Veneno); ethereal ones fade instead of discarding.
+    for card in list(state.hand.cards):
+        if card.on_turn_end_in_hand is not None:
+            card.on_turn_end_in_hand(state)
+    for card in state.hand.cards:
+        (state.exhausted if card.ethereal else state.discard_pile.cards).append(card)
     state.hand.cards.clear()
-    # End of the hero's turn: one turn of Débil wears off; "this turn" bonuses expire.
-    state.player.status_effects = tick_status(state.player.status_effects, WEAK)
+    # End of the hero's turn: one turn of Débil / Vulnerable / Frágil wears off;
+    # "this turn" bonuses expire.
+    for name in HERO_TIMED_DEBUFFS:
+        state.player.status_effects = tick_status(state.player.status_effects, name)
     state.next_card_discount = 0
     state.next_damage_bonus = 0
     state.pickpocket_gold = 0
@@ -69,52 +78,91 @@ def _discard_hand(state: CombatState) -> None:
 
 
 def _run_enemy_turn(state: CombatState) -> None:
-    for enemy in state.enemies:
+    state.enemy_log = []
+    for index, enemy in enumerate(state.enemies):
         if enemy.is_alive:
             _tick_status_effects(enemy)   # poison/burn deal damage before acting
             if not enemy.is_alive:        # killed by status? skip action
                 relic_effects.spread_poison(state)   # Colmillo de Víbora
                 continue
             enemy.block = 0              # reset block at the START of each enemy's action
-            _execute_intent(state, enemy)
+            state.enemy_log.append(_execute_intent(state, enemy, index))
             enemy.status_effects = tick_status(enemy.status_effects, WEAK)   # lasts its turn
 
     # Remove defeated enemies before rolling new intents
     state.enemies = [e for e in state.enemies if e.is_alive]
 
     for enemy in state.enemies:
-        enemy.intent = _roll_intent(enemy)
+        enemy.intent = _next_intent(state, enemy)
 
 
-def _execute_intent(state: CombatState, enemy: Enemy) -> None:
-    match enemy.intent.intent_type:
+def _next_intent(state: CombatState, enemy: Enemy) -> Intent:
+    """Bosses follow their pattern (``enemy_ai``); other enemies roll at random."""
+    if enemy_ai.has_pattern(enemy):
+        return enemy_ai.next_intent(enemy, state.player)
+    return _roll_intent(enemy)
+
+
+def _execute_intent(state: CombatState, enemy: Enemy, index: int = 0) -> EnemyAction:
+    """Resolve the enemy's intent, then its extras (block, buffs, debuffs, status cards)."""
+    intent = enemy.intent
+    action = EnemyAction(index=index, move_id=intent.move_id, move=intent.move)
+    named = bool(intent.move)          # a boss move: extras instead of the generic behaviour
+    match intent.intent_type:
         case IntentType.ATTACK:
-            dmg = weakened(enemy.intent.value, enemy.status_effects)
-            if _redirect_to_decoy(state, enemy, dmg):
-                return
-            absorbed = min(state.player.block, dmg)
-            state.player.block = max(0, state.player.block - absorbed)
-            if not TUNING.invincible:          # Pruebas: invincible hero
-                state.player.current_hp = max(0, state.player.current_hp - (dmg - absorbed))
-            # Contraataque: a hit fully blocked deals damage back to the attacker.
-            if dmg > 0 and absorbed == dmg and state.counter_damage:
-                deal_damage(enemy, state.counter_damage)
-            relic_effects.try_revive(state)
+            for _ in range(max(1, intent.hits)):
+                if not enemy.is_alive or not state.player.is_alive:
+                    break
+                action.hits.append(_enemy_attack(state, enemy, enemy_hit_damage(enemy, state.player)))
 
         case IntentType.BLOCK:
-            enemy.block += enemy.intent.value
+            enemy.block += intent.value
 
-        case IntentType.BUFF:
+        case IntentType.BUFF if not named:
             # Buff: ramp up damage for the following attack
             enemy.intent = Intent(IntentType.ATTACK, random.randint(10, 20))
 
-        case IntentType.DEBUFF:
+        case IntentType.DEBUFF if not named:
             # The hero is weakened for their next 2 turns (Panacea: immune).
             if not relic_effects.immune_to_debuffs(state.relics):
                 add_status(state.player.status_effects, WEAK, ENEMY_DEBUFF_TURNS, is_buff=False)
+                action.debuffs.append((WEAK, ENEMY_DEBUFF_TURNS))
 
-        case IntentType.UNKNOWN:
+        case _:
             pass
+
+    if intent.block > 0:
+        enemy.block += intent.block
+    for name, stacks in intent.buffs:
+        if stacks > 0:
+            add_status(enemy.status_effects, name, stacks, is_buff=True)
+    if intent.debuffs and not relic_effects.immune_to_debuffs(state.relics):   # Panacea
+        for name, stacks in intent.debuffs:
+            if stacks > 0:
+                add_status(state.player.status_effects, name, stacks, is_buff=False)
+                action.debuffs.append((name, stacks))
+    for card_id, count, pile in intent.cards:
+        added = state.add_status_cards(card_id, count, pile)
+        if added:
+            action.cards.append((card_id, added, pile))
+    return action
+
+
+def _enemy_attack(state: CombatState, enemy: Enemy, dmg: int) -> int:
+    """One hit on the hero (block, Señuelo, Contraataque, death saves). Returns HP lost."""
+    if _redirect_to_decoy(state, enemy, dmg):
+        return 0
+    absorbed = min(state.player.block, dmg)
+    state.player.block = max(0, state.player.block - absorbed)
+    lost = 0
+    if not TUNING.invincible:          # Pruebas: invincible hero
+        lost = min(state.player.current_hp, dmg - absorbed)
+        state.player.current_hp -= lost
+    # Contraataque: a hit fully blocked deals damage back to the attacker.
+    if dmg > 0 and absorbed == dmg and state.counter_damage:
+        deal_damage(enemy, state.counter_damage)
+    relic_effects.try_revive(state)
+    return lost
 
 
 def _redirect_to_decoy(state: CombatState, attacker: Enemy, dmg: int) -> bool:
@@ -162,10 +210,25 @@ def _begin_player_turn(state: CombatState) -> None:
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None
+    _poison_hero(state)
     _trigger_powers(state)
-    draw_cards(state, cards_per_turn(state))
+    # Enredado: draw 1 card less per stack, this turn only.
+    tangled = status_stacks(state.player.status_effects, ENTANGLED)
+    state.player.status_effects = [se for se in state.player.status_effects if se.name != ENTANGLED]
+    draw_cards(state, cards_per_turn(state) - tangled)
     _after_hand_drawn(state)
     relic_effects.spread_poison(state)
+
+
+def _poison_hero(state: CombatState) -> None:
+    """Veneno on the hero: lose its stacks in HP (block does not help), then 1 stack wears off."""
+    stacks = status_stacks(state.player.status_effects, POISON)
+    if stacks <= 0:
+        return
+    if not TUNING.invincible:
+        state.player.current_hp = max(0, state.player.current_hp - stacks)
+        relic_effects.try_revive(state)
+    state.player.status_effects = tick_status(state.player.status_effects, POISON)
 
 
 def _reset_turn_counters(state: CombatState) -> None:

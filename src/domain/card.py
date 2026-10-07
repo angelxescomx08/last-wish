@@ -17,6 +17,7 @@ class CardType(Enum):
     ATTACK = auto()
     SKILL = auto()
     POWER = auto()
+    STATUS = auto()   # junk added by enemies (Espora, Moho…); only lives for one combat
 
 
 class CardClass(Enum):
@@ -157,6 +158,12 @@ class Card:
     base_name: str = ""               # name before "+" suffixes (set post-init)
     # Played automatically (free) the moment it is drawn, then removed from the combat.
     play_on_draw: bool = False
+    # Status-card rules (cards enemies put in your deck, see ``domain/status_cards.py``):
+    unplayable: bool = False          # "Injugable": cannot be played
+    exhaust: bool = False             # "Agotar": leaves the combat after being played
+    ethereal: bool = False            # "Etérea": leaves the combat if still in hand at end of turn
+    on_draw: Callable[[CombatState], None] | None = None              # when it reaches the hand
+    on_turn_end_in_hand: Callable[[CombatState], None] | None = None  # still in hand at end of turn
 
     def __post_init__(self) -> None:
         if self.rarity is None:

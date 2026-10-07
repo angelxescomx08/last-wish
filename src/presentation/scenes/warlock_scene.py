@@ -103,6 +103,7 @@ class WarlockScene:
     """Upgrade cards for gold. Escape opens the pause menu (or closes the confirmation)."""
 
     pause_button_rect = pygame.Rect(78, 650, 130, 30)
+    gold_hud_pos = ("bottomright", (1268, 708))   # the top right holds the viewer's close button
 
     def __init__(self, run: Run, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:
         self._run = run
@@ -193,7 +194,7 @@ class WarlockScene:
         pass
 
     def draw(self, surface: pygame.Surface) -> None:
-        self._grid._title = f'El Brujo  ·  Oro: {self._run.gold}'
+        self._grid._title = 'El Brujo'
         self._grid.draw(surface)
         if self._message:
             msg = self._fonts.get(15).render(self._message, True,

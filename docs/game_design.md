@@ -64,6 +64,88 @@ o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier c
 | **Veneno** | Pierde X de vida al inicio de su turno; baja 1 por turno. | Cartas (enemigos) | ✅ |
 | **Débil** | Inflige 25% menos de daño. | Guardia Evasiva (a enemigos, 1 turno); intención DEBUFF de enemigos (al héroe, 2 turnos) | ✅ |
 | **Marcado** | Cada golpe que recibe hace X de daño más. Se quita al terminar tu turno. | Marcar Objetivo (Pícara) | ✅ |
+| **Veneno (héroe)** | El héroe pierde X de vida al inicio de su turno (ignora el bloqueo); baja 1. | Reina Micélida, Espora | ✅ |
+| **Vulnerable** | Recibe 50% más de daño de ataques. Baja 1 al terminar tu turno. | La Tejedora | ✅ |
+| **Frágil** | Gana 25% menos de escudo con cartas. Baja 1 al terminar tu turno. | La Tejedora | ✅ |
+| **Enredado** | Roba 1 carta menos por acumulación en su próximo turno; luego desaparece. | La Tejedora | ✅ |
+| **Fuerza** (enemigos) | Cada golpe hace X de daño más. Permanente. | Caballero Hueco (Furia Hueca) | ✅ |
+| **Espadas** (enemigo) | Espadas flotantes: la Danza de Espadas golpea una vez por espada (máx. 6). | Caballero Hueco | ✅ |
+
+---
+
+## Cartas de estado
+
+Cartas basura que los enemigos meten en tu mazo **solo durante el combate** (nunca entran al
+mazo de la partida). Tipo *Estado*, marco verde enfermizo, arte en `assets/cards-v2/art/`.
+
+| Carta | Coste | Efecto | Quién la añade | Estado |
+|---|---|---|---|---|
+| **Espora** | 1 | Agotar. Si sigue en tu mano al final del turno, recibes 3 de Veneno. | Reina Micélida | ✅ |
+| **Moho** | — | Injugable. Al robarla pierdes 1 de maná. Se desvanece al final del turno (etérea). | Reina Micélida | ✅ |
+
+---
+
+## Gachapón ✅
+
+Sala del mapa ("Gacha", una por piso). Una máquina de cápsulas que vende reliquias al azar.
+
+| Tirada | Precio base | Probabilidades (sin suerte) | Extra |
+|---|---|---|---|
+| Normal | 80 oro | Común 50% · Poco común 28% · Rara 14% · Épica 6% · Legendaria 2% | — |
+| Estelar | 190 oro | Común 0% · Poco común 40% · Rara 34% · Épica 18% · Legendaria 8% | Doble probabilidad de dorada |
+
+- **Cada tirada (de cualquier tipo) multiplica por 1,5 el precio de las siguientes** durante
+  toda la partida: 80 → 120 → 180 → 270… / 190 → 285 → 430…; la Máscara del Ladrón lo rebaja.
+- La suerte mejora los tiers altos igual que en el resto de reliquias.
+- No salen reliquias repetidas hasta que no queden nuevas.
+- Al abrir la cápsula eliges **Quedármela** o **Rechazar**. Si la rechazas no se devuelve el oro
+  (y el precio de la siguiente tirada ya subió), pero la reliquia puede volver a salir.
+- El color de la cápsula indica la rareza (gris, verde, azul, morado, dorado); cuanto más rara,
+  más se agita antes de abrirse y más grande es la explosión.
+
+---
+
+## Jefes
+
+Piso 1: uno de tres, elegido por la semilla (Pruebas → "Jefe del piso 1" lo fija;
+"Todas las salas: el jefe" convierte cada combate en el jefe para probarlos). Pisos 2+:
+Señor de la Cripta. Cada jefe sigue un **patrón fijo y legible** y tiene un movimiento
+único la primera vez que baja a la mitad de vida.
+
+### Reina Micélida — cartas tóxicas (138 PV)
+Hongo reina: sombrero carmesí con manchas tóxicas, rostro en la sombra de las láminas, velo de encaje.
+
+| Turno | Movimiento | Efecto |
+|---|---|---|
+| 1 | Lluvia de Esporas | 6 de daño y baraja 2 Esporas en tu pila de robo |
+| 2 | Raíces Estranguladoras | 10 de daño y 3 de Veneno |
+| 3 | Brote de Moho | 12 de bloqueo y baraja 2 Moho en tu pila de robo |
+| ≤50% (una vez) | Floración Pútrida | 4 de Veneno y 2 Esporas en tu mano |
+
+### La Tejedora — debuffs (126 PV)
+Araña matriarca: quitina violeta, reloj de arena carmesí, ocho ojos magenta, hilos de seda.
+
+| Turno | Movimiento | Efecto |
+|---|---|---|
+| 1 | Hilos Pegajosos | Débil 2 y Enredado 1 |
+| 2 | Colmillo | 9 de daño y Vulnerable 2 |
+| 3 | Capullo de Seda | 10 de bloqueo y Frágil 2 |
+| 4 | Banquete | 5 de daño × (1 + debuffs distintos que tengas) |
+| ≤50% (una vez) | Madre de la Camada | Débil, Frágil, Vulnerable y Enredado 1 a la vez |
+
+### Caballero Hueco — ataques múltiples (150 PV, empieza con 2 Espadas)
+Armadura vacía flotante: yelmo coronado con visera de brasas, guanteletes sin brazos, espadón.
+
+| Turno | Movimiento | Efecto |
+|---|---|---|
+| 1, 4 | Danza de Espadas | 4 de daño × Espadas (cada espada vuela por separado) |
+| 2, 5 | Llamar al Acero | +1 Espada (máx. 6) y 8 de bloqueo |
+| 3 | Estocada Doble | 8 de daño × 2 |
+| 6 | Tajo del Verdugo | 17 de daño |
+| ≤50% (una vez) | Furia Hueca | +2 Fuerza (cada golpe +2) y 6 de bloqueo |
+
+El bloqueo absorbe cada golpe por separado, así que los ataques múltiples castigan el
+bloqueo justo y premian Contraataque (daño por cada golpe bloqueado del todo).
 
 ---
 

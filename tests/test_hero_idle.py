@@ -190,7 +190,13 @@ class TestScenes:
             from src.domain.entities import Intent, IntentType
             enemy.intent = Intent(IntentType.ATTACK, 5)
         scene._do_end_turn()
-        assert scene.hero_action == "hurt"
+        seen = scene.hero_action == "hurt"
+        for _ in range(40):                 # animated bosses: she flinches when the blow lands
+            if seen:
+                break
+            scene.update(0.05)
+            seen = scene.hero_action == "hurt"
+        assert seen
 
     def test_unknown_action_is_ignored(self):
         scene = _combat_scene()

@@ -10,7 +10,7 @@ without a sheet keep their static Dungeon Crawl sprite.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -23,8 +23,13 @@ ENEMY_DIR = Path(__file__).parent.parent.parent / "assets" / "enemies"
 # Enemy display name -> sheet id (files <id>_sheet.png / <id>_sheet.json)
 ENEMY_SHEET_IDS: dict[str, str] = {
     "Espectro": "wraith",
+    # Floor-1 bosses (scripts/generate_boss_<id>.py)
+    "Reina Micélida": "mycelid",
+    "La Tejedora": "weaver",
+    "Caballero Hueco": "knight",
 }
 ENEMY_ANIMATIONS = ("idle", "attack", "hurt", "cast", "death")
+BOSS_SHEET_IDS = ("mycelid", "weaver", "knight")
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,12 @@ class EnemySheet:
     anchor: tuple[int, int]                      # ground point inside a scaled cell
     animations: dict[str, HeroAnimation]
     frames: dict[str, tuple[pygame.Surface, ...]]
+    # Optional data written by the boss generators:
+    strikes: dict[str, tuple[int, ...]] = field(default_factory=dict)   # anim -> frames where hits land
+    moves: dict[str, str] = field(default_factory=dict)                 # boss move id -> animation
+    is_boss: bool = False                                                 # drawn in the big boss slot
+    blade_frames: tuple[pygame.Surface, ...] = ()                         # floating sword rotations
+    top: int = 0                     # highest opaque row of idle frame 0, in scaled px from the cell top
 
     def seconds(self, animation: str) -> float:
         anim = self.animations.get(animation)
@@ -43,6 +54,25 @@ class EnemySheet:
     def frame(self, animation: str, elapsed: float) -> pygame.Surface:
         name = animation if animation in self.frames else "idle"
         return self.frames[name][self.animations[name].frame_at(elapsed)]
+
+    def strike_seconds(self, animation: str) -> tuple[float, ...]:
+        """Seconds from the start of ``animation`` to each frame where a hit lands.
+
+        Uses ``events.<anim>.strikes`` from the JSON; without it, ``attack`` lands on
+        its 4th frame (the Espectro's claws) and other animations land nowhere.
+        """
+        anim = self.animations.get(animation)
+        if anim is None:
+            return ()
+        frames = self.strikes.get(animation)
+        if frames is None:
+            frames = (3,) if animation == "attack" else ()
+        return tuple(sum(anim.durations[:f]) for f in frames if 0 <= f <= len(anim.durations))
+
+    def animation_for_move(self, move_id: str, fallback: str) -> str:
+        """The animation that acts out a boss move (``moves`` in the JSON), else ``fallback``."""
+        name = self.moves.get(move_id, "")
+        return name if name in self.animations else fallback
 
 
 def enemy_sheet_id(name: str) -> str | None:
@@ -73,10 +103,33 @@ def load_enemy_sheet(sheet_id: str) -> EnemySheet | None:
         if "idle" not in frames:
             return None
         ax, ay = meta.get("anchor", (cw // 2, ch))
+        strikes = {name: tuple(int(f) for f in ev.get("strikes", ()))
+                   for name, ev in meta.get("events", {}).items() if isinstance(ev, dict)}
+        moves = {str(k): str(v) for k, v in meta.get("moves", {}).items()}
         return EnemySheet(sheet_id, (cw * scale, ch * scale), (int(ax) * scale, int(ay) * scale),
-                          animations, frames)
+                          animations, frames, strikes=strikes, moves=moves,
+                          is_boss=bool(meta.get("boss", False)),
+                          blade_frames=_load_blades(meta.get("blade"), scale),
+                          top=_top_row(frames["idle"][0]))
     except (OSError, ValueError, KeyError, TypeError, pygame.error):
         return None
+
+
+def _load_blades(info, scale: int) -> tuple[pygame.Surface, ...]:
+    """Rotations of a floating weapon (a strip of square cells), scaled like the sheet."""
+    if not isinstance(info, dict):
+        return ()
+    strip = pygame.image.load(str(ENEMY_DIR / str(info["sheet"])))
+    if pygame.display.get_init() and pygame.display.get_surface() is not None:
+        strip = strip.convert_alpha()
+    size, count = int(info["size"]), int(info["rotations"])
+    return tuple(pygame.transform.scale(strip.subsurface((k * size, 0, size, size)),
+                                        (size * scale, size * scale)) for k in range(count))
+
+
+def _top_row(frame: pygame.Surface) -> int:
+    rect = frame.get_bounding_rect(min_alpha=1)
+    return rect.top if rect.height > 0 else 0
 
 
 def sheet_for_enemy(name: str) -> EnemySheet | None:

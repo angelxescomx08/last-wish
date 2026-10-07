@@ -9,7 +9,7 @@ from src.application.drawing import draw_cards
 from src.domain.card import Card, CardEffect, CardType
 from src.domain.chroma import chroma_def
 from src.domain.combat import CombatState
-from src.domain.entities import deal_damage, weakened
+from src.domain.entities import deal_damage, frail, weakened
 
 
 @dataclass
@@ -59,6 +59,8 @@ def play_card(
         return PlayResult(False, "Índice de carta inválido")
 
     card = state.hand.cards[card_index]
+    if card.unplayable:
+        return PlayResult(False, "Esta carta no se puede jugar")
 
     cost = state.card_cost(card)          # after discounts (next card / first card of the turn)
     if not state.mana.can_afford(cost):
@@ -94,6 +96,8 @@ def play_card(
     played = state.hand.cards.pop(card_index)
     if played.card_type == CardType.POWER:
         state.active_powers.append(played)
+    elif played.exhaust:                  # "Agotar": gone for the rest of the combat
+        state.exhausted.append(played)
     else:
         state.discard_pile.cards.append(played)
 
@@ -181,8 +185,8 @@ def _resolve_cast(state: CombatState, card: Card, combo: bool, target: int | Non
                                  + state.player.attack_bonus + damage_bonus + scarf,
                                  state.player.status_effects)
         deal_damage(enemy, effective_dmg)
-    if blk > 0:
-        state.player.block += blk + state.player.dexterity + scarf
+    if blk > 0:                           # Frágil: 25 % less block from cards
+        state.player.block += frail(blk + state.player.dexterity + scarf, state.player.status_effects)
     mana_gain = card.total_mana_gain(combo, singular, void, spoil)
     if mana_gain > 0:
         state.mana.gain(mana_gain)
@@ -210,7 +214,7 @@ def _resolve_layers(state: CombatState, layers: list[CardEffect], target: int | 
         deal_damage(state.enemies[target], dmg)
     blk = sum(fx.block.resolve() for fx in layers)
     if blk > 0:
-        state.player.block += blk
+        state.player.block += frail(blk, state.player.status_effects)
     mana = sum(fx.mana_gain for fx in layers)
     if mana > 0:
         state.mana.gain(mana)

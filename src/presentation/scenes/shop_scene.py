@@ -55,7 +55,6 @@ class ShopScene:
         surface.fill(pygame.Color(10, 14, 18))
         cx = surface.get_width() // 2
         self._label(surface, 'Tienda del Viajero', (cx, 45), 26, colors.TEXT_ACCENT)
-        self._label(surface, f'Oro disponible: {self._run.gold}', (cx, 85), 16, colors.TEXT_ACCENT)
         start_x = cx - (3 * _TILE_W + 2 * _GAP) // 2
         self._relic_rects = []
         self._pack_rects = []

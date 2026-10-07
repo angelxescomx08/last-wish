@@ -21,6 +21,7 @@ class Run:
     relics: list[Relic] = field(default_factory=list)
     current_map: GameMap | None = None
     current_room_id: str | None = None
+    gacha_pulls: int = 0          # gachapón pulls made this run (every pull raises the next price)
 
     def add_card(self, card: Card) -> None:
         self.deck.append(card)

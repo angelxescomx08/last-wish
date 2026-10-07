@@ -96,24 +96,48 @@ _INTENT_COLOR: dict[IntentType, pygame.Color] = {
 }
 
 
+def intent_label(intent: Intent, damage: int | None = None) -> str:
+    """Short bubble text: "ATQ 12", "ATQ 5x3", "BLQ 12 +CARTAS", "DEB", "BUFF +BLQ"…
+
+    ``damage``: per-hit damage after Fuerza / Débil / Vulnerable (ATTACK only).
+    """
+    label = _INTENT_LABEL[intent.intent_type]
+    value = damage if (damage is not None and intent.intent_type == IntentType.ATTACK) else intent.value
+    if value > 0:
+        label = f"{label} {value}"
+    if intent.is_multi_hit:
+        label += f"x{intent.hits}"
+    extras = []
+    if intent.block > 0:
+        extras.append("BLQ")
+    if intent.debuffs and intent.intent_type != IntentType.DEBUFF:
+        extras.append("DEB")
+    if intent.cards:
+        extras.append("CARTAS")
+    if intent.buffs and intent.intent_type != IntentType.BUFF:
+        extras.append("BUFF")
+    return label + "".join(f" +{e}" for e in extras)
+
+
 def _draw_intent(
     surface: pygame.Surface,
     intent: Intent,
     cx: int,
     cy: int,
     fonts: FontRegistry,
+    damage: int | None = None,
 ) -> None:
     col   = _INTENT_COLOR[intent.intent_type]
-    label = _INTENT_LABEL[intent.intent_type]
-    if intent.value > 0:
-        label = f"{label} {intent.value}"
+    label = intent_label(intent, damage)
 
-    w, h = 56, 22
+    intent_font = fonts.get(10)
+    w, h = max(56, intent_font.size(label)[0] + 16), 22
     rect = pygame.Rect(cx - w // 2, cy - h // 2, w, h)
     pygame.draw.rect(surface, colors.BG_PANEL, rect, border_radius=4)
     pygame.draw.rect(surface, col, rect, 1, border_radius=4)
+    if intent.cards:                                    # toxic cards: a sickly green underline
+        pygame.draw.line(surface, (150, 220, 70), (rect.x + 4, rect.bottom - 3), (rect.right - 5, rect.bottom - 3))
 
-    intent_font = fonts.get(10)
     intent_surf = intent_font.render(label, True, col)
     surface.blit(intent_surf, intent_surf.get_rect(center=rect.center))
 
@@ -137,9 +161,16 @@ def draw_enemy(
     highlighted: bool = False,
     sprite: pygame.Surface | None = None,
     framed: bool = True,
+    size: tuple[int, int] | None = None,
+    intent_damage: int | None = None,
 ) -> pygame.Rect:
-    """Draw one enemy. ``framed=False`` skips the body panel (animated sprites draw themselves)."""
-    rect = pygame.Rect(x, y, ENEMY_W, ENEMY_H)
+    """Draw one enemy. ``framed=False`` skips the body panel (animated sprites draw themselves).
+
+    ``size``: body rect size (bosses use a bigger one); ``intent_damage``: per-hit damage
+    shown in the intent bubble (after Fuerza / Débil / Vulnerable).
+    """
+    w, h = size or (ENEMY_W, ENEMY_H)
+    rect = pygame.Rect(x, y, w, h)
 
     # Defeated state — draw greyed-out silhouette and return
     if not enemy.is_alive:
@@ -151,7 +182,7 @@ def draw_enemy(
         return rect
 
     # Intent bubble above
-    _draw_intent(surface, enemy.intent, rect.centerx, y - 30, fonts)
+    _draw_intent(surface, enemy.intent, rect.centerx, y - 30, fonts, intent_damage)
 
     # Name label
     name_font = fonts.get(11)
@@ -195,7 +226,7 @@ def draw_enemy(
             pygame.draw.line(surface, border, (cx, cy), (cx, cy + dy * sz), 2)
 
     # HP bar
-    hp_rect = pygame.Rect(x, rect.bottom + 4, ENEMY_W, _HP_H)
+    hp_rect = pygame.Rect(x, rect.bottom + 4, w, _HP_H)
     _draw_hp_bar(surface, hp_rect, enemy.current_hp, enemy.max_hp, fonts)
 
     # Block badge (bottom-right of body)

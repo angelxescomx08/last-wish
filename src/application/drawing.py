@@ -27,6 +27,8 @@ def draw_one(state: CombatState) -> Card | None:
         _play_on_draw(state, card)
     else:
         state.hand.cards.append(card)
+        if card.on_draw is not None:          # status cards (Moho: lose mana)
+            card.on_draw(state)
     return card
 
 

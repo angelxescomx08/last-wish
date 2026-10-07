@@ -18,6 +18,7 @@ import pygame
 from src.domain.character import ALL_CHARACTERS
 from src.domain.chroma import CHROMA_DEFS, Chroma
 from src.domain.rarity import Rarity, luck_chroma_multiplier, rarity_odds
+from src.application.enemy_ai import BOSSES, FLOOR1_BOSSES
 from src.domain.tuning import CHROMA_KINDS, TUNING, chroma_chance, chroma_key, hero_luck
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
@@ -53,6 +54,10 @@ class _Row:
     chroma: Chroma | None = None   # PERCENT rows
     chroma_kind: str = ""
     column: int = 0                # 0 = left, 1 = right ("Stats del héroe")
+    labels: tuple[str, ...] = ()   # NUMBER rows that pick an option: value -> label
+
+
+_BOSS_LABELS = ("Al azar", *(BOSSES[ai].name for ai in FLOOR1_BOSSES))
 
 
 def _rows() -> list[_Row]:
@@ -74,6 +79,10 @@ def _rows() -> list[_Row]:
         _Row("HP máximo extra", _Kind.NUMBER, "extra_max_hp", 25, 0, 1000, "+{}", column=1),
         _Row("Maná extra por combate", _Kind.NUMBER, "extra_mana", 1, 0, 10, "+{}", column=1),
         _Row("Cartas extra por turno", _Kind.NUMBER, "extra_draw", 1, 0, 10, "+{}", column=1),
+        _Row("Jefe del piso 1", _Kind.NUMBER, "forced_boss", 1, 0, len(_BOSS_LABELS) - 1,
+             column=1, labels=_BOSS_LABELS),
+        _Row("Todas las salas: el jefe", _Kind.TOGGLE, "boss_rooms", column=1),
+        _Row("Todas las salas: gachapón", _Kind.TOGGLE, "gacha_rooms", column=1),
         # --- actions (left column, bottom) ---
         _Row("Restablecer valores", _Kind.ACTION, "reset"),
         _Row("Volver", _Kind.ACTION, "back"),
@@ -122,6 +131,9 @@ class DevSettingsScene:
             return f"{chroma_chance(row.chroma, row.chroma_kind) * 100:.0f} %"
         if row.kind is _Kind.TOGGLE:
             return "Sí" if getattr(TUNING, row.attr) else "No"
+        if row.kind is _Kind.NUMBER and row.labels:
+            value = int(getattr(TUNING, row.attr))
+            return row.labels[value] if 0 <= value < len(row.labels) else str(value)
         if row.kind is _Kind.NUMBER:
             return row.fmt.format(getattr(TUNING, row.attr))
         return ""

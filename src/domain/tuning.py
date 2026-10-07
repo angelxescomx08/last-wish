@@ -32,6 +32,9 @@ class Tuning:
     extra_luck: int = 0               # hero stats (Pruebas "Stats del héroe")
     extra_damage: int = 0
     extra_dexterity: int = 0
+    forced_boss: int = 0              # floor-1 boss: 0 = by seed, 1.. = index in FLOOR1_BOSSES
+    boss_rooms: bool = False          # every combat room is the floor's boss (to test bosses)
+    gacha_rooms: bool = False         # every combat room opens the gachapón (to test it)
 
     def reset(self) -> None:
         default = Tuning()

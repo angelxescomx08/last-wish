@@ -9,7 +9,8 @@ from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
-from src.domain.entities import IntentType
+from src.application.enemy_ai import intent_hit_damage
+from src.domain.entities import BLADES, IntentType, status_stacks
 from src.infrastructure.enemy_sprites import sheet_for_enemy
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
@@ -91,6 +92,16 @@ _ENEMY_SLOTS: list[tuple[int, int]] = [
     (942, _ENEMY_Y),
     (1122, _ENEMY_Y),
 ]
+
+# Bosses with a big animated sheet stand alone in a wider slot, a bit lower (closer to the
+# camera); their name and intent float above the top of the sprite.
+_BOSS_CX: int = 905
+_BOSS_GROUND: int = 314
+_BOSS_W: int = 230
+_CARD_NAMES_ES: dict[str, str] = {"status_espora": "Espora", "status_moho": "Moho"}
+_PILE_ES: dict[str, str] = {"draw": "tu pila de robo", "discard": "tu descarte", "hand": "tu mano"}
+_TOXIC = (170, 230, 70)
+_DEBUFF_TEXT = (220, 120, 240)
 
 _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)
 
@@ -240,6 +251,7 @@ class CombatScene:
         self._draw_info_rect = pygame.Rect(756, 10, 285, 48)
         # Pause button in the free gap between the relic bar (184–449) and the turn counter.
         self.pause_button_rect = pygame.Rect(460, 16, 130, 36)
+        self.gold_hud_pos = ("topleft", (12, 476))     # the top bar is full: above the mana orb
         self._card_draw_order: list[int] = []
 
         # Hover state (which element index / flag is under cursor)
@@ -286,7 +298,11 @@ class CombatScene:
 
     def update(self, dt: float) -> None:
         self._advance_hero_animation(max(0.0, dt))
-        for anim in self._enemy_anims.values():
+        hero = (_PLAYER_X + PLAYER_W / 2, _PLAYER_Y + PLAYER_H / 2 - 8)
+        for i, anim in self._enemy_anims.items():
+            if anim.style.blades and i < len(self._state.enemies):
+                anim.blades = status_stacks(self._state.enemies[i].status_effects, BLADES)
+                anim.target = hero
             anim.update(dt)
         if self._hero_fx is not None:
             self._hero_fx.update(dt)
@@ -441,19 +457,28 @@ class CombatScene:
                 saved = (enemy.current_hp, enemy.block)
                 enemy.current_hp, enemy.block = shown[i]
             anim = self._enemy_anims.get(i)
+            hit = intent_hit_damage(enemy, self._state.player)
             try:
-                if anim is not None:
+                if anim is not None and anim.sheet.is_boss:
+                    rect = self._boss_rect(anim)
+                    anim.draw(surface, (_BOSS_CX, _BOSS_GROUND))
+                    if enemy.is_alive:
+                        rect = draw_enemy(surface, enemy, rect.x, rect.y, self._fonts,
+                                          targeted=self._state.targeted_enemy_index == i,
+                                          framed=False, size=rect.size, intent_damage=hit)
+                elif anim is not None:
                     rect = pygame.Rect(ex, ey, ENEMY_W, ENEMY_H)
                     anim.draw(surface, (rect.centerx, rect.bottom + 6))
                     if enemy.is_alive:
                         rect = draw_enemy(surface, enemy, ex, ey, self._fonts,
                                           targeted=self._state.targeted_enemy_index == i,
-                                          framed=False)
+                                          framed=False, intent_damage=hit)
                 else:
                     rect = draw_enemy(
                         surface, enemy, ex, ey, self._fonts,
                         targeted    = self._state.targeted_enemy_index == i,
                         sprite      = self._sprites.get_enemy_sprite(enemy.name),
+                        intent_damage=hit,
                     )
             finally:
                 if saved is not None:
@@ -470,6 +495,13 @@ class CombatScene:
 
         if self._state.active_powers:
             self._draw_active_powers(surface)
+
+    @staticmethod
+    def _boss_rect(anim: EnemyAnimator) -> pygame.Rect:
+        """Hit / label rect of a boss: from the top of its sprite down to just above its feet."""
+        height = max(120, anim.sheet.anchor[1] - anim.sheet.top - 4)
+        top = max(_TOP_BAR_H + 44, _BOSS_GROUND - height)
+        return pygame.Rect(_BOSS_CX - _BOSS_W // 2, top, _BOSS_W, _BOSS_GROUND - 6 - top)
 
     def _draw_player(self, surface: pygame.Surface) -> None:
         center = (_PLAYER_X + PLAYER_W / 2, _PLAYER_Y + PLAYER_H / 2)
@@ -738,7 +770,8 @@ class CombatScene:
                                 spoil_active=self._state.spoil_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
-            return enemy_tooltip(self._state.enemies[self._hovered_enemy])
+            enemy = self._state.enemies[self._hovered_enemy]
+            return enemy_tooltip(enemy, intent_hit_damage(enemy, self._state.player))
 
         if self._hovered_relic is not None and self._hovered_relic < len(self._state.relics):
             return relic_tooltip(self._state.relics[self._hovered_relic])
@@ -890,6 +923,9 @@ class CombatScene:
     def _pick_card(self, index: int, pos: tuple[int, int] | None) -> None:
         """Pick up a card with the mouse (``pos``) or with its number key."""
         card = self._state.hand.cards[index]
+        if card.unplayable:
+            self._show_error("Esta carta no se puede jugar")
+            return
         if not self._state.mana.can_afford(self._state.card_cost(card)):
             self._show_error("Maná insuficiente")
             return
@@ -1101,6 +1137,22 @@ class CombatScene:
             self._hero_action_time = 0.0
             self._idle_time = 0.0
 
+    def _announce_extras(self, action, enemy_name: str, at: float) -> None:
+        """Floating text for a boss move's debuffs and the status cards it adds."""
+        if not self._player_rect:
+            return
+        x, y = self._player_rect.centerx + 60, self._player_rect.top + 70
+        for j, (name, stacks) in enumerate(action.debuffs):
+            self._fx.add_text(x, y - 18 * j, f"{name} {stacks}", _DEBUFF_TEXT, 1.3, delay=at + 0.1 * j)
+        if action.cards:
+            parts = [f"{n} {_CARD_NAMES_ES.get(cid, cid)}{'s' if n > 1 else ''} a {_PILE_ES.get(pile, pile)}"
+                     for cid, n, pile in action.cards]
+            self._feedback_text = f"{enemy_name}: " + ", ".join(parts)
+            self._feedback_time = 2.6
+            for j, (cid, n, pile) in enumerate(action.cards):
+                self._fx.add_text(x, y - 18 * (len(action.debuffs) + j),
+                                  f"+{n} {_CARD_NAMES_ES.get(cid, cid)}", _TOXIC, 1.4, delay=at + 0.15)
+
     def _enemy_hit(self, i: int, dmg: int, *, killed: bool, hold: bool = True,
                    delay: float = 0.0) -> None:
         """Damage number, sound and the enemy's reaction (hurt / death animation or flashes).
@@ -1126,24 +1178,37 @@ class CombatScene:
         state  = self._state
         old_hp = state.player.current_hp
         old_enemy_hps = [e.current_hp for e in state.enemies]
-        acting = [(i, e.intent.intent_type) for i, e in enumerate(state.enemies)
-                  if e.is_alive and i in self._enemy_anims]
+        intents = {i: e.intent for i, e in enumerate(state.enemies) if e.is_alive}
+        names = {i: e.name for i, e in enumerate(state.enemies)}
 
         self._play.cancel()
         self._sound.play_end_turn()
         end_player_turn(state)
 
-        # Animated enemies act out their intent: claws for attacks, a spell otherwise.
+        # Animated enemies act out their move: the sheet may have a clip for it (bosses),
+        # otherwise claws for attacks and a spell for the rest. Each hit lands on its strike.
         strike: float | None = None
-        for k, (i, itype) in enumerate(acting):
-            anim = self._enemy_anims[i]
+        hit_times: list[tuple[float, int]] = []          # (seconds, HP lost) per hit on the hero
+        k = 0
+        for action in state.enemy_log:
+            i = action.index
+            anim = self._enemy_anims.get(i)
+            if anim is None or i not in intents:
+                continue
             delay = 0.14 * k
-            if itype == IntentType.ATTACK:
-                anim.play("attack", delay=delay)
-                landed = delay + anim.strike_time()
-                strike = landed if strike is None else min(strike, landed)
-            else:
-                anim.play("cast", delay=delay)
+            k += 1
+            fallback = "attack" if intents[i].intent_type == IntentType.ATTACK else "cast"
+            name = anim.sheet.animation_for_move(action.move_id, fallback)
+            hits = max(1, len(action.hits))
+            anim.play(name, delay=delay, hits=hits)
+            times = [delay + t for t in anim.strike_times(name, hits)]
+            if action.hits and times:
+                strike = times[0] if strike is None else min(strike, times[0])
+                hit_times += [(times[min(j, len(times) - 1)], lost) for j, lost in enumerate(action.hits)]
+            self._announce_extras(action, names.get(i, ""), (times[-1] if times else delay + 0.5))
+        for action in state.enemy_log:                    # static enemies: extras too
+            if action.index not in self._enemy_anims:
+                self._announce_extras(action, names.get(action.index, ""), 0.2)
         for i, (old, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
             if old - enemy.current_hp > 0 and i < len(self._enemy_rects):   # e.g. poison
                 self._enemy_hit(i, old - enemy.current_hp, killed=not enemy.is_alive)
@@ -1158,5 +1223,19 @@ class CombatScene:
             else:
                 self._play_hero_action(reaction)
         if dmg > 0 and self._player_rect:
-            self._fx.add_hit_flash(self._player_rect, dmg, delay=wait, flash=self._hero_fx is None)
+            shown = [(t, lost) for t, lost in hit_times if lost > 0]
+            if len(shown) > 1 or (shown and sum(l for _, l in shown) < dmg):
+                # one number per hit, each when its blow lands; leftovers (Veneno) at the end
+                spread = len(shown)
+                for j, (t, lost) in enumerate(shown):
+                    self._fx.add_hit_flash(self._player_rect, lost, delay=t, flash=False,
+                                           dx=(j - (spread - 1) / 2) * 18)
+                rest = dmg - sum(l for _, l in shown)
+                if rest > 0:
+                    last = max([t for t, _ in shown], default=0.0)
+                    self._fx.add_hit_flash(self._player_rect, rest, delay=last + 0.25, flash=False)
+                    self._fx.add_text(self._player_rect.centerx + 60, self._player_rect.top + 50,
+                                      "Veneno", _TOXIC, delay=last + 0.25)
+            else:
+                self._fx.add_hit_flash(self._player_rect, dmg, delay=wait, flash=self._hero_fx is None)
             self._sound.play_hit()
