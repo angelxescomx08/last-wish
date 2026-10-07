@@ -360,3 +360,17 @@ using a Python environment with Pillow; Pillow is needed only for review GIFs,
 not for sprite generation or the game. `output/warrior-idle-before.png` is the
 comparison baseline, not a runtime asset. Inspect the animation at its real
 96/192 px display sizes as well as enlarged. Automated checks cannot judge taste.
+
+## Readable rules and intents (2026-10-07)
+
+User: tooltips and enemy attacks were hard to understand "aun leyendo". Following
+card-game UX (Slay the Spire intents, keyword tooltips with colour coding):
+
+- One code-drawn pixel icon per rule (`scripts/generate_ui_icons.py`), reused on the
+  intent, the status badge and the tooltip panel, so it is learned once.
+- Intent = icon + big outlined number, never a text bubble; the sword grows with the
+  damage; lethal turns red with a skull.
+- Tooltips are a stack of small panels (main + one per keyword), colour-coded text,
+  icons at the start of lines, dim notes indented. Kept on screen, two columns if tall.
+- Enemy turn banners name each move and what it did.
+

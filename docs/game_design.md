@@ -71,6 +71,22 @@ o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier c
 | **Fuerza** (enemigos) | Cada golpe hace X de daño más. Permanente. | Caballero Hueco (Furia Hueca) | ✅ |
 | **Espadas** (enemigo) | Espadas flotantes: la Danza de Espadas golpea una vez por espada (máx. 6). | Caballero Hueco | ✅ |
 
+Cada estado tiene su **icono** (`assets/ui/icons.png`): aparece en la insignia bajo el
+personaje (con las acumulaciones en la esquina), en la intención del enemigo y en el
+tooltip que lo explica. Pasar el ratón por una insignia muestra su regla.
+
+---
+
+## Interfaz de lectura ✅
+
+- **Intenciones**: icono grande + número ("6", "4×3"); la espada crece con el daño total;
+  iconos pequeños para escudo / mejora / perjuicio / cartas de estado. Brillo rojo y
+  calavera si los ataques de este turno te matan. Ratón encima → qué hará, en frases.
+- **Tooltips**: panel principal + un panel por palabra clave o estado mencionado (Veneno,
+  Combo, Agotar…). Colores: daño rojo, escudo azul, palabras clave doradas, Veneno verde.
+- **Barra de vida del héroe**: parpadea la vida que te quitarán los ataques ("−N").
+- **Turno enemigo**: un cartel por enemigo con su movimiento y lo que te hizo.
+
 ---
 
 ## Cartas de estado

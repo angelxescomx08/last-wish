@@ -84,7 +84,7 @@ class TestGoldenCardsAndRelicsOnScreen:
 
     def test_golden_card_keeps_stats_and_explains_double_cast(self):
         tip = card_tooltip(_card(G))
-        text = "\n".join(tip.lines)
+        text = tip.all_text()
         assert tip.title == "Golpe · Dorada"
         assert "Inflige 6" in text and "2 veces" in text
 
@@ -151,9 +151,9 @@ class TestComboCardUi:
         fonts = FontRegistry()
         assert render_card_surface(tajo, fonts) is not render_card_surface(tajo, fonts, combo=True)
         tip = card_tooltip(tajo)
-        text = "\n".join(tip.lines)
+        text = tip.all_text()
         assert "Combo" in text and "+5 de daño" in text
-        active = "\n".join(card_tooltip(tajo, combo_active=True).lines)
+        active = card_tooltip(tajo, combo_active=True).all_text()
         assert "11" in active and "¡Activo!" in active
         surf = pygame.Surface((1280, 720))
         draw_card_at(surf, tajo, (640, 360), fonts, angle=4.0, combo=True)

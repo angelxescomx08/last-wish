@@ -96,7 +96,8 @@ class _UpgradeGrid(CollectionViewer):
                      f"Precio: {upgrade_price(item)} de oro"]
         else:
             extra = ["Ya está mejorada al máximo."]
-        return TooltipContent(title=tip.title, lines=[*extra, "", *tip.lines])
+        return TooltipContent(title=tip.title, lines=[*extra, "", *tip.lines], icon=tip.icon,
+                              subtitle=tip.subtitle, panels=tip.panels)
 
 
 class WarlockScene:

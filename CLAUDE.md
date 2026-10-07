@@ -149,6 +149,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
 | `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py` and `scripts/generate_boss_*.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`, bosses → `mycelid`/`weaver`/`knight`), `BOSS_SHEET_IDS`; boss data on `EnemySheet`: `strike_seconds(anim)`, `animation_for_move(move_id, fallback)`, `is_boss`, `blade_frames`, `top`, `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
+| `ui_icons.py` | `ui_icon(name, scale=2)` (cached, nearest) / `has_ui_icon(name)` from `assets/ui/icons.png` + `icons.json` (written by `scripts/generate_ui_icons.py`): intent icons 18 px (`attack_1`…`attack_4`, `defend`, `buff`, `debuff`, `cards`, `unknown`, `lethal`), status/keyword icons 14 px (one per status, `status_buff`/`status_debuff` fallbacks, `block`, `junk_card`, `combo`, `singular`, `void`, `spoil`, `exhaust`, `ethereal`, `unplayable`, `damage`, `draw`, `mana`, `heal`); `None` when missing |
 | `gacha_assets.py` | `load_gacha_assets()` → `GachaAssets` (cached, ×2 nearest): machine, glass overlay, crank frames, pile capsules, prize capsules per tier (drop size; stage size closed/top/bottom), coin, chute flap, `meta`; `point(name)` / `rect(name)` anchors; `None` when missing |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `hero_strike_seconds(hero)` (attack time until the blade connects, from the sheet's `events.attack.strike_frame`; 0 when absent), `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
@@ -159,7 +160,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/main_menu_scene.py` | Main menu: Jugar/Continuar, Ajustes, Salir. Sets `requested_action: MenuAction` |
 | `scenes/settings_scene.py` | Settings screen: toggle "Mostrar FPS" (Activado/Desactivado). Mutates `UserPreferences` in-place; sets `cleared: bool`. SceneManager saves to disk on exit |
 | `scenes/character_select_scene.py` | Character panel grid with stat bars; seed text input (click to focus, type digits). Sets `confirmed` / `back_to_menu`; exposes `seed: int` property |
-| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch. `is_boss` constructor param; `combat_won` property; `state` property. Hand fan (`_hand_layout`, `CardPose`) with tweened card motion, hover zoom, draw-pile fly-in and discard fly-out; card play through `CardPlayInput` (drag / click / keys), targeting arrow and reticles |
+| `scenes/combat_scene.py` | Main battle screen: input, layout, hover, tooltip dispatch (hovering an intent or a status badge shows just that: `_detail_at`/`_detail_tooltip`; `_incoming_damage()` feeds the lethal glow and the HP preview; `_announce_actions` fills the enemy action banners at end of turn). `is_boss` constructor param; `combat_won` property; `state` property. Hand fan (`_hand_layout`, `CardPose`) with tweened card motion, hover zoom, draw-pile fly-in and discard fly-out; card play through `CardPlayInput` (drag / click / keys), targeting arrow and reticles |
 | `scenes/death_scene.py` | Death screen: Nueva Partida / Menú Principal. Sets `requested_action: DeathAction` |
 | `scenes/map_scene.py` | STS-style node map. Signals `selected_node: MapNode \| None` |
 | `scenes/combat_reward_scene.py` | Gold display + 3 card choices after a non-boss combat. Signals `cleared: bool`, `chosen_card: Card \| None` |
@@ -172,7 +173,10 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)`, `draw_card_at(surface, card, center, fonts, *, scale, angle, …, outline)` (free placement: scale quantised to 5 %, tilt rotated once and cached) and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 256) |
 | `ui/card_play.py` | `CardPlayInput`, `Mode`, `PlayRequest` — pygame-free Slay the Spire style card-play state machine: pick, drag, aim, release, sticky click, keyboard (1–9, ←/→/Tab, Enter), cancel (right click / ESC) |
 | `ui/targeting.py` | `draw_arrow(surface, start, end, *, hot, phase)` chevron arrow (pure curve helpers `control_point`, `sample_curve`, `segment_placements`, `head_placement`; cached pre-rotated pixel sprites) and `draw_reticle(surface, rect, color, t)` |
-| `ui/entity_widget.py` | `draw_player()`, `draw_enemy(…, framed=True)` (`framed=False`: no body panel, used by animated enemies) |
+| `ui/entity_widget.py` | `draw_player(…, incoming_loss=, t=, hitboxes=)`, `draw_enemy(…, framed=True, intent_damage=, lethal=, t=, hitboxes=)` (`framed=False`: no body panel, used by animated enemies). STS-style intent `draw_intent` (big icon — the sword grows with total damage — + number "4×3" + small extra icons; red glow + skull when `lethal`), `intent_number`, `intent_extras`, `intent_label` (text fallback); status badges = icon + stacks (`status_rects`); block = shield with number on the HP bar (blue rim); hero HP bar blinks the HP the coming attacks take + "−N" chip. `hitboxes` gets `"intent"` and `"statuses"` rects for hover |
+| `ui/glossary.py` | Keyword glossary: `Term` (name, rule, icon, colour), `STATUS_TERMS`, `KEYWORD_TERMS`, `EXHAUST`/`ETHEREAL`/`UNPLAYABLE`/`SHIELD`, `terms_in(texts, exclude=, include_shield=)`, `status_icon`, `status_term`; shared text colours (`KEYWORD` gold, `DAMAGE` red, `BLOCK` blue, `POISON_INK` green, `MANA`) |
+| `ui/rich_text.py` | Colour-coded rule text: `spans(text, base)`, `render_lines(text, font, max_w, base)` (wrapped, cached), `render_line` — "N de daño"/"N de vida" red, escudo/bloqueo blue, maná light blue, Veneno green, glossary terms gold. Used by tooltips, card faces and banners |
+| `ui/action_banner.py` | `ActionBanners` (one per acting enemy, stacked at y 372, fade in / hold 2.1 s / fade out) and `describe_action(name, intent, action)` → (icon, "Caballero Hueco usa Danza de Espadas", "2 golpes · pierdes 3 de vida · …") |
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
 | `fx/particles.py` | `EmitterConfig`, `ParticleSystem` — reusable pooled particles (parallel lists, swap-remove, dt clamp), gravity/wobble/colour-over-life, streak trails, clip rect, `floor_y` + `burst` into an `on_floor` child system, `prewarm()` |
 | `fx/bursts.py` | `BurstParticles` — pooled one-shot particles in screen px, each with its own palette/size/drag/gravity and style (`SQUARE`, `SPARK` streak, `GLOW` additive): `emit`, `burst` (radial), `implode` (ring → centre), `update`, `draw`; `soft_glow(color, radius)` cached additive light, `scaled(color, k)` |
@@ -181,7 +185,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/gold_hud.py` | `GoldHud` (one instance in `SceneManager`): plate + spinning pixel coin + big outlined amount that counts towards the real gold, `+N`/`−N` labels, sparkles and border flash on change; `sync`, `update(dt, amount)`, `draw(surface, anchor, pos)`, `rect`; `format_gold`, `DEFAULT_POS` |
 | `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
-| `ui/tooltip.py` | `card_tooltip(card, *, bonus_damage=0, bonus_block=0)`, `relic_tooltip`, `enemy_tooltip`, etc.; `draw_tooltip(…, beside=rect)` places it next to a hovered card |
+| `ui/tooltip.py` | Multi-panel tooltips (STS style): `TooltipContent(title, lines, icon, subtitle, tag, accent, panels)` + `TooltipPanel(title, lines, icon, color, tag, key)`; `all_text()`. Lines may start with `[[icon]]`; lines starting with two spaces are dim notes. `card_tooltip` (keyword panels with "¡Activo!", Agotar/Injugable/Etérea, modifiers, chroma), `enemy_tooltip(enemy, hit, player)` (intent panel + one panel per status), `intent_tooltip`, `intent_lines` (hits, total, Fuerza/Débil/Vulnerable breakdown, block absorbed, lethal), `status_tooltip`/`status_panel` (duration of timed hero debuffs), `player_tooltip(player, incoming)`, `relic_tooltip`, `pile_tooltip`, `mana_tooltip`; glossary panels added for every term mentioned. `draw_tooltip(…, beside=rect)` renders the stack once (cached by content), 2 columns when too tall, kept on screen; returns its rect |
 | `ui/pile_viewer.py` | Modal overlay for browsing a pile's cards |
 
 ---
@@ -569,6 +573,7 @@ One test file per source module. All test files follow the same structure:
 | `test_boss_sprite_generators.py` | `scripts/generate_boss_*.py`, `scripts/pixel_kit.py` | Espectro art contract per boss, strike events, move → animation, sword strip, kit (gapless strokes, dissolve, PNG) |
 | `presentation/scenes/test_combat_bosses.py` | boss sheets, `EnemyAnimator` styles/swords, `CombatScene` boss slot | loader extras, styles, strike times, sword count/throw/re-form/death, big slot, move clip, cards added, one number per hit, hero waits for the first sword, unplayable card, 60-turn stress |
 | `application/test_gacha.py` | `domain/gacha.py`, `application/gacha.py` | prices (growth, rounding, shared counter, Máscara, 10^3 pulls), odds (sum 1, stellar never Común and better, luck, subsets), roll distribution, paying, refusing, determinism, no duplicates until the pool is empty, max HP, stellar golden boost |
+| `presentation/ui/test_readability.py` | `ui_icons`, `scripts/generate_ui_icons.py`, `rich_text`, `glossary`, tooltips, `entity_widget` intents/badges, `action_banner`, `CombatScene` hover | every icon exists (one per status), generator = assets, colours (damage/block/keyword/poison/mana/HP), terms found in order without repeats, intent sentences (multi-hit totals, modifiers, block absorbed, lethal, extras), panels not repeated, timed debuff duration, card keyword/flag panels, renderer on screen / 2 columns / beside a card, intent number/extras/hitboxes, banner texts and lifecycle, hover intent / hero status / enemy status, banner after end turn |
 | `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
@@ -961,3 +966,24 @@ Bolsillos, Bolsillo Roto, Nada que Perder); the end-of-turn discard does not cou
   `lucky_roll_count(luck)` (Tirar los Dados).
 
 Every new card, relic and status is listed in `docs/game_design.md`.
+
+## Readable cards and intents (2026-10-07)
+
+Rule text and enemy actions follow the card-game conventions (Slay the Spire,
+Monster Train, Hearthstone): **one picture per rule, used everywhere**, colour-coded
+numbers, and a glossary panel for every keyword.
+
+- Icons: `scripts/generate_ui_icons.py` → `assets/ui/icons.png/json` (code-drawn,
+  ramps + upper-left light + dark outline, shown ×2). New status → add its icon in the
+  generator, its entry in `glossary._STATUS_ICON` / `_STATUS_KIND` and its rule in
+  `entities.STATUS_TEXT`; tooltips, badges and card text pick it up automatically.
+- Intent: icon + number ("4×3"), sword size by total damage (`tooltip.attack_icon`:
+  <8, <16, <26, more), extra icons for block / buff / debuff / junk cards, red glow and
+  skull when the attacks coming this turn kill the hero. Hover the intent → its tooltip.
+- Status badges: icon + stacks; hover one → its rule (and, on the hero, how many turns).
+- Tooltips: main panel + one panel per status/keyword/status card mentioned; text
+  colour-coded by `rich_text` (also on card faces and banners).
+- Hero HP bar blinks the HP the coming attacks will take ("−N" after the bar); the
+  hero tooltip says the incoming damage.
+- Enemy turn: one banner per acting enemy ("Reina Micélida usa Lluvia de Esporas —
+  1 golpe · pierdes 6 de vida · mete 2 Esporas en tu pila de robo").

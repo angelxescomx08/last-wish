@@ -92,81 +92,81 @@ class TestCardTooltip:
 
     def test_attack_shows_damage_line(self):
         tt = card_tooltip(_attack(6))
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "daño" in combined
 
     def test_skill_shows_block_line(self):
         tt = card_tooltip(_skill(5))
-        combined = "\n".join(tt.lines)
-        assert "bloqueo" in combined
+        combined = tt.all_text()
+        assert "escudo" in combined
 
     def test_power_shows_special_effect_line(self):
         tt = card_tooltip(_power())
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "efecto" in combined.lower() or "poder" in combined.lower()
 
     def test_cost_shown_in_lines(self):
         tt = card_tooltip(_attack(6, cost=2))
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "2" in combined and "maná" in combined
 
     def test_draw_shown_when_nonzero(self):
         tt = card_tooltip(_skill(5, draw=2))
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "2" in combined and "carta" in combined
 
     def test_stacked_effects_section_shown(self):
         card = _attack(6)
         card.stacked_effects.append(CardEffect("Fuego", damage=BigValue(4)))
         tt = card_tooltip(card)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "apilado" in combined.lower()
 
     def test_modifier_shown(self):
         card = _attack(6)
         card.modifiers.append(CardModifier(ModifierTag.CHROMA, stacks=1))
-        combined = "\n".join(card_tooltip(card).lines)
+        combined = card_tooltip(card).all_text()
         assert "Chroma" in combined
 
     def test_broken_hint_shown(self):
         card = _attack(6)
         card.is_broken = True
-        combined = "\n".join(card_tooltip(card).lines)
+        combined = card_tooltip(card).all_text()
         assert "ROTA" in combined or "fusionarse" in combined
 
     def test_bonus_damage_zero_no_bonus_line(self):
         tt = card_tooltip(_attack(6), bonus_damage=0)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "bonus" not in combined
 
     def test_bonus_damage_shows_breakdown(self):
         tt = card_tooltip(_attack(6), bonus_damage=2)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "bonus" in combined
 
     def test_bonus_damage_adds_to_displayed_value(self):
         tt = card_tooltip(_attack(6), bonus_damage=2)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "8" in combined  # 6 + 2
 
     def test_large_bonus_damage(self):
         tt = card_tooltip(_attack(10**9), bonus_damage=10**9)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "bonus" in combined
 
     def test_bonus_block_zero_no_dexterity_line(self):
         tt = card_tooltip(_skill(5), bonus_block=0)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "destreza" not in combined
 
     def test_bonus_block_shows_dexterity_breakdown(self):
         tt = card_tooltip(_skill(5), bonus_block=3)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "destreza" in combined
 
     def test_bonus_block_adds_to_displayed_value(self):
         tt = card_tooltip(_skill(5), bonus_block=3)
-        combined = "\n".join(tt.lines)
+        combined = tt.all_text()
         assert "8" in combined  # 5 + 3
 
     def test_returns_tooltip_content(self):
@@ -203,12 +203,12 @@ class TestRelicTooltip:
 
     def test_active_shows_activo(self):
         r = Relic("r", "N", "D", is_active=True)
-        combined = "\n".join(relic_tooltip(r).lines)
+        combined = relic_tooltip(r).all_text()
         assert "Activo" in combined
 
     def test_inactive_shows_agotado(self):
         r = Relic("r", "N", "D", is_active=False)
-        combined = "\n".join(relic_tooltip(r).lines)
+        combined = relic_tooltip(r).all_text()
         assert "Agotado" in combined
 
     def test_returns_tooltip_content(self):
@@ -238,23 +238,23 @@ class TestEnemyTooltip:
 
     def test_attack_intent_shown(self):
         e = _enemy(intent=Intent(IntentType.ATTACK, 12))
-        combined = "\n".join(enemy_tooltip(e).lines)
+        combined = enemy_tooltip(e).all_text()
         assert "12" in combined
 
     def test_block_intent_shown(self):
         e = _enemy(intent=Intent(IntentType.BLOCK, 8))
-        combined = "\n".join(enemy_tooltip(e).lines)
+        combined = enemy_tooltip(e).all_text()
         assert "8" in combined
 
     def test_buff_intent_shown(self):
         e = _enemy(intent=Intent(IntentType.BUFF, 0))
-        combined = "\n".join(enemy_tooltip(e).lines)
+        combined = enemy_tooltip(e).all_text()
         assert "fortalec" in combined.lower()
 
     def test_status_effects_shown(self):
         e = _enemy()
         e.status_effects = [StatusEffect("Vulnerable", 2, is_buff=False)]
-        combined = "\n".join(enemy_tooltip(e).lines)
+        combined = enemy_tooltip(e).all_text()
         assert "Vulnerable" in combined
 
     def test_returns_tooltip_content(self):
@@ -284,13 +284,13 @@ class TestPlayerTooltip:
     def test_status_effects_shown(self):
         p = _player()
         p.status_effects = [StatusEffect("Fuerza", 3, is_buff=True)]
-        combined = "\n".join(player_tooltip(p).lines)
+        combined = player_tooltip(p).all_text()
         assert "Fuerza" in combined
 
     def test_luck_shown_when_positive(self):
         p = _player()
         p.luck = 8
-        combined = "\n".join(player_tooltip(p).lines)
+        combined = player_tooltip(p).all_text()
         assert "Suerte: 8" in combined
 
     def test_no_luck_line_when_zero(self):
@@ -314,15 +314,15 @@ class TestPileTooltip:
         assert "Descarte" in tt.title
 
     def test_draw_count_shown(self):
-        combined = "\n".join(pile_tooltip("ROBO", 7, is_draw=True).lines)
+        combined = pile_tooltip("ROBO", 7, is_draw=True).all_text()
         assert "7" in combined
 
     def test_discard_count_shown(self):
-        combined = "\n".join(pile_tooltip("DESCARTE", 4, is_draw=False).lines)
+        combined = pile_tooltip("DESCARTE", 4, is_draw=False).all_text()
         assert "4" in combined
 
     def test_zero_count(self):
-        combined = "\n".join(pile_tooltip("ROBO", 0, is_draw=True).lines)
+        combined = pile_tooltip("ROBO", 0, is_draw=True).all_text()
         assert "0" in combined
 
     def test_returns_tooltip_content(self):

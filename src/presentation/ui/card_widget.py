@@ -28,6 +28,7 @@ from src.infrastructure import colors
 from src.infrastructure.card_assets import card_frame, card_illustration, card_layout
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.fx import chroma_fx
+from src.presentation.ui import rich_text
 
 # ---------------------------------------------------------------------------
 # Card dimensions (frame aspect ratio ≈ 0.72)
@@ -283,18 +284,24 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
         text_rect = pygame.Rect(text_rect.x, text_rect.y, text_rect.w, max(1, text_rect.h - plate.get_height()))
     lines = _ability_lines(card, damage, block, combo, singular, void, spoil)
     if lines:
+        # Colour-coded like the tooltips: damage red, block blue, keywords gold.
         font = fonts.get(max(8, round(h * 0.052)))
-        wrapped: list[str] = []
+        wrapped: list[pygame.Surface] = []
         for raw in lines:
-            wrapped.extend(_wrap(raw, font, text_rect.w))
+            wrapped.extend(rich_text.render_lines(raw, font, text_rect.w, _INK_LIGHT))
         line_h = font.get_linesize()
         max_lines = max(1, text_rect.h // line_h)
         if len(wrapped) > max_lines:
             wrapped = wrapped[:max_lines]
-            wrapped[-1] = _fit(wrapped[-1] + "…", font, text_rect.w)
+            dots = font.render("…", True, _INK_LIGHT)
+            last = wrapped[-1]
+            keep = min(last.get_width(), text_rect.w - dots.get_width())
+            joined = pygame.Surface((keep + dots.get_width(), last.get_height()), pygame.SRCALPHA)
+            joined.blit(last, (0, 0), pygame.Rect(0, 0, keep, last.get_height()))
+            joined.blit(dots, (keep, 0))
+            wrapped[-1] = joined
         y = text_rect.centery - len(wrapped) * line_h // 2
-        for line in wrapped:
-            s = font.render(line, True, _INK_LIGHT)
+        for s in wrapped:
             surf.blit(s, s.get_rect(centerx=text_rect.centerx, top=y))
             y += line_h
 

@@ -24,6 +24,7 @@ from src.presentation.fx.bursts import GLOW, SPARK, BurstParticles
 from src.presentation.fx.enemy_animator import EnemyAnimator
 from src.presentation.fx.hero_fx import HeroFx
 from src.presentation.ui.fx import FxLayer
+from src.presentation.ui.action_banner import ActionBanners, describe_action
 from src.presentation.ui.card_play import CardPlayInput, PlayRequest
 from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
 from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
@@ -52,8 +53,10 @@ from src.presentation.ui.tooltip import (
     card_tooltip,
     draw_tooltip,
     enemy_tooltip,
+    intent_tooltip,
     mana_tooltip,
     pile_tooltip,
+    status_tooltip,
     player_tooltip,
     relic_tooltip,
 )
@@ -99,7 +102,6 @@ _BOSS_CX: int = 905
 _BOSS_GROUND: int = 314
 _BOSS_W: int = 230
 _CARD_NAMES_ES: dict[str, str] = {"status_espora": "Espora", "status_moho": "Moho"}
-_PILE_ES: dict[str, str] = {"draw": "tu pila de robo", "discard": "tu descarte", "hand": "tu mano"}
 _TOXIC = (170, 230, 70)
 _DEBUFF_TEXT = (220, 120, 240)
 
@@ -263,11 +265,15 @@ class CombatScene:
         self._hovered_mana:      bool = False
         self._hovered_draw_pile: bool = False
         self._hovered_disc_pile: bool = False
+        self._hovered_detail: tuple | None = None    # ("intent", i) / ("status", i or "player", j)
+        self._enemy_hitboxes: list[dict] = []
+        self._player_hitboxes: dict = {}
 
         # Overlay
         self._overlay: CollectionViewer | None = None
         self._feedback_text = ""
         self._feedback_time = 0.0
+        self._banners = ActionBanners()
 
     # ------------------------------------------------------------------
     # Protocol
@@ -318,6 +324,7 @@ class CombatScene:
             self._overlay = None
             self._sound.play_cancel()
         self._feedback_time = max(0.0, self._feedback_time - dt)
+        self._banners.update(dt)
         self._fx.update(dt)
         self._fx_time += max(0.0, dt)
         self._advance_cards(max(0.0, dt))
@@ -334,6 +341,7 @@ class CombatScene:
         self._draw_leaving(surface)
         self._draw_cast_stage(surface)
         self._bursts.draw(surface)
+        self._banners.draw(surface, self._fonts)
         self._fx.draw(surface)
         if self._feedback_time > 0:
             message = self._fonts.get(16).render(self._feedback_text, True, (245, 165, 125))
@@ -446,6 +454,10 @@ class CombatScene:
                          (0, _HAND_AREA_Y), (surface.get_width(), _HAND_AREA_Y))
 
         self._enemy_rects = []
+        self._enemy_hitboxes = []
+        incoming = self._incoming_damage()
+        lethal = incoming - self._state.player.block >= self._state.player.current_hp > 0
+        t = self._idle_time
 
         for i, enemy in enumerate(self._state.enemies):
             if i >= len(_ENEMY_SLOTS):
@@ -458,6 +470,9 @@ class CombatScene:
                 enemy.current_hp, enemy.block = shown[i]
             anim = self._enemy_anims.get(i)
             hit = intent_hit_damage(enemy, self._state.player)
+            boxes: dict = {}
+            attacking = lethal and enemy.intent.intent_type == IntentType.ATTACK
+            extra = dict(intent_damage=hit, lethal=attacking, t=t, hitboxes=boxes)
             try:
                 if anim is not None and anim.sheet.is_boss:
                     rect = self._boss_rect(anim)
@@ -465,25 +480,26 @@ class CombatScene:
                     if enemy.is_alive:
                         rect = draw_enemy(surface, enemy, rect.x, rect.y, self._fonts,
                                           targeted=self._state.targeted_enemy_index == i,
-                                          framed=False, size=rect.size, intent_damage=hit)
+                                          framed=False, size=rect.size, **extra)
                 elif anim is not None:
                     rect = pygame.Rect(ex, ey, ENEMY_W, ENEMY_H)
                     anim.draw(surface, (rect.centerx, rect.bottom + 6))
                     if enemy.is_alive:
                         rect = draw_enemy(surface, enemy, ex, ey, self._fonts,
                                           targeted=self._state.targeted_enemy_index == i,
-                                          framed=False, intent_damage=hit)
+                                          framed=False, **extra)
                 else:
                     rect = draw_enemy(
                         surface, enemy, ex, ey, self._fonts,
                         targeted    = self._state.targeted_enemy_index == i,
                         sprite      = self._sprites.get_enemy_sprite(enemy.name),
-                        intent_damage=hit,
+                        **extra,
                     )
             finally:
                 if saved is not None:
                     enemy.current_hp, enemy.block = saved
             self._enemy_rects.append(rect)
+            self._enemy_hitboxes.append(boxes)
 
         real_block = self._state.player.block
         if self._shown_player_block is not None:
@@ -500,7 +516,7 @@ class CombatScene:
     def _boss_rect(anim: EnemyAnimator) -> pygame.Rect:
         """Hit / label rect of a boss: from the top of its sprite down to just above its feet."""
         height = max(120, anim.sheet.anchor[1] - anim.sheet.top - 4)
-        top = max(_TOP_BAR_H + 44, _BOSS_GROUND - height)
+        top = max(_TOP_BAR_H + 60, _BOSS_GROUND - height)   # room for the intent above the name
         return pygame.Rect(_BOSS_CX - _BOSS_W // 2, top, _BOSS_W, _BOSS_GROUND - 6 - top)
 
     def _draw_player(self, surface: pygame.Surface) -> None:
@@ -511,7 +527,17 @@ class CombatScene:
         if self._hero_fx is not None:
             self._hero_fx.draw(surface, center)
 
+    def _incoming_damage(self) -> int:
+        """Damage every living enemy's ATTACK intent will deal this enemy turn (before block)."""
+        player = self._state.player
+        return sum(intent_hit_damage(e, player) * max(1, e.intent.hits)
+                   for e in self._state.enemies
+                   if e.is_alive and e.intent.intent_type == IntentType.ATTACK)
+
     def _draw_player_sprite(self, surface: pygame.Surface) -> None:
+        player = self._state.player
+        loss = max(0, self._incoming_damage() - player.block) if self._shown_enemies is None else 0
+        self._player_hitboxes = {}
         self._player_rect = draw_player(
             surface, self._state.player, _PLAYER_X, _PLAYER_Y, self._fonts,
             sprite=self._sprites.get_player_sprite(self._state.player.name,
@@ -519,6 +545,7 @@ class CombatScene:
                 elapsed=self._hero_action_time if self._hero_action else self._idle_time,
                 animation=self._hero_action or "idle"),
             framed=not has_hero_sprites(self._state.player.name),
+            incoming_loss=loss, t=self._idle_time, hitboxes=self._player_hitboxes,
         )
 
     def _draw_active_powers(self, surface: pygame.Surface) -> None:
@@ -760,6 +787,9 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     def _get_tooltip(self) -> TooltipContent | None:
+        detail = self._detail_tooltip()
+        if detail is not None:
+            return detail
         if self._hovered_card is not None and self._hovered_card < self._state.hand.count:
             card      = self._state.hand.cards[self._hovered_card]
             bonus_dmg, bonus_blk = self._bonuses(card)
@@ -771,7 +801,7 @@ class CombatScene:
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             enemy = self._state.enemies[self._hovered_enemy]
-            return enemy_tooltip(enemy, intent_hit_damage(enemy, self._state.player))
+            return enemy_tooltip(enemy, intent_hit_damage(enemy, self._state.player), self._state.player)
 
         if self._hovered_relic is not None and self._hovered_relic < len(self._state.relics):
             return relic_tooltip(self._state.relics[self._hovered_relic])
@@ -784,7 +814,7 @@ class CombatScene:
                 'y a las cartas disponibles en robo y descarte.',
             ])
         if self._hovered_player:
-            return player_tooltip(self._state.player)
+            return player_tooltip(self._state.player, self._incoming_damage())
 
         if self._hovered_mana:
             return mana_tooltip(self._state.mana)
@@ -797,6 +827,39 @@ class CombatScene:
 
         return None
 
+    def _detail_tooltip(self) -> TooltipContent | None:
+        """Tooltip of a hovered intent or status badge (more precise than the whole enemy)."""
+        d = self._hovered_detail
+        if d is None:
+            return None
+        player = self._state.player
+        if d[0] == "intent" and d[1] < len(self._state.enemies):
+            enemy = self._state.enemies[d[1]]
+            if enemy.is_alive:
+                return intent_tooltip(enemy, intent_hit_damage(enemy, player), player)
+        if d[0] == "status":
+            owner, j = d[1], d[2]
+            effects = (player.status_effects if owner == "player"
+                       else self._state.enemies[owner].status_effects if owner < len(self._state.enemies) else [])
+            if j < len(effects):
+                return status_tooltip(effects[j], on_player=owner == "player")
+        return None
+
+    def _detail_at(self, pos: tuple[int, int]) -> tuple | None:
+        for i, boxes in enumerate(self._enemy_hitboxes):
+            if i < len(self._state.enemies) and not self._state.enemies[i].is_alive:
+                continue
+            rect = boxes.get("intent")
+            if rect is not None and rect.inflate(6, 6).collidepoint(pos):
+                return ("intent", i)
+            for j, (_, badge) in enumerate(boxes.get("statuses", [])):
+                if badge.collidepoint(pos):
+                    return ("status", i, j)
+        for j, (_, badge) in enumerate(self._player_hitboxes.get("statuses", [])):
+            if badge.collidepoint(pos):
+                return ("status", "player", j)
+        return None
+
     # ------------------------------------------------------------------
     # Hover detection
     # ------------------------------------------------------------------
@@ -805,6 +868,7 @@ class CombatScene:
         self._hovered_card = self._hovered_enemy = self._hovered_relic = None
         self._hovered_player = self._hovered_mana = False
         self._hovered_draw_pile = self._hovered_disc_pile = self._end_turn_hovered = False
+        self._hovered_detail = None
 
     def _update_hover(self, pos: tuple[int, int]) -> None:
         previous_card = self._hovered_card
@@ -816,12 +880,17 @@ class CombatScene:
         self._hovered_draw_pile = False
         self._hovered_disc_pile = False
         self._end_turn_hovered = False
+        self._hovered_detail = None
 
         card = self._card_at(pos)
         if card is not None:
             self._hovered_card = card
             if card != previous_card:
                 self._sound.play_nav()
+            return
+
+        self._hovered_detail = self._detail_at(pos)
+        if self._hovered_detail is not None:
             return
 
         for i, rect in enumerate(self._enemy_rects):
@@ -1137,6 +1206,13 @@ class CombatScene:
             self._hero_action_time = 0.0
             self._idle_time = 0.0
 
+    def _announce_actions(self, log, intents: dict, names: dict) -> None:
+        """One banner per enemy that acted: its move and what it did to the hero."""
+        self._banners.clear()
+        for k, action in enumerate(a for a in log if a.index in intents):
+            icon, title, detail = describe_action(names.get(action.index, ""), intents[action.index], action)
+            self._banners.add(icon, title, detail, delay=0.12 * k)
+
     def _announce_extras(self, action, enemy_name: str, at: float) -> None:
         """Floating text for a boss move's debuffs and the status cards it adds."""
         if not self._player_rect:
@@ -1145,10 +1221,6 @@ class CombatScene:
         for j, (name, stacks) in enumerate(action.debuffs):
             self._fx.add_text(x, y - 18 * j, f"{name} {stacks}", _DEBUFF_TEXT, 1.3, delay=at + 0.1 * j)
         if action.cards:
-            parts = [f"{n} {_CARD_NAMES_ES.get(cid, cid)}{'s' if n > 1 else ''} a {_PILE_ES.get(pile, pile)}"
-                     for cid, n, pile in action.cards]
-            self._feedback_text = f"{enemy_name}: " + ", ".join(parts)
-            self._feedback_time = 2.6
             for j, (cid, n, pile) in enumerate(action.cards):
                 self._fx.add_text(x, y - 18 * (len(action.debuffs) + j),
                                   f"+{n} {_CARD_NAMES_ES.get(cid, cid)}", _TOXIC, 1.4, delay=at + 0.15)
@@ -1184,6 +1256,7 @@ class CombatScene:
         self._play.cancel()
         self._sound.play_end_turn()
         end_player_turn(state)
+        self._announce_actions(state.enemy_log, intents, names)
 
         # Animated enemies act out their move: the sheet may have a clip for it (bosses),
         # otherwise claws for attacks and a spell for the rest. Each hit lands on its strike.
