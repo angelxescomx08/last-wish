@@ -44,7 +44,11 @@ from src.presentation.scenes.gacha_scene import GachaScene
 from src.presentation.ui.gold_hud import DEFAULT_POS as GOLD_HUD_POS
 from src.presentation.ui.gold_hud import GoldHud
 from src.presentation.scenes.warlock_scene import WarlockScene
-from src.presentation.ui.pause_menu import PauseMenu, PauseAction, draw_pause_button, pause_button_rect
+from src.application.hero_stats import hero_sheet
+from src.presentation.ui.hero_sheet import HeroSheetOverlay
+from src.presentation.ui.pause_menu import (
+    PauseAction, PauseMenu, draw_pause_button, draw_stats_button, pause_button_rect, stats_button_rect,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -103,6 +107,10 @@ class SceneManager:
         self._run            = None           # set when character is selected
         self.quit_requested: bool = False
         self._pause: PauseMenu | None = None
+        self._hero_sheet: HeroSheetOverlay | None = None
+        self._mouse: tuple[int, int] = (-1, -1)
+        self._mouse_down = False
+        self._ui_time = 0.0
         self._gold_hud = GoldHud(fonts)       # shared gold counter on every run screen
         self._gold_run_id: int | None = None
 
@@ -133,7 +141,34 @@ class SceneManager:
             self._top(), (MainMenuScene, CharacterSelectScene, SettingsScene, DevSettingsScene, DeathScene)
         )
 
+    def open_hero_sheet(self) -> None:
+        """Show the hero sheet for the current run (live combat values when in a fight)."""
+        if self._run is None:
+            return
+        top = self._top()
+        state = top.state if isinstance(top, CombatScene) else None
+        if isinstance(top, CombatScene):
+            top._cancel_selection()
+        self._hero_sheet = HeroSheetOverlay(hero_sheet(self._run, state), self._fonts)
+        self._sound.play_confirm()
+
+    @property
+    def hero_sheet(self) -> HeroSheetOverlay | None:
+        return self._hero_sheet
+
     def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.MOUSEMOTION:
+            self._mouse = event.pos
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self._mouse_down = True
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self._mouse_down = False
+        if self._hero_sheet is not None:
+            self._hero_sheet.handle_event(event)
+            if self._hero_sheet.closed:
+                self._hero_sheet = None
+                self._sound.play_confirm()
+            return
         if self._pause is not None:
             self._pause.handle_event(event)
             action = self._pause.action
@@ -145,6 +180,14 @@ class SceneManager:
                 self._sound.play_confirm()
             return
         top = self._top()
+        stats = stats_button_rect(top)
+        wants_sheet = (event.type == pygame.KEYDOWN and event.key == pygame.K_c and not getattr(event, 'repeat', False)
+                       and getattr(top, '_overlay', None) is None) or (
+            event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and stats is not None
+            and stats.collidepoint(event.pos))
+        if self._can_pause() and wants_sheet:
+            self.open_hero_sheet()
+            return
         escape = event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
         button = pause_button_rect(top)
         clicked = (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
@@ -166,7 +209,12 @@ class SceneManager:
 
     def update(self, dt: float) -> None:
         self._sound.update()
+        self._ui_time += dt
+        if self._hero_sheet is not None:
+            self._hero_sheet.update(dt)
+            return
         if self._pause is not None:
+            self._pause.update(dt)
             return
         top = self._top()
         top.update(dt)
@@ -194,9 +242,13 @@ class SceneManager:
             self._gold_hud.draw(surface, anchor, pos)
         button = pause_button_rect(self._top()) if self._can_pause() else None
         if button is not None:
-            draw_pause_button(surface, self._fonts, button)
+            ui = dict(mouse=self._mouse, pressed=self._mouse_down, t=self._ui_time)
+            draw_pause_button(surface, self._fonts, button, **ui)
+            draw_stats_button(surface, self._fonts, stats_button_rect(self._top()), **ui)
         if self._pause is not None:
             self._pause.draw(surface)
+        if self._hero_sheet is not None:
+            self._hero_sheet.draw(surface)
 
     # ------------------------------------------------------------------
     # Transition dispatcher

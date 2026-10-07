@@ -131,6 +131,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `play_card.py` | `play_card(state, card_index, target_enemy_index)` → `PlayResult`; `requires_target(card)`, `target_kind(card)` → `TargetKind` (`ENEMY` / `ALL_ENEMIES` / `SELF`) | Validate and execute playing a card from hand. Applies `player.attack_bonus` to attack damage and `player.dexterity` to block. `target_kind` tells the UI what a card will act on |
 | `end_turn.py` | `end_player_turn(state)`, `draw_opening_hand(state)` | Full turn pipeline. Draw count = 5 + relic bonus (luck does not affect draws) |
 | `gacha.py` | `gacha_price(run, kind)`, `can_pull`, `gacha_odds`, `pull(run, kind)` → `PullResult`, `accept(run, result)`, `decline(result)` | Pay and roll a gachapón relic (seeded by run seed + pull count); the hero then keeps or declines it |
+| `hero_stats.py` | `hero_sheet(run, state=None)` → `HeroSheet` (`stats: list[HeroStat]`, gold, floor, deck size/by type, relic count, golden card/relic and Épica+ odds, statuses, turn); `HeroStat(key, name, icon, value, base, sources, effect, current, reference)` with `bonus` and `breakdown()` ("Base 6 · Orbe de Fuego +2"); `StatSource(label, amount)` | Data of the hero sheet: per-relic contributions measured by calling each `relic_effects` query with that relic alone, "Pruebas" and "Este combate" (live `CombatState` values) as sources |
 | `enemy_ai.py` | `BOSSES`, `FLOOR1_BOSSES`, `create_boss(ai, floor)`, `next_intent(enemy, player)`, `has_pattern`, `intent_hit_damage` | Pattern AI of the floor-1 bosses (see *Floor-1 bosses*) |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
@@ -150,6 +151,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
 | `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py` and `scripts/generate_boss_*.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`, bosses → `mycelid`/`weaver`/`knight`), `BOSS_SHEET_IDS`; boss data on `EnemySheet`: `strike_seconds(anim)`, `animation_for_move(move_id, fallback)`, `is_boss`, `blade_frames`, `top`, `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
 | `ui_icons.py` | `ui_icon(name, scale=2)` (cached, nearest) / `has_ui_icon(name)` from `assets/ui/icons.png` + `icons.json` (written by `scripts/generate_ui_icons.py`): intent icons 18 px (`attack_1`…`attack_4`, `defend`, `buff`, `debuff`, `cards`, `unknown`, `lethal`), status/keyword icons 14 px (one per status, `status_buff`/`status_debuff` fallbacks, `block`, `junk_card`, `combo`, `singular`, `void`, `spoil`, `exhaust`, `ethereal`, `unplayable`, `damage`, `draw`, `mana`, `heal`); `None` when missing |
+| `ui_kit.py` | HUD kit from `assets/ui/kit.png` + `kit.json` (written by `scripts/generate_ui_kit.py`): `kit_piece(name, scale=2)`, `kit_slice(name, w, h, scale=2)` (9-slice / 3-slice with **tiled** edges and centre, exact size, cached), `has_kit`, `kit_names`. Pieces: `panel`, `btn_{bronze,gold}_{idle,hover,press,off}`, `orb_back/frame/glass`, `orb_liquid_0..7`, `pile_draw/discard/empty`, `topbar`, `trim`, `ribbon` |
 | `gacha_assets.py` | `load_gacha_assets()` → `GachaAssets` (cached, ×2 nearest): machine, glass overlay, crank frames, pile capsules, prize capsules per tier (drop size; stage size closed/top/bottom), coin, chute flap, `meta`; `point(name)` / `rect(name)` anchors; `None` when missing |
 | `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `hero_strike_seconds(hero)` (attack time until the blade connects, from the sheet's `events.attack.strike_frame`; 0 when absent), `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
@@ -184,7 +186,9 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fx/hero_fx.py` | `HeroFx(strike, seed)` — code-drawn hero only: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/gold_hud.py` | `GoldHud` (one instance in `SceneManager`): plate + spinning pixel coin + big outlined amount that counts towards the real gold, `+N`/`−N` labels, sparkles and border flash on change; `sync`, `update(dt, amount)`, `draw(surface, anchor, pos)`, `rect`; `format_gold`, `DEFAULT_POS` |
-| `ui/hud_widget.py` | Relic bar, mana orb, pile buttons, turn counter, End Turn button |
+| `ui/hud_widget.py` | Kit-drawn combat HUD: `draw_relics` (iron slots, rarity rim, hover lift), `draw_mana(…, orb=)`, `draw_pile_widget(…, hovered=)` (card-back stack + count badge, `PILE_W/PILE_H`), `draw_end_turn_button(…, hovered, pressed, enabled, ready, t)` (gold button, hourglass, key E; pulses when `ready`, "TURNO ENEMIGO" when disabled), `draw_turn_counter` (red ribbon) |
+| `ui/pixel_ui.py` | Kit widgets: `draw_panel`, `draw_button(surface, rect, label, fonts, *, style="bronze"/"gold", state, icon, key, t, glow, size)` (hover lift + light sweep, press sinks, glow aura), `button_state`, `draw_keycap`, `draw_topbar`, `draw_trim`, `draw_ribbon`, `outlined`; `ManaOrb` (`update(dt, mana)`, `error()`, `draw`): liquid cut at the mana level with a moving crest, splash + drops on spend, glow + motes on refill, shake + red rim when a card can't be paid |
+| `ui/hero_sheet.py` | `HeroSheetOverlay(sheet, fonts)` — "Héroe" screen: animated hero portrait, name, HP bar, statuses; one row per stat (icon, big number, base/bonus bar with pips, sources, sentence); tiles for gold, floor, deck (bar per type), relics, turn. Bars fill one after another and spark. `fill(i)`, `closed` (Esc, C, X, click outside) |
 | `ui/tooltip.py` | Multi-panel tooltips (STS style): `TooltipContent(title, lines, icon, subtitle, tag, accent, panels)` + `TooltipPanel(title, lines, icon, color, tag, key)`; `all_text()`. Lines may start with `[[icon]]`; lines starting with two spaces are dim notes. `card_tooltip` (keyword panels with "¡Activo!", Agotar/Injugable/Etérea, modifiers, chroma), `enemy_tooltip(enemy, hit, player)` (intent panel + one panel per status), `intent_tooltip`, `intent_lines` (hits, total, Fuerza/Débil/Vulnerable breakdown, block absorbed, lethal), `status_tooltip`/`status_panel` (duration of timed hero debuffs), `player_tooltip(player, incoming)`, `relic_tooltip`, `pile_tooltip`, `mana_tooltip`; glossary panels added for every term mentioned. `draw_tooltip(…, beside=rect)` renders the stack once (cached by content), 2 columns when too tall, kept on screen; returns its rect |
 | `ui/pile_viewer.py` | Modal overlay for browsing a pile's cards |
 
@@ -574,6 +578,7 @@ One test file per source module. All test files follow the same structure:
 | `presentation/scenes/test_combat_bosses.py` | boss sheets, `EnemyAnimator` styles/swords, `CombatScene` boss slot | loader extras, styles, strike times, sword count/throw/re-form/death, big slot, move clip, cards added, one number per hit, hero waits for the first sword, unplayable card, 60-turn stress |
 | `application/test_gacha.py` | `domain/gacha.py`, `application/gacha.py` | prices (growth, rounding, shared counter, Máscara, 10^3 pulls), odds (sum 1, stellar never Común and better, luck, subsets), roll distribution, paying, refusing, determinism, no duplicates until the pool is empty, max HP, stellar golden boost |
 | `presentation/ui/test_readability.py` | `ui_icons`, `scripts/generate_ui_icons.py`, `rich_text`, `glossary`, tooltips, `entity_widget` intents/badges, `action_banner`, `CombatScene` hover | every icon exists (one per status), generator = assets, colours (damage/block/keyword/poison/mana/HP), terms found in order without repeats, intent sentences (multi-hit totals, modifiers, block absorbed, lethal, extras), panels not repeated, timed debuff duration, card keyword/flag panels, renderer on screen / 2 columns / beside a card, intent number/extras/hitboxes, banner texts and lifecycle, hover intent / hero status / enemy status, banner after end turn |
+| `presentation/ui/test_hud_kit.py` | `ui_kit`, `scripts/generate_ui_kit.py`, `pixel_ui`, HUD widgets, `hero_stats`, `hero_sheet`, SceneManager/CombatScene wiring | pieces + generator = assets, exact 9/3-slice sizes, tiling keeps corners, buttons in every style/state, mana orb (sync, splash, easing, flash, shake, max 0, 10^9 dt stress), End Turn variants, piles, stat bases/relic sources/golden relic/inactive/Pruebas/live combat/odds/huge luck/deck by type, sheet fill order/closing/phases/stress, C key + button + Escape order + overlay guard, End Turn locked while enemies act, orb shakes on unaffordable card |
 | `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
@@ -763,8 +768,11 @@ orb, Brujo `("bottomright", (1268, 708))`; `show_gold_hud = False` hides it. The
 
 `SceneManager` in `main.py` owns a `PauseMenu` overlay
 (`src/presentation/ui/pause_menu.py`). During a run, the visible `Pausa · Esc`
-button or Escape opens it in map, combat, shop, event and reward screens.
-Existing collections/held cards consume Escape first. The button's place comes from `pause_button_rect(scene)` (`pause_menu.py`): `PAUSE_BUTTON` by default, a scene's own `pause_button_rect` when its top bar is busy (combat: `(460, 16, 130, 36)`, between the relic bar and the turn counter), and hidden while a collection overlay is open. The pause button cancels
+button or Escape opens it in map, combat, shop, event and reward screens. Next to it the
+hero button (`stats_button_rect`, key **C**) opens `HeroSheetOverlay` (`SceneManager.open_hero_sheet`,
+`hero_sheet` property; live combat values when the top scene is a `CombatScene`); while open,
+room updates stop and every event goes to it.
+Existing collections/held cards consume Escape first. The button's place comes from `pause_button_rect(scene)` (`pause_menu.py`): `PAUSE_BUTTON` by default, a scene's own `pause_button_rect` when its top bar is busy (combat: `(460, 16, 64, 36)`, between the relic bar and the turn ribbon; Brujo `(78, 652, 64, 36)`; both buttons are 64×36 kit buttons with an icon and their key cap, and show their name on hover), and hidden while a collection overlay is open. The pause button cancels
 held combat input. While paused, room updates and transitions stop and all input
 goes to the overlay; shared audio still updates. Mouse and keyboard are supported.
 
@@ -987,3 +995,24 @@ numbers, and a glossary panel for every keyword.
   hero tooltip says the incoming damage.
 - Enemy turn: one banner per acting enemy ("Reina Micélida usa Lluvia de Esporas —
   1 golpe · pierdes 6 de vida · mete 2 Esporas en tu pila de robo").
+
+## Pixel-art HUD and hero sheet (2026-10-07)
+
+User: the HUD (End Turn, pause/Esc, mana, piles…) did not match the game; wanted pixel
+art with effects, and a way to see the hero's stats that is easy to read.
+
+- Art: `scripts/generate_ui_kit.py` → `assets/ui/kit.png/json` (iron panel, bronze and
+  gold buttons in 4 states, mana orb parts + 8 liquid frames, card piles, top bar, gold
+  trim, ribbon) and new icons in `generate_ui_icons.py` (gear, helmet, bag, hand_cards,
+  clover, tower, hourglass, deck, coin). Same rules as every sprite: native px ×2, ramps,
+  upper-left light, dither, dark outline. Stretchable pieces tile, never stretch.
+- Combat: kit top bar, "Reliquias (n)" button, relic slots, info panel (Robo / Mano máx.),
+  turn ribbon, End Turn (gold, hourglass + E; pulses when `nothing_to_play`; locked and grey
+  as "TURNO ENEMIGO" for `_ENEMY_PHASE` s after ending the turn), gold trim over the hand
+  area, `ManaOrb`, card-stack piles, "Mano n/m" button. Map header uses the same kit.
+- Pause menu: kit panel, ribbon, gold/bronze buttons, key caps.
+- Hero sheet: `C` or the helmet button → `application/hero_stats.hero_sheet` +
+  `ui/hero_sheet.HeroSheetOverlay`. New stat or relic bonus: compute it in `hero_sheet`
+  (per-relic via `_per_relic(relics, query)`), give it an icon and a colour in
+  `STAT_COLOR`.
+

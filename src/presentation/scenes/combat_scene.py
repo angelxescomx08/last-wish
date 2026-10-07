@@ -26,6 +26,10 @@ from src.presentation.fx.hero_fx import HeroFx
 from src.presentation.ui.fx import FxLayer
 from src.presentation.ui.action_banner import ActionBanners, describe_action
 from src.presentation.ui.card_play import CardPlayInput, PlayRequest
+from src.presentation.ui.pixel_ui import (
+    ManaOrb, button_state, draw_button, draw_panel, draw_topbar, draw_trim, outlined,
+)
+from src.infrastructure.ui_icons import ui_icon
 from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
 from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
 from src.presentation.ui.entity_widget import (
@@ -80,15 +84,16 @@ _MANA_CX: int   = 68
 _MANA_CY: int   = 595
 _MANA_R: int    = 42          # orb radius (for hover detection)
 
-_DRAW_X: int    = 1156
-_DRAW_Y: int    = 527
-_DISCARD_X: int = 1156
-_DISCARD_Y: int = 621
+_DRAW_X: int    = 1160
+_DRAW_Y: int    = 484
+_DISCARD_X: int = 1160
+_DISCARD_Y: int = 596
 
-_END_TURN_X: int = 1085
-_END_TURN_Y: int = 15
-_END_TURN_W: int = 183
-_END_TURN_H: int = 38
+_END_TURN_X: int = 1074
+_END_TURN_Y: int = 9
+_END_TURN_W: int = 196
+_END_TURN_H: int = 48
+_ENEMY_PHASE: float = 1.3      # seconds the End Turn button shows "Turno enemigo"
 
 _ENEMY_SLOTS: list[tuple[int, int]] = [
     (762, _ENEMY_Y),
@@ -248,11 +253,14 @@ class CombatScene:
         self._end_turn_rect:  pygame.Rect | None = None
         self._draw_pile_rect: pygame.Rect | None = None
         self._disc_pile_rect: pygame.Rect | None = None
-        self._relic_collection_rect = pygame.Rect(10, 15, 164, 38)
-        self._hand_collection_rect = pygame.Rect(12, 662, 145, 34)
-        self._draw_info_rect = pygame.Rect(756, 10, 285, 48)
-        # Pause button in the free gap between the relic bar (184–449) and the turn counter.
-        self.pause_button_rect = pygame.Rect(460, 16, 130, 36)
+        self._relic_collection_rect = pygame.Rect(10, 16, 164, 36)
+        self._hand_collection_rect = pygame.Rect(12, 668, 150, 36)
+        self._draw_info_rect = pygame.Rect(770, 12, 290, 42)
+        # Pause + hero buttons in the free gap between the relic bar (184–449) and the turn ribbon.
+        self.pause_button_rect = pygame.Rect(460, 16, 64, 36)
+        self._orb = ManaOrb()
+        self._enemy_phase = 0.0
+        self._mouse_down = False
         self.gold_hud_pos = ("topleft", (12, 476))     # the top bar is full: above the mana orb
         self._card_draw_order: list[int] = []
 
@@ -294,8 +302,10 @@ class CombatScene:
             else:
                 self._update_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self._mouse_down = True
             self._handle_click(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self._mouse_down = False
             self._handle_release(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
             self._cancel_selection()
@@ -325,6 +335,8 @@ class CombatScene:
             self._sound.play_cancel()
         self._feedback_time = max(0.0, self._feedback_time - dt)
         self._banners.update(dt)
+        self._orb.update(dt, self._state.mana)
+        self._enemy_phase = max(0.0, self._enemy_phase - max(0.0, dt))
         self._fx.update(dt)
         self._fx_time += max(0.0, dt)
         self._advance_cards(max(0.0, dt))
@@ -423,31 +435,46 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     def _draw_top_bar(self, surface: pygame.Surface) -> None:
-        bar = pygame.Rect(0, 0, surface.get_width(), _TOP_BAR_H)
-        pygame.draw.rect(surface, colors.BG_PANEL, bar)
-        pygame.draw.line(surface, colors.PANEL_BORDER,
-                         (0, _TOP_BAR_H - 1), (surface.get_width(), _TOP_BAR_H - 1))
+        draw_topbar(surface, _TOP_BAR_H)
+        t = self._idle_time
 
         self._relic_rects = draw_relics(
             surface, self._state.relics[:5], 184, 10, self._fonts,
             hovered_index=self._hovered_relic,
             sprites=self._sprites,
         )
-        pygame.draw.rect(surface, colors.BG_DARK, self._relic_collection_rect, border_radius=6)
-        text = self._fonts.get(14).render(f"Reliquias ({len(self._state.relics)}) · Ver", True, colors.TEXT_ACCENT)
-        surface.blit(text, text.get_rect(center=self._relic_collection_rect.center))
+        rc = self._relic_collection_rect
+        draw_button(surface, rc, f"Reliquias ({len(self._state.relics)})", self._fonts, icon="bag",
+                    state=button_state(rc, self._mouse, self._mouse_down), t=t, size=14)
+
+        info = self._draw_info_rect
+        draw_panel(surface, info)
         nominal_draw = cards_per_turn(self._state)
         count = min(nominal_draw, self._state.hand.max_size)
-        label = self._fonts.get(15).render(f"ROBO POR TURNO: {count}", True, colors.TEXT_PRIMARY)
-        surface.blit(label, label.get_rect(center=(self._draw_info_rect.centerx, 25)))
-        hint = self._fonts.get(11).render(f"Base + bonos: {nominal_draw} · Mano máx.: {self._state.hand.max_size}", True, colors.TEXT_SECONDARY)
-        surface.blit(hint, hint.get_rect(center=(self._draw_info_rect.centerx, 47)))
-        draw_turn_counter(surface, self._state.turn, surface.get_width() // 2, 34, self._fonts)
+        x = info.x + 12
+        for icon_name, text in (("draw", f"Robo: {count}/turno"), ("hand_cards", f"Mano máx.: {self._state.hand.max_size}")):
+            icon = ui_icon(icon_name, 2)
+            if icon is not None:
+                surface.blit(icon, icon.get_rect(midleft=(x, info.centery)))
+                x += icon.get_width() + 3
+            label = outlined(self._fonts.get(14), text)
+            surface.blit(label, label.get_rect(midleft=(x, info.centery)))
+            x += label.get_width() + 16
+        draw_turn_counter(surface, self._state.turn, surface.get_width() // 2 + 22, 34, self._fonts)
 
+        rect = pygame.Rect(_END_TURN_X, _END_TURN_Y, _END_TURN_W, _END_TURN_H)
         self._end_turn_rect = draw_end_turn_button(
             surface, _END_TURN_X, _END_TURN_Y, _END_TURN_W, _END_TURN_H,
-            self._fonts, hovered=self._end_turn_hovered,
+            self._fonts, hovered=rect.collidepoint(self._mouse), pressed=self._mouse_down,
+            enabled=self._enemy_phase <= 0, ready=self.nothing_to_play, t=t,
         )
+
+    @property
+    def nothing_to_play(self) -> bool:
+        """No card in hand can be played now (unplayable or too expensive): End Turn pulses."""
+        mana = self._state.mana
+        return not any(not c.unplayable and mana.can_afford(self._state.card_cost(c))
+                       for c in self._state.hand.cards)
 
     def _draw_battlefield(self, surface: pygame.Surface) -> None:
         pygame.draw.line(surface, colors.PANEL_BORDER,
@@ -557,8 +584,11 @@ class CombatScene:
     def _draw_hand_area(self, surface: pygame.Surface) -> None:
         hand_bg = pygame.Rect(0, _HAND_AREA_Y, 1280, 720 - _HAND_AREA_Y)
         pygame.draw.rect(surface, colors.BG_CARD_AREA, hand_bg)
+        shade = _hand_shade(hand_bg.size)
+        surface.blit(shade, hand_bg.topleft)
+        draw_trim(surface, _HAND_AREA_Y)
 
-        draw_mana(surface, self._state.mana, _MANA_CX, _MANA_CY, self._fonts)
+        draw_mana(surface, self._state.mana, _MANA_CX, _MANA_CY, self._fonts, orb=self._orb)
 
         relic_atk_bonus = relic_effects.extra_attack_damage(self._state.relics)
         char_atk_bonus  = self._state.player.attack_bonus
@@ -595,17 +625,17 @@ class CombatScene:
 
         self._draw_pile_rect = draw_pile_widget(
             surface, "ROBO", self._state.draw_pile.count,
-            _DRAW_X, _DRAW_Y, self._fonts,
+            _DRAW_X, _DRAW_Y, self._fonts, hovered=self._hovered_draw_pile,
         )
         self._disc_pile_rect = draw_pile_widget(
             surface, "DESCARTE", self._state.discard_pile.count,
-            _DISCARD_X, _DISCARD_Y, self._fonts,
+            _DISCARD_X, _DISCARD_Y, self._fonts, hovered=self._hovered_disc_pile,
         )
 
-        pygame.draw.rect(surface, colors.BG_PANEL, self._hand_collection_rect, border_radius=6)
-        hc_surf = self._fonts.get(12).render(
-            f"Mano {self._state.hand.count}/{self._state.hand.max_size} · Ver", True, colors.TEXT_PRIMARY)
-        surface.blit(hc_surf, hc_surf.get_rect(center=self._hand_collection_rect.center))
+        hc = self._hand_collection_rect
+        draw_button(surface, hc, f"Mano {self._state.hand.count}/{self._state.hand.max_size}", self._fonts,
+                    icon="hand_cards", state=button_state(hc, self._mouse, self._mouse_down),
+                    t=self._idle_time, size=14)
 
     def _card_hit_order(self) -> list[int]:
         # Match actual stacking so the visible, raised card receives the click.
@@ -953,7 +983,8 @@ class CombatScene:
 
         # End turn
         if self._end_turn_rect and self._end_turn_rect.collidepoint(pos):
-            self._do_end_turn()
+            if self._enemy_phase <= 0:
+                self._do_end_turn()
             return
 
         # A card under the pointer: pick it up (or switch to it)
@@ -986,7 +1017,7 @@ class CombatScene:
         elif key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             if self._play.active:
                 self._finish(self._play.confirm())
-        elif key == pygame.K_e:
+        elif key == pygame.K_e and self._enemy_phase <= 0:
             self._do_end_turn()
 
     def _pick_card(self, index: int, pos: tuple[int, int] | None) -> None:
@@ -996,6 +1027,7 @@ class CombatScene:
             self._show_error("Esta carta no se puede jugar")
             return
         if not self._state.mana.can_afford(self._state.card_cost(card)):
+            self._orb.error()
             self._show_error("Maná insuficiente")
             return
         kind = target_kind(card)
@@ -1255,6 +1287,7 @@ class CombatScene:
 
         self._play.cancel()
         self._sound.play_end_turn()
+        self._enemy_phase = _ENEMY_PHASE
         end_player_turn(state)
         self._announce_actions(state.enemy_log, intents, names)
 
@@ -1312,3 +1345,21 @@ class CombatScene:
             else:
                 self._fx.add_hit_flash(self._player_rect, dmg, delay=wait, flash=self._hero_fx is None)
             self._sound.play_hit()
+
+
+_SHADE_CACHE: dict = {}
+
+
+def _hand_shade(size: tuple[int, int]) -> pygame.Surface:
+    """Soft vertical darkening of the hand area (cached)."""
+    shade = _SHADE_CACHE.get(size)
+    if shade is None:
+        w, h = size
+        shade = pygame.Surface(size, pygame.SRCALPHA)
+        for y in range(h):
+            a = int(10 + 70 * (y / max(1, h - 1)) ** 1.5)
+            pygame.draw.line(shade, (0, 0, 0, a), (0, y), (w, y))
+        for y in range(0, 26):
+            pygame.draw.line(shade, (255, 190, 110, int(22 * (1 - y / 26))), (0, y), (w, y))
+        _SHADE_CACHE[size] = shade
+    return shade

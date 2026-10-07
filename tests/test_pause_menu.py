@@ -118,7 +118,10 @@ def test_combat_pause_button_does_not_overlap_relic_bar_or_turn_counter():
     from src.presentation.ui.pause_menu import pause_button_rect
     scene = CombatScene(create_sample_combat(), FontRegistry(), sound=Mock())
     button = pause_button_rect(scene)
-    assert button == pygame.Rect(460, 16, 130, 36)
+    assert button == pygame.Rect(460, 16, 64, 36)
+    from src.presentation.ui.pause_menu import stats_button_rect
+    stats = stats_button_rect(scene)
+    assert stats.left > button.right and stats.right < 604
     relic_slots = [pygame.Rect(184 + i * (RELIC_SZ + _RELIC_GAP), 10, RELIC_SZ, RELIC_SZ) for i in range(5)]
     assert not any(button.colliderect(slot) for slot in relic_slots)
     assert not button.colliderect(scene._relic_collection_rect)

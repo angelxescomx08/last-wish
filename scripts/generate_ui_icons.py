@@ -11,7 +11,8 @@ player learns the picture once and then reads the board at a glance.
 * Status / keyword icons are 14×14 (shown ×2): poison, vulnerable, weak, frail,
   entangled, strength, blades, marked, ritual, status_buff, status_debuff,
   block, junk_card, combo, singular, void, spoil, exhaust, ethereal, unplayable, damage,
-  draw, mana, heal.
+  draw, mana, heal; HUD: gear, helmet, bag, hand_cards, clover, tower,
+  hourglass, deck, coin.
 
 Each icon is a small shape drawn with ramps, upper-left light and the usual dark
 outline (``pixel_kit``). The JSON maps every name to its ``[x, y, w, h]`` in the
@@ -522,6 +523,148 @@ def block_small() -> Canvas:
     return shield_small(BLUE)
 
 
+# ---------------------------------------------------------------- HUD / hero sheet icons (12 → 14)
+
+def gear() -> Canvas:
+    """Pausa: a steel cog."""
+    cv = Canvas(12, 12)
+
+    def inside(x, y):
+        dx, dy = x - 6, y - 6
+        r = math.hypot(dx, dy)
+        if r < 1.9:
+            return False
+        tooth = math.cos(math.atan2(dy, dx) * 8) > 0.15
+        return r <= 4.4 or (tooth and r <= 5.9)
+    fill(cv, inside, STEEL, 6, 6, 6, base=0.6)
+    return cv
+
+
+def helmet() -> Canvas:
+    """Héroe / estadísticas: a knight's helm with a red plume."""
+    cv = Canvas(12, 12)
+    paint(cv, ["...rrR......",
+               "....rRhhh...",
+               "..hHHWWHHh..",
+               ".hHWHHHHHHh.",
+               ".hHHHHHHHHh.",
+               ".hHkkkkkkHh.",
+               ".hHHHkHHHdh.",
+               ".hHHHkHHHdh.",
+               ".hHHHHHHddh.",
+               "..gggggggg..",
+               "...hhhhhh..."],
+          {"r": RED[1], "R": RED[3], "h": STEEL[0], "H": STEEL[2], "W": STEEL[4], "k": INK,
+           "d": STEEL[1], "g": GOLD[2]}, 0, 0)
+    return cv
+
+
+def bag() -> Canvas:
+    """Reliquias: a leather pouch with a gold tie and a gem."""
+    cv = Canvas(12, 12)
+    paint(cv, ["....b..b....",
+               ".....gg.....",
+               "....gGGg....",
+               "...bBBBBb...",
+               "..bBWBBBBb..",
+               ".bBBBBBBBdb.",
+               ".bBBBrrBBdb.",
+               ".bBBBRrBBdb.",
+               ".bBBBBBBddb.",
+               "..bBBBBddb..",
+               "...bbbbbb..."],
+          {"b": BROWN[0], "B": BROWN[2], "W": BROWN[3], "d": BROWN[1], "g": GOLD[1], "G": GOLD[3],
+           "r": RED[2], "R": RED[4]}, 0, 1)
+    return cv
+
+
+def hand_cards() -> Canvas:
+    """Mano: three fanned cards."""
+    cv = Canvas(12, 12)
+    for ox, oy, col in ((0, 3, BLUE), (3, 1, GOLD), (6, 3, RED)):
+        for y in range(oy, min(12, oy + 8)):
+            for x in range(ox, ox + 6):
+                edge = x in (ox, ox + 5) or y in (oy, oy + 7)
+                cv.put(x, y, col[1] if edge else col[2] if (x + y) % 5 else col[3])
+    return cv
+
+
+def clover() -> Canvas:
+    """Suerte: a four-leaf clover."""
+    cv = Canvas(12, 12)
+    leaves = ((3.4, 3.2), (8.6, 3.2), (3.4, 8.2), (8.6, 8.2))
+
+    def inside(x, y):
+        return any(math.hypot(x - cx, y - cy) <= 2.5 for cx, cy in leaves) or math.hypot(x - 6, y - 5.7) <= 1.6
+    fill(cv, inside, GREEN, 6, 5.7, 6, base=0.6)
+    for cx, cy in leaves:                       # a light vein in every leaf
+        cv.put(int(cx), int(cy), GREEN[4])
+    for x, y in ((6, 5), (6, 6), (5, 6)):
+        cv.put(x, y, GREEN[1])
+    for x, y in ((7, 9), (8, 10), (9, 11)):
+        cv.put(x, y, BROWN[2])
+    return cv
+
+
+def tower() -> Canvas:
+    """Piso: a stone tower with a lit window."""
+    cv = Canvas(12, 12)
+    for x in (2, 3, 5, 6, 8, 9):
+        cv.put(x, 0, GREY[3])
+    for x in range(2, 10):
+        cv.put(x, 1, GREY[3] if x < 6 else GREY[2])
+    for y in range(2, 12):
+        for x in range(3, 9):
+            brick = (y % 3 == 1) or ((x + (y // 3) * 2) % 4 == 0)
+            cv.put(x, y, GREY[1] if brick else (GREY[3] if x < 5 else GREY[2]))
+    for x, y in ((5, 4), (6, 4), (5, 5), (6, 5)):
+        cv.put(x, y, ORANGE[3] if y == 4 else ORANGE[2])
+    for x, y in ((5, 9), (6, 9), (5, 10), (6, 10), (5, 11), (6, 11)):
+        cv.put(x, y, (26, 18, 22))
+    return cv
+
+
+def hourglass() -> Canvas:
+    """Terminar turno: an hourglass."""
+    cv = Canvas(12, 12)
+    paint(cv, ["gggggggggg",
+               ".w......w.",
+               ".wSSSSSSw.",
+               "..wSSSSw..",
+               "...wSSw...",
+               "....ww....",
+               "...w.Sw...",
+               "..w..S.w..",
+               ".w..SSS.w.",
+               ".wSSSSSSw.",
+               "GGGGGGGGGG"], {"g": GOLD[3], "G": GOLD[1], "w": CYAN[3], "S": ORANGE[3]}, 1, 0)
+    return cv
+
+
+def deck() -> Canvas:
+    """Mazo: a stack of card backs."""
+    cv = Canvas(12, 12)
+    for k, (ox, oy) in enumerate(((4, 0), (2, 1), (0, 2))):
+        for y in range(oy, oy + 10):
+            for x in range(ox, ox + 7):
+                edge = x in (ox, ox + 6) or y in (oy, oy + 9)
+                cv.put(x, y, GOLD[1] if edge else (VIOLET[1] if k < 2 else VIOLET[2]))
+    for x, y in ((3, 6), (2, 7), (3, 7), (4, 7), (3, 8)):
+        cv.put(x, y, GOLD[3])
+    return cv
+
+
+def coin() -> Canvas:
+    """Oro: a gold coin."""
+    cv = Canvas(12, 12)
+    fill(cv, lambda x, y: math.hypot(x - 6, y - 6) <= 5.3, GOLD, 6, 6, 5.5, base=0.62)
+    for y in range(3, 9):
+        cv.put(6, y, GOLD[1])
+    for x, y in ((5, 3), (7, 8), (5, 5), (7, 6)):
+        cv.put(x, y, GOLD[1])
+    return cv
+
+
 ICONS_16 = {
     "attack_1": lambda: sword(6, 2),
     "attack_2": lambda: sword(9, 2),
@@ -560,6 +703,15 @@ ICONS_12 = {
     "draw": card_draw,
     "mana": crystal,
     "heal": heart,
+    "gear": gear,
+    "helmet": helmet,
+    "bag": bag,
+    "hand_cards": hand_cards,
+    "clover": clover,
+    "tower": tower,
+    "hourglass": hourglass,
+    "deck": deck,
+    "coin": coin,
 }
 
 

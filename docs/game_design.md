@@ -86,6 +86,13 @@ tooltip que lo explica. Pasar el ratón por una insignia muestra su regla.
   Combo, Agotar…). Colores: daño rojo, escudo azul, palabras clave doradas, Veneno verde.
 - **Barra de vida del héroe**: parpadea la vida que te quitarán los ataques ("−N").
 - **Turno enemigo**: un cartel por enemigo con su movimiento y lo que te hizo.
+- **Hoja del héroe** (tecla C o el botón del casco): Vida, Maná, Ataque, Destreza, Suerte,
+  Robo y Mano máxima con barra base + bonus (verde), de dónde viene cada punto (reliquia,
+  Pruebas, este combate) y qué hace; oro, piso, mazo por tipo, reliquias y probabilidades
+  de dorado/Épica según la Suerte.
+- **HUD pixel art**: barra superior de hierro con remate dorado, botón Terminar turno dorado
+  (late cuando no queda nada que jugar; gris durante el turno enemigo), orbe de maná con
+  líquido animado, pilas de cartas dibujadas y botones de Pausa (Esc) y Héroe (C).
 
 ---
 

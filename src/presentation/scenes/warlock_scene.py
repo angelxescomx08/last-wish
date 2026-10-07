@@ -103,7 +103,7 @@ class _UpgradeGrid(CollectionViewer):
 class WarlockScene:
     """Upgrade cards for gold. Escape opens the pause menu (or closes the confirmation)."""
 
-    pause_button_rect = pygame.Rect(78, 650, 130, 30)
+    pause_button_rect = pygame.Rect(78, 652, 64, 36)
     gold_hud_pos = ("bottomright", (1268, 708))   # the top right holds the viewer's close button
 
     def __init__(self, run: Run, fonts: FontRegistry, *, sound: SoundPlayer | None = None) -> None:

@@ -374,3 +374,13 @@ card-game UX (Slay the Spire intents, keyword tooltips with colour coding):
   icons at the start of lines, dim notes indented. Kept on screen, two columns if tall.
 - Enemy turn banners name each move and what it did.
 
+## Pixel-art HUD (2026-10-07)
+
+The HUD is drawn from a code-generated kit (`scripts/generate_ui_kit.py`): iron frames with
+gold rivets, bronze buttons for secondary actions, gold for the main one (End Turn, Reanudar),
+grey when disabled. Buttons lift on hover with a light sweep, sink when pressed and glow when
+they are the obvious next step. Every shortcut is shown as a key cap. The mana orb is liquid
+in glass (level = mana, splash on spend, glow on refill, shake when a card can't be paid).
+Text on the HUD is always outlined. The hero sheet uses the same frames: one row per stat,
+base in the stat colour and bonus in green.
+

@@ -21,6 +21,8 @@ from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.pile_viewer import PileViewer
 from src.presentation.ui.relic_viewer import RelicViewer
 from src.presentation.ui.collection_viewer import CollectionViewer
+from src.infrastructure.ui_icons import ui_icon
+from src.presentation.ui.pixel_ui import button_state, draw_button, draw_ribbon, draw_topbar, outlined
 
 # ---------------------------------------------------------------------------
 # Color palette
@@ -166,23 +168,27 @@ class MapScene:
     def _draw_header(self, surface: pygame.Surface) -> None:
         run = self._run
         cx  = 640
+        draw_topbar(surface, 68)
+        draw_ribbon(surface, (cx, 24), f"PISO {run.floor}", self._fonts, size=18)
 
-        t = self._fonts.get(22).render(f"PISO {run.floor}", True, colors.TEXT_ACCENT)
-        surface.blit(t, t.get_rect(centerx=cx, centery=22))
+        # HP as a small bar with a heart, under the ribbon
+        bar = pygame.Rect(cx - 70, 44, 140, 14)
+        ratio = run.player_current_hp / run.player_max_hp if run.player_max_hp > 0 else 0
+        pygame.draw.rect(surface, (50, 14, 18), bar, border_radius=3)
+        pygame.draw.rect(surface, (200, 46, 52), (bar.x, bar.y, int(bar.w * ratio), bar.h), border_radius=3)
+        pygame.draw.rect(surface, (14, 8, 12), bar, 1, border_radius=3)
+        heart = ui_icon("heal", 1)
+        if heart is not None:
+            surface.blit(heart, heart.get_rect(center=(bar.x - 2, bar.centery)))
+        hp = outlined(self._fonts.get(11), f"{run.player_current_hp}/{run.player_max_hp}")
+        surface.blit(hp, hp.get_rect(center=bar.center))
 
-        info = f"HP: {run.player_current_hp}/{run.player_max_hp}"   # gold: the shared GoldHud
-        s = self._fonts.get(13).render(info, True, colors.TEXT_PRIMARY)
-        surface.blit(s, s.get_rect(centerx=cx, centery=52))
-
-        for rect, label in (
-            (self._relic_collection_rect, f"Ver reliquias ({len(run.relics)})"),
-            (self._deck_collection_rect, f"Ver mazo ({len(run.deck)})"),
+        for rect, label, icon in (
+            (self._relic_collection_rect, f"Reliquias ({len(run.relics)})", "bag"),
+            (self._deck_collection_rect, f"Mazo ({len(run.deck)})", "deck"),
         ):
-            pygame.draw.rect(surface, colors.BG_PANEL, rect, border_radius=6)
-            pygame.draw.rect(surface, colors.PANEL_BORDER, rect, 1, border_radius=6)
-            text = self._fonts.get(15).render(label, True, colors.TEXT_ACCENT)
-            surface.blit(text, text.get_rect(center=rect.center))
-        pygame.draw.line(surface, colors.PANEL_BORDER, (0, 66), (1280, 66))
+            draw_button(surface, rect, label, self._fonts, icon=icon,
+                        state=button_state(rect, self._mouse, False), size=15)
 
     def _draw_footer(self, surface: pygame.Surface) -> None:
         h = self._fonts.get(11).render(
