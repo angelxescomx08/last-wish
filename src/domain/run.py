@@ -22,6 +22,7 @@ class Run:
     current_map: GameMap | None = None
     current_room_id: str | None = None
     gacha_pulls: int = 0          # gachapón pulls made this run (every pull raises the next price)
+    cards_removed: int = 0        # cards removed at an Altar de Purga (every one raises the next price)
     interest_earned: int = 0      # gold paid by Interés Compuesto this run (total)
     last_interest: int = 0        # interest paid on the latest gold gain
 

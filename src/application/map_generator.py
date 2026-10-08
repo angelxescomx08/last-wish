@@ -182,6 +182,17 @@ def generate_map(seed: int, floor: int) -> GameMap:
     if gacha_id:
         nodes[gacha_id].room_type = RoomType.GACHA
 
+    # Altar de Purga: one per floor, in a middle row away from El Brujo when possible.
+    warlock_row = nodes[warlock_id].row if warlock_id else -1
+    purge_id = (_pick_from_rows([r for r in mid_rows if r != warlock_row], mutable_pool)
+                or _pick_from_rows(mid_rows, mutable_pool))
+    if purge_id is None:
+        fallback = [nid for nid, n in nodes.items()
+                    if n.room_type == RoomType.COMBAT and 0 < n.row < rows - 1]
+        purge_id = rng.choice(sorted(fallback)) if fallback else None
+    if purge_id:
+        nodes[purge_id].room_type = RoomType.PURGE
+
     return GameMap(
         floor=floor,
         nodes=nodes,

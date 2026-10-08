@@ -42,8 +42,11 @@ class TestRoomTypeEnum:
     def test_boss_exists(self):
         assert RoomType.BOSS in RoomType
 
-    def test_exactly_seven_variants(self):
-        assert len(list(RoomType)) == 7
+    def test_exactly_eight_variants(self):
+        assert len(list(RoomType)) == 8
+
+    def test_purge_exists(self):
+        assert RoomType.PURGE in RoomType
 
     def test_gacha_exists(self):
         assert RoomType.GACHA in RoomType

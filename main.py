@@ -45,6 +45,7 @@ from src.presentation.scenes.gacha_scene import GachaScene
 from src.presentation.ui.gold_hud import DEFAULT_POS as GOLD_HUD_POS
 from src.presentation.ui.gold_hud import GoldHud
 from src.presentation.scenes.warlock_scene import WarlockScene
+from src.presentation.scenes.purge_scene import PurgeScene
 from src.application.card_preview import run_card_bonus
 from src.application.luck import luck_report
 from src.application.hero_stats import hero_sheet
@@ -291,6 +292,10 @@ class SceneManager:
             if top.cleared:
                 top.cleared = False
                 self.pop()
+        elif isinstance(top, PurgeScene):
+            if top.cleared:
+                top.cleared = False
+                self.pop()
         elif isinstance(top, SettingsScene):
             self._t_settings(top)
         elif isinstance(top, DevSettingsScene):
@@ -371,6 +376,9 @@ class SceneManager:
 
         elif node.room_type == RoomType.GACHA:
             self.push(GachaScene(run, self._fonts, sound=self._sound))
+
+        elif node.room_type == RoomType.PURGE:
+            self.push(PurgeScene(run, self._fonts, sound=self._sound))
 
     def _t_combat(self, scene: CombatScene) -> None:
         run = self._run

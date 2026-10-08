@@ -140,6 +140,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
 | `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies` (→ `enemy_roster.roll_encounter`, seeded with `zlib.crc32(room_id)`), `generate_boss`, `apply_combat_victory(run, hp, enemies, bonus_gold=0)`, `gain_gold(run, amount)` → interest (every gold *gain* goes through it: combat victories and events), `generate_event_gold`, `pick_treasure_relic`, `pick_treasure_relics` (2 with Llave Maestra), `pick_boss_relics`, `shop_price(run, base)`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
+| `purge.py` | `purge_price(run)` (75 + 25 × `Run.cards_removed`, through `shop_price`), `purge_block_reason(run)`, `can_purge`, `purge_card(run, index)` → removed `Card \| None`, `MIN_DECK` (5) | Altar de Purga rules |
 | `card_rewards.py` | `allowed_card_classes(run)`; `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]`; `lucky_cards(run, seed, exclude)` | Seeded card reward selection after combat and pack opening, filtered to the run's allowed classes (packs topped up from other themes if ever short), plus luck's "Cartas de la suerte" at the end (`Card.lucky_drop`). Seeds use `zlib.crc32(room_id)` (stable across runs) |
 
 ### Infrastructure layer — `src/infrastructure/`
@@ -173,6 +174,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `scenes/shop_scene.py` | 3 relics + 3 packs; prices via `run_manager.shop_price` (Máscara del Ladrón). Signals `selected_pack: PackTheme \| None`, `cleared: bool` |
 | `scenes/pack_opening_scene.py` | Animated opening (intro → idle float → click → charge with imploding sparks → tear: flash, shake, top strip flies off, particle explosion, light rays → cards dealt face-down → flipped one by one with rarity bursts; rare+ get an anticipation glow, legendary gold confetti) then 5-card pick-1 with rarity halos/sparkles and an outro for the chosen card. Any click/Space skips the animation. Ctor kwargs `theme` (PackTheme value, picks pack art + colours) and `seed`. `phase`, `is_animating`, `skip_animation()`, `choose(i)`. Signals `cleared: bool` (after the outro), `chosen_card: Card \| None` |
 | `scenes/gacha_scene.py` | Gachapón room: two pull buttons with live prices, odds table, and the show (coin → crank → drop → present → open → reveal → collect) with pooled particles. `start_pull(kind)`, `advance()`, `skip_to_reveal()`, `phase`, `result`. Signals `cleared` |
+| `scenes/purge_scene.py` | Altar de Purga: deck grid (`CollectionViewer`) with the price, confirmation panel ("Eliminar (precio)" / "Cancelar"), then the card burns away (`fx/card_burn`, embers, soft glow) and the room closes — one card per altar. Blocked removals say why. Signals `cleared`, `removed` |
 | `scenes/event_scene.py` | Spanish narrative + gold pickup "Recoger" button. Signals `cleared: bool` |
 | `scenes/boss_reward_scene.py` | 3-phase boss reward: gold → epic pack → relic choice. Signals `cleared: bool`, `open_pack_requested: bool`, `chosen_relic: Relic \| None` |
 | `ui/card_widget.py` | `draw_card(…, bonus_damage=0, bonus_block=0)`, `draw_card_at(surface, card, center, fonts, *, scale, angle, …, outline)` (free placement: scale quantised to 5 %, tilt rotated once and cached) and `render_card_surface(…)` — cards-v2 rarity frame + illustration + dynamic text (cost, name, effect lines, ATK/DEF with effective values); each visual state cached (LRU 256) |
@@ -190,6 +192,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui/luck_badge.py` | `draw_luck_badge(surface, anchor, pos, report, fonts)`, `luck_line(report)` — kit plate "Suerte N ▲ · Rara o mejor X % · dorada Y % · carta extra Z %" (green when relics raise luck); shop, pack opening, card reward |
 | `fx/hero_fx.py` | `HeroFx(strike, seed)` — code-drawn hero only: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
 | `fx/card_deal.py` | Drawn cards fly in from the draw pile: `Deal(wait, start)` (`advance`, `waiting`, `progress`, `done`), `deal_pose(u, start, goal)` (arc above both ends, ease-out, scale with a small overshoot, tilt straightens), `flip_width(u)` (back narrows to an edge, face widens; done at `FLIP_END`), `draw_dealt_card(surface, face, pose, u)`, `DEAL_SECONDS`, `DEAL_STAGGER`, `TRAIL`/`TRAIL_GOLD` |
+| `fx/card_burn.py` | `CardBurn(face, seed)`: card cut into 6 px blocks that burn bottom-up with noise; `frame(progress)` (burnt blocks gone, edge blocks as embers), `edge_points`, `gone`, `BURN_SECONDS`, `EMBER` |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/gold_hud.py` | `GoldHud` (one instance in `SceneManager`): plate + spinning pixel coin + big outlined amount that counts towards the real gold, `+N`/`−N` labels, sparkles and border flash on change; `sync`, `update(dt, amount)`, `draw(surface, anchor, pos)`, `rect`; `format_gold`, `DEFAULT_POS` |
 | `ui/hud_widget.py` | Kit-drawn combat HUD: `draw_relics` (iron slots, rarity rim, hover lift), `draw_mana(…, orb=)`, `draw_pile_widget(…, hovered=)` (card-back stack + count badge, `PILE_W/PILE_H`), `draw_end_turn_button(…, hovered, pressed, enabled, ready, t)` (gold button, hourglass, key E; pulses when `ready`, "TURNO ENEMIGO" when disabled), `draw_turn_counter` (red ribbon) |
@@ -374,6 +377,7 @@ A full roguelike run persists state across rooms via the `Run` domain object and
 | `gacha_pulls` | `int` | Gachapón pulls made this run (every pull raises the next price) |
 | `interest_earned` | `int` | Gold paid by Interés Compuesto this run (the manager notes the growth on the gold counter) |
 | `last_interest` | `int` | Interest paid by the latest `gain_gold` (0 if none; reward screens show it) |
+| `cards_removed` | `int` | Cards removed at Altares de Purga this run (each raises the next price by 25) |
 
 Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_after)`.
 
@@ -400,6 +404,7 @@ Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_
 | `BOSS` | `CombatScene(is_boss=True)` | Fight boss → `BossRewardScene` (gold + epic pack + relic choice) |
 | `WARLOCK` | `WarlockScene` | Upgrade cards for gold (one per floor) |
 | `GACHA` | `GachaScene` | Pay for random relics; prices rise with every pull (one per floor) |
+| `PURGE` | `PurgeScene` | Altar de Purga: remove ONE card of your choice for gold (one per floor) |
 
 ### Card packs (`src/domain/card_pool.py`)
 
@@ -593,6 +598,8 @@ One test file per source module. All test files follow the same structure:
 | `test_enemy_roster_sprites.py` | `scripts/generate_enemy_<id>.py` (10 enemies) | Espectro art contract (idle loop, actions end on idle 0, fits the cell, death/explode end empty, flash, strike events, moves → clips, random poses, sheets on disk), every pattern move has a clip |
 | `application/test_luck.py` | `application/luck`, lucky cards in `card_rewards`, `rarity.lucky_card_*`, luck badge, screens | report with/without the Trébol, sources, monotonic, huge luck capped; the Trébol makes pack/reward cards rarer and more golden, shop packs golden, gachapón odds and pulls better (60 seeds); lucky-card chances 0/50/100/200/300/10^9, count range, Trébol guarantees one, Rara+, no duplicates, allowed classes, deterministic, rare for base heroes; badge text/anchor; shop/gachapón/reward/pack draw with luck and marks |
 | `presentation/fx/test_card_deal.py` | `fx/card_deal`, `PlayResult.cast_drawn`, deal in `CombatScene`, `card_assets` source cache/prewarm | easing/flip/arc/scale math, wait→flight, huge frame lands, drawing back/face/edge; draws per cast (normal, golden, none, empty pile); golden draw 2 → 2 cards after each cast, normal draw waits for the cast, waiting cards out of the fan and not clickable, pile/hand counts follow the screen, cards land in their slots, end turn (old hand to discard, new hand dealt after the enemy turn), opening hand staggered, redrawn card flies again, 20-play stress; frames decoded once |
+| `application/test_purge.py` | `application/purge`, altar placement in `map_generator` | price 75/+25/negative counter/Máscara, chosen card removed, gold and counter, exact gold, one short, invalid index, minimum deck (5 / 6), stress down to the minimum; one altar per floor (10 floors × 40 seeds), other special rooms kept, deterministic |
+| `presentation/scenes/test_purge_scene.py` | `scenes/purge_scene.py`, `fx/card_burn.py`, SceneManager wiring | click → confirm removes that card, Enter, cancel (button/Escape/outside), closes after the burn, click hurries it, only one card, leave without removing, no gold / minimum deck messages, price rises, every phase draws, tooltip; map node opens and pops the altar; burn bottom-first, edge glows, gone, capped edge points, tiny face, 10 000-value stress |
 | `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
@@ -1143,4 +1150,16 @@ draw 2), with a smoother, nicer draw animation; and a small lag sometimes when a
   are now cached and prewarmed at startup (reward screen first frame 59 → 12 ms in the container).
   The pause before the reward screen itself is intended: victory waits for the death animation
   (~1.1–1.3 s) and `_KILL_HOLD`.
+
+## Altar de Purga (2026-10-08)
+
+User: a shop to remove cards — only one, but you choose which card, and it costs gold.
+
+- Map: `RoomType.PURGE` ("Purga", orange), exactly one per floor, in a middle row away from
+  El Brujo's row when possible (`map_generator`, fallback like El Brujo).
+- Rules (`application/purge.py`): one card per altar; price `75 + 25 × Run.cards_removed`
+  (rises for the whole run, like Slay the Spire), discounted by the Máscara del Ladrón
+  (`shop_price`); the deck never drops below `MIN_DECK` = 5.
+- Screen (`scenes/purge_scene.py`): pick a card in the deck grid → confirmation → it burns on
+  the altar (`fx/card_burn`) → the room closes. "Salir" leaves without removing.
 

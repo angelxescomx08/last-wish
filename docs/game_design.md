@@ -356,6 +356,16 @@ lo demás es neutral.
 
 ---
 
+## Altar de Purga ✅
+
+Sala del mapa ("Purga", una por piso). Eliges **una** carta de tu mazo y la eliminas para
+siempre pagando oro; después la sala se cierra (una carta por altar).
+
+- Precio: 75 de oro, +25 por cada carta que ya eliminaste en la partida (75, 100, 125…).
+  La Máscara del Ladrón lo abarata como cualquier precio de tienda.
+- Tu mazo no puede bajar de 5 cartas.
+- La carta elegida arde en el altar, de abajo hacia arriba, con brasas.
+
 ## Mejoras de cartas — El Brujo ✅
 
 - Aparece **una vez por piso** en el mapa (sala "Brujo").

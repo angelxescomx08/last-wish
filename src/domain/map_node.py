@@ -12,6 +12,7 @@ class RoomType(Enum):
     BOSS     = auto()
     WARLOCK  = auto()   # El Brujo: upgrade cards for gold (one per floor)
     GACHA    = auto()   # Gachapón: random relics for rising prices (one per floor, if room)
+    PURGE    = auto()   # Altar de Purga: remove one card for gold (one per floor, if room)
 
 
 @dataclass
