@@ -78,7 +78,11 @@ class TestCardClassDomain:
             assert len(card_factories_for_theme(theme, {CardClass.NEUTRAL})) >= 2
 
     def test_filter_without_classes_returns_whole_theme(self):
-        assert len(card_factories_for_theme(PackTheme.ACERO)) == 12 + 8   # + La Pícara
+        # 3 neutral + 3 Guerrera + 3 Mago + 19 Pícara (her 2026-10-04 expansion)
+        theme = card_factories_for_theme(PackTheme.ACERO)
+        assert len(theme) == 3 + 3 + 3 + 19
+        per_class = {c: sum(f.card_class == c for f in theme) for c in CardClass}
+        assert per_class == {CardClass.NEUTRAL: 3, CardClass.WARRIOR: 3, CardClass.MAGE: 3, CardClass.ROGUE: 19}
 
     def test_class_filter_across_themes(self):
         mage = card_factories_for_classes({CardClass.MAGE})

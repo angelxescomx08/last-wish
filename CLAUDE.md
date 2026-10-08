@@ -461,7 +461,7 @@ turn, incremented by every successful `play_card`). `Card.total_*(combo=True)`,
 `active_effects(combo)`, `keywords()`; `combo_text(card)` describes the layer.
 `play_card` returns `PlayResult.combo`. UI: card face line "Combo: +5 de daño." /
 "¡Combo activo!" (numbers in green), tooltip rule, teal pulsing silhouette aura on
-ready cards in hand and a floating "¡COMBO!" on the hero. 8 rogue cards have Combo
+ready cards in hand and a floating "¡COMBO!" on the hero. 17 rogue cards have Combo
 (`_add_combo` in `card_pool.py`).
 
 ### Pruebas / tuning (`src/domain/tuning.py`)
