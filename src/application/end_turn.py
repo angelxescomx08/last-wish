@@ -5,7 +5,7 @@ import random
 from src.application import relic_effects
 from src.application.drawing import draw_cards
 from src.domain.card_pool import hidden_dagger
-from src.application import enemy_ai
+from src.application import enemy_ai, enemy_roster
 from src.domain.combat import CombatState, EnemyAction
 from src.domain.entities import (ENTANGLED, HERO_TIMED_DEBUFFS, MARKED, POISON, WEAK, Enemy, Intent,
                                  IntentType, add_status, deal_damage, enemy_hit_damage,
@@ -79,15 +79,17 @@ def _discard_hand(state: CombatState) -> None:
 
 def _run_enemy_turn(state: CombatState) -> None:
     state.enemy_log = []
+    for enemy in state.enemies:          # block lasts until the enemies act again; reset all
+        enemy.block = 0                  # first, so block an ally gives this turn is kept
     for index, enemy in enumerate(state.enemies):
         if enemy.is_alive:
             _tick_status_effects(enemy)   # poison/burn deal damage before acting
             if not enemy.is_alive:        # killed by status? skip action
                 relic_effects.spread_poison(state)   # Colmillo de Víbora
                 continue
-            enemy.block = 0              # reset block at the START of each enemy's action
             state.enemy_log.append(_execute_intent(state, enemy, index))
             enemy.status_effects = tick_status(enemy.status_effects, WEAK)   # lasts its turn
+            enemy_roster.after_action(enemy)
 
     # Remove defeated enemies before rolling new intents
     state.enemies = [e for e in state.enemies if e.is_alive]
@@ -97,9 +99,9 @@ def _run_enemy_turn(state: CombatState) -> None:
 
 
 def _next_intent(state: CombatState, enemy: Enemy) -> Intent:
-    """Bosses follow their pattern (``enemy_ai``); other enemies roll at random."""
+    """Pattern enemies (bosses, ``enemy_roster``) follow their pattern; others roll at random."""
     if enemy_ai.has_pattern(enemy):
-        return enemy_ai.next_intent(enemy, state.player)
+        return enemy_ai.next_intent(enemy, state.player, state.enemies)
     return _roll_intent(enemy)
 
 
@@ -114,6 +116,8 @@ def _execute_intent(state: CombatState, enemy: Enemy, index: int = 0) -> EnemyAc
                 if not enemy.is_alive or not state.player.is_alive:
                     break
                 action.hits.append(_enemy_attack(state, enemy, enemy_hit_damage(enemy, state.player)))
+            if intent.lifesteal and enemy.is_alive:          # Murciélago Vampiro
+                action.healed += _heal(enemy, sum(action.hits))
 
         case IntentType.BLOCK:
             enemy.block += intent.value
@@ -145,7 +149,32 @@ def _execute_intent(state: CombatState, enemy: Enemy, index: int = 0) -> EnemyAc
         added = state.add_status_cards(card_id, count, pile)
         if added:
             action.cards.append((card_id, added, pile))
+    _ally_extras(state, enemy, intent, action)
+    if intent.self_destruct and enemy.is_alive:              # Seta Explosiva
+        enemy.current_hp = 0
+        action.exploded = True
     return action
+
+
+def _heal(enemy: Enemy, amount: int) -> int:
+    """Heal ``enemy`` up to its max HP. Returns the HP recovered."""
+    gained = max(0, min(amount, enemy.max_hp - enemy.current_hp))
+    enemy.current_hp += gained
+    return gained
+
+
+def _ally_extras(state: CombatState, enemy: Enemy, intent: Intent, action: EnemyAction) -> None:
+    """Support moves: block / statuses for the other living enemies, heals for all of them."""
+    allies = [e for e in state.enemies if e.is_alive and e is not enemy]
+    for ally in allies:
+        if intent.ally_block > 0:
+            ally.block += intent.ally_block
+        for name, stacks in intent.ally_buffs:
+            if stacks > 0:
+                add_status(ally.status_effects, name, stacks, is_buff=True)
+    if intent.heal_allies > 0:
+        for e in [enemy] + allies:
+            action.healed += _heal(e, intent.heal_allies)
 
 
 def _enemy_attack(state: CombatState, enemy: Enemy, dmg: int) -> int:
@@ -218,6 +247,7 @@ def _begin_player_turn(state: CombatState) -> None:
     draw_cards(state, cards_per_turn(state) - tangled)
     _after_hand_drawn(state)
     relic_effects.spread_poison(state)
+    enemy_roster.react_to_deaths(state.enemies, state.player)
 
 
 def _poison_hero(state: CombatState) -> None:

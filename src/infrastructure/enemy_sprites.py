@@ -27,7 +27,20 @@ ENEMY_SHEET_IDS: dict[str, str] = {
     "Reina Micélida": "mycelid",
     "La Tejedora": "weaver",
     "Caballero Hueco": "knight",
+    # Regular enemies (scripts/generate_enemy_<id>.py, application/enemy_roster.py)
+    "Babosa Ácida": "slime",
+    "Gusano de Tumba": "worm",
+    "Ojo Vigilante": "eye",
+    "Cráneo Ígneo": "skull",
+    "Murciélago Vampiro": "bat",
+    "Seta Explosiva": "bomb",
+    "Gólem de Musgo": "golem",
+    "Acólito de Ceniza": "acolyte",
+    "Diablillo": "imp",
+    "Mímico": "mimic",
 }
+REGULAR_SHEET_IDS = ("wraith", "slime", "worm", "eye", "skull", "bat", "bomb", "golem", "acolyte",
+                     "imp", "mimic")
 ENEMY_ANIMATIONS = ("idle", "attack", "hurt", "cast", "death")
 BOSS_SHEET_IDS = ("mycelid", "weaver", "knight")
 
@@ -46,6 +59,7 @@ class EnemySheet:
     is_boss: bool = False                                                 # drawn in the big boss slot
     blade_frames: tuple[pygame.Surface, ...] = ()                         # floating sword rotations
     top: int = 0                     # highest opaque row of idle frame 0, in scaled px from the cell top
+    terminal: tuple[str, ...] = ()   # actions that end the enemy like death (Seta: "explode")
 
     def seconds(self, animation: str) -> float:
         anim = self.animations.get(animation)
@@ -110,7 +124,8 @@ def load_enemy_sheet(sheet_id: str) -> EnemySheet | None:
                           animations, frames, strikes=strikes, moves=moves,
                           is_boss=bool(meta.get("boss", False)),
                           blade_frames=_load_blades(meta.get("blade"), scale),
-                          top=_top_row(frames["idle"][0]))
+                          top=_top_row(frames["idle"][0]),
+                          terminal=tuple(str(n) for n in meta.get("terminal", ()) if n in frames))
     except (OSError, ValueError, KeyError, TypeError, pygame.error):
         return None
 

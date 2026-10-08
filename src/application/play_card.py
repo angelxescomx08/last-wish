@@ -4,6 +4,7 @@ import random
 from dataclasses import dataclass, field
 from enum import Enum
 
+from src.application import enemy_roster
 from src.application import relic_effects
 from src.application.drawing import draw_cards
 from src.domain.card import Card, CardEffect, CardType
@@ -146,6 +147,7 @@ def play_card(
         state.spoils_this_turn += 1
     relic_effects.settle_pickpocket(state)
     relic_effects.try_broken_clock(state)
+    enemy_roster.react_to_deaths(state.enemies, state.player)   # a partner fell: Venganza
     message = (f"Jugaste {played.name}" + (f" x{casts}" if casts > 1 else "")
                + (" — ¡Combo!" if combo else "") + (" — ¡Singular!" if singular else "")
                + (" — ¡Vacío!" if void else "") + (" — ¡Despojo!" if spoil else ""))

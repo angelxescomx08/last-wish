@@ -33,6 +33,7 @@ class Tuning:
     extra_damage: int = 0
     extra_dexterity: int = 0
     forced_boss: int = 0              # floor-1 boss: 0 = by seed, 1.. = index in FLOOR1_BOSSES
+    forced_encounter: int = 0         # combat rooms: 0 = random, 1.. = enemy_roster.ENCOUNTERS index
     boss_rooms: bool = False          # every combat room is the floor's boss (to test bosses)
     gacha_rooms: bool = False         # every combat room opens the gachapón (to test it)
 

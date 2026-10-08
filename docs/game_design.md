@@ -70,6 +70,7 @@ o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier c
 | **Enredado** | Roba 1 carta menos por acumulación en su próximo turno; luego desaparece. | La Tejedora | ✅ |
 | **Fuerza** (enemigos) | Cada golpe hace X de daño más. Permanente. | Caballero Hueco (Furia Hueca) | ✅ |
 | **Espadas** (enemigo) | Espadas flotantes: la Danza de Espadas golpea una vez por espada (máx. 6). | Caballero Hueco | ✅ |
+| **Mecha** (enemigo) | Turnos que le quedan antes de explotar; al llegar a 1, explota (gran golpe) y muere. | Seta Explosiva | ✅ |
 
 Cada estado tiene su **icono** (`assets/ui/icons.png`): aparece en la insignia bajo el
 personaje (con las acumulaciones en la esquina), en la intención del enemigo y en el
@@ -179,6 +180,46 @@ Armadura vacía flotante: yelmo coronado con visera de brasas, guanteletes sin b
 
 El bloqueo absorbe cada golpe por separado, así que los ataques múltiples castigan el
 bloqueo justo y premian Contraataque (daño por cada golpe bloqueado del todo).
+
+---
+
+## Enemigos ✅
+
+Once enemigos normales dibujados por código (mismo método que el Espectro), cada uno con su
+**identidad** y un **patrón fijo y legible** (la intención siempre dice qué hará). Números del
+piso 1; +15 % por piso. Las salas de combate traen un enemigo solo o una **pareja**
+predeterminada (piso 1: 35 %, piso 2: 50 %, después 60 %); desde el piso 3 una pareja puede
+venir con un tercer enemigo (25 %). En pareja, cada uno tiene el 80 % de su vida.
+Pruebas → "Enemigos de los combates" fija cualquier enemigo o pareja.
+
+| Enemigo | PV | Identidad | Patrón |
+|---|---|---|---|
+| Espectro | 42 | Lamento | Zarpazo Espectral 11 · Zarpazo Espectral 11 · Lamento (Débil 2, Frágil 1) |
+| Babosa Ácida | 46 | Corrosión | Escupitajo Ácido 5 + Frágil 2 · Golpe Viscoso 10 · Corroer (Vulnerable 2, 5 de escudo) |
+| Gusano de Tumba | 52 | Veneno | Mordida Pútrida 6 + 3 Veneno · Enterrarse 12 de escudo · Bilis 5 Veneno |
+| Ojo Vigilante | 34 | Debuffs | Mirada Fija (Vulnerable 2, Débil 1) · Rayo Ocular 8 · Pavor (Enredado 1, Frágil 1) |
+| Cráneo Ígneo | 38 | Agresivo | Llamarada 7 · Llamarada 7 · Avivar (+3 Fuerza para siempre) |
+| Murciélago Vampiro | 30 | Robo de vida | Mordisco Vampírico 7 (se cura lo que te quita) · Picado 3×3 · Chillido (Débil 2) |
+| Seta Explosiva | 28 | Cuenta atrás | Mecha 3: Nube de Esporas (2 Veneno) · Hincharse 8 de escudo · ¡Explosión! 24 y muere |
+| Gólem de Musgo | 72 | Muro | Muralla 10 de escudo (+8 a su compañero) · Puñetazo de Roca 13 · Endurecer (12 de escudo, +2 Fuerza) |
+| Acólito de Ceniza | 40 | Apoyo | Bendición (+2 Fuerza a todos) · Incensario 6 · Plegaria (cura 8 a todos) o Penitencia (Débil, Frágil) · Incensario 6 |
+| Diablillo | 32 | Muy agresivo | Zarpazos 3×3 · Bola de Fuego 11 + Vulnerable 1 · Zarpazos 3×3 · Burla (+2 Fuerza) |
+| Mímico | 60 | Emboscada | Fingir 15 de escudo · Dentellada 18 · Lengüetazo 4×3 + Débil 1 · Dentellada 12 |
+
+### Parejas
+
+| Pareja | Miembros | Sinergia |
+|---|---|---|
+| El Culto del Fuego | Acólito de Ceniza + Cráneo Ígneo | El Acólito le da Fuerza al Cráneo, que no para de atacar |
+| Muro Corrosivo | Gólem de Musgo + Babosa Ácida | El Gólem cubre a la Babosa mientras su ácido te corroe |
+| Vigía y Cazador | Ojo Vigilante + Murciélago Vampiro | El Ojo te deja Vulnerable para el Picado del Murciélago |
+| Cementerio Podrido | Gusano de Tumba + Seta Explosiva | El Gusano te entretiene con Veneno mientras la Mecha se consume |
+| Trampa del Tesoro (piso 2+) | Mímico + Diablillo | Escudo enorme y ataques sin parar |
+| Procesión de Ceniza | Espectro + Acólito de Ceniza | El Espectro te debilita y el Acólito lo fortalece y lo cura |
+
+**Venganza:** si cae uno de la pareja (o la Seta explota), la intención del otro cambia en
+el acto a *Venganza*: +3 de Fuerza permanente y 6 de escudo. Solo una vez. Al empezar el
+combate un cartel presenta la pareja y su sinergia.
 
 ---
 

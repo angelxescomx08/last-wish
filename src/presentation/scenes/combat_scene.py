@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pygame
 
+from src.application.enemy_roster import PAIRS, VENGEANCE_ID
 from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import TargetKind, play_card, target_kind
@@ -109,6 +110,9 @@ _BOSS_GROUND: int = 314
 _BOSS_W: int = 230
 _CARD_NAMES_ES: dict[str, str] = {"status_espora": "Espora", "status_moho": "Moho"}
 _TOXIC = (170, 230, 70)
+_HEAL_TEXT = (120, 236, 120)
+_VENGEANCE_TEXT = (255, 90, 70)
+_VENGEANCE_DELAY = 1.0          # after the blow (or blast) that killed the partner
 _DEBUFF_TEXT = (220, 120, 240)
 
 _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)
@@ -235,11 +239,19 @@ class CombatScene:
         self._bursts = BurstParticles(400, seed=11)
         self._fx_time = 0.0
         # Animated enemies (sprite sheets in assets/enemies/), keyed by enemy index
-        self._enemy_anims: dict[int, EnemyAnimator] = {}
+        # Keyed by enemy id (indices shift when the dead are removed); ``_enemy_anims`` is the
+        # same set keyed by the current index. Each enemy keeps the screen slot it started in,
+        # and an animator whose enemy left the list keeps drawing until its death/explosion ends.
+        self._anim_by_id: dict[str, EnemyAnimator] = {}
+        self._slot_of: dict[str, int] = {e.id: i for i, e in enumerate(state.enemies)}
+        self._gone: list[tuple[EnemyAnimator, int]] = []
+        self._avenging: set[str] = set()
         for i, enemy in enumerate(state.enemies):
             sheet = sheet_for_enemy(enemy.name)
             if sheet is not None:
-                self._enemy_anims[i] = EnemyAnimator(sheet, seed=31 + 17 * i, phase=0.47 * i)
+                self._anim_by_id[enemy.id] = EnemyAnimator(sheet, seed=31 + 17 * i, phase=0.47 * i)
+        self._enemy_anims: dict[int, EnemyAnimator] = {}
+        self._sync_enemy_anims()
         self._pending_hero_hurt: float | None = None     # hero flinches when the enemy claws land
         self._pending_hero_name = "hurt"                # ... or falls ("death")
         # Code-drawn heroes (sheet with a strike event) get timed particles and a floor shadow.
@@ -283,6 +295,7 @@ class CombatScene:
         self._feedback_text = ""
         self._feedback_time = 0.0
         self._banners = ActionBanners()
+        self._announce_pair()
 
     # ------------------------------------------------------------------
     # Protocol
@@ -320,7 +333,10 @@ class CombatScene:
             if anim.style.blades and i < len(self._state.enemies):
                 anim.blades = status_stacks(self._state.enemies[i].status_effects, BLADES)
                 anim.target = hero
+        for anim in self._anim_by_id.values():
             anim.update(dt)
+        self._gone = [(a, slot) for a, slot in self._gone if a.busy]
+        self._announce_vengeance()
         if self._hero_fx is not None:
             self._hero_fx.update(dt)
         if self._pending_hero_hurt is not None:
@@ -408,7 +424,7 @@ class CombatScene:
     @property
     def enemies_dying(self) -> bool:
         """An animated enemy is still playing its death (victory waits for it)."""
-        return any(a.dead and not a.death_done for a in self._enemy_anims.values())
+        return any(a.dead and not a.death_done for a in self._anim_by_id.values())
 
     @property
     def enemy_animators(self) -> dict[int, EnemyAnimator]:
@@ -487,10 +503,14 @@ class CombatScene:
         lethal = incoming - self._state.player.block >= self._state.player.current_hp > 0
         t = self._idle_time
 
+        for anim, slot in self._gone:                     # left the fight, still exploding/dying
+            gx, gy = _ENEMY_SLOTS[min(slot, len(_ENEMY_SLOTS) - 1)]
+            anim.draw(surface, (gx + ENEMY_W // 2, gy + ENEMY_H + 6))
         for i, enemy in enumerate(self._state.enemies):
-            if i >= len(_ENEMY_SLOTS):
+            slot = self._slot_of.get(enemy.id, i)
+            if slot >= len(_ENEMY_SLOTS):
                 break
-            ex, ey = _ENEMY_SLOTS[i]
+            ex, ey = _ENEMY_SLOTS[slot]
             shown = self._shown_enemies
             saved = None
             if shown is not None and i < len(shown):      # replay: show HP/block cast by cast
@@ -1282,12 +1302,50 @@ class CombatScene:
         elif anim is not None:
             anim.play("hurt", delay=delay)
 
+    def _sync_enemy_anims(self, before: list | None = None) -> None:
+        """Rebuild ``_enemy_anims`` (index → animator) for the current enemy list.
+
+        Animators of enemies that left the list (dead, exploded) move to ``_gone`` so their
+        last animation finishes in their old slot.
+        """
+        current = {e.id for e in self._state.enemies}
+        for enemy in before or ():
+            anim = self._anim_by_id.get(enemy.id)
+            if enemy.id not in current and anim is not None:
+                if anim.busy:                    # death / explosion playing or still queued
+                    self._gone.append((anim, self._slot_of.get(enemy.id, 0)))
+                else:
+                    del self._anim_by_id[enemy.id]
+        self._enemy_anims = {i: self._anim_by_id[e.id] for i, e in enumerate(self._state.enemies)
+                             if e.id in self._anim_by_id}
+
+    def _announce_vengeance(self) -> None:
+        """A partner fell: "¡VENGANZA!" over the survivor once its intent turns into it."""
+        for i, enemy in enumerate(self._state.enemies):
+            if (enemy.is_alive and enemy.intent.move_id == VENGEANCE_ID
+                    and enemy.id not in self._avenging and i < len(self._enemy_rects)):
+                self._avenging.add(enemy.id)
+                rect = self._enemy_rects[i]
+                self._fx.add_text(rect.centerx, rect.top - 46, "¡VENGANZA!", _VENGEANCE_TEXT, 1.6,
+                                  delay=_VENGEANCE_DELAY)
+                anim = self._enemy_anims.get(i)
+                if anim is not None:
+                    anim.play("cast", delay=_VENGEANCE_DELAY)
+
+    def _announce_pair(self) -> None:
+        """Opening banner when the fight is a pair: its name and how the two work together."""
+        names = {e.pair for e in self._state.enemies if e.pair}
+        for pair in PAIRS.values():
+            if pair.name in names:
+                self._banners.add("buff", f"¡Pareja! {pair.name}", pair.synergy, delay=0.4)
+
     def _do_end_turn(self) -> None:
         state  = self._state
         old_hp = state.player.current_hp
-        old_enemy_hps = [e.current_hp for e in state.enemies]
-        intents = {i: e.intent for i, e in enumerate(state.enemies) if e.is_alive}
-        names = {i: e.name for i, e in enumerate(state.enemies)}
+        before = list(state.enemies)                      # indices of the log refer to this list
+        old_enemy_hps = [e.current_hp for e in before]
+        intents = {i: e.intent for i, e in enumerate(before) if e.is_alive}
+        names = {i: e.name for i, e in enumerate(before)}
 
         self._play.cancel()
         self._sound.play_end_turn()
@@ -1309,6 +1367,8 @@ class CombatScene:
             k += 1
             fallback = "attack" if intents[i].intent_type == IntentType.ATTACK else "cast"
             name = anim.sheet.animation_for_move(action.move_id, fallback)
+            if action.exploded and name not in anim.sheet.terminal:
+                name = "death"                             # no explosion clip: just die
             hits = max(1, len(action.hits))
             anim.play(name, delay=delay, hits=hits)
             times = [delay + t for t in anim.strike_times(name, hits)]
@@ -1319,9 +1379,21 @@ class CombatScene:
         for action in state.enemy_log:                    # static enemies: extras too
             if action.index not in self._enemy_anims:
                 self._announce_extras(action, names.get(action.index, ""), 0.2)
-        for i, (old, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
-            if old - enemy.current_hp > 0 and i < len(self._enemy_rects):   # e.g. poison
+        exploded = {a.index for a in state.enemy_log if a.exploded}
+        for i, (old, enemy) in enumerate(zip(old_enemy_hps, before)):
+            if i >= len(self._enemy_rects):
+                continue
+            if old - enemy.current_hp > 0 and i not in exploded:          # e.g. poison
                 self._enemy_hit(i, old - enemy.current_hp, killed=not enemy.is_alive)
+            elif enemy.current_hp > old:                                   # vampire bite, prayer
+                rect = self._enemy_rects[i]
+                self._fx.add_text(rect.centerx, rect.top + 20, f"+{enemy.current_hp - old}",
+                                  _HEAL_TEXT, 1.2, delay=0.55)
+        for i in exploded:                                # the blast: screen shake + number
+            if i < len(self._enemy_rects):
+                self._sound.play_death()
+                self._hold_time = max(self._hold_time, 1.2)
+        self._sync_enemy_anims(before)
 
         dmg = old_hp - state.player.current_hp
         wait = strike or 0.0

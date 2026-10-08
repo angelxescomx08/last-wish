@@ -208,6 +208,14 @@ def intent_extras(intent: Intent) -> list[str]:
         extras.append("status_debuff")
     if intent.cards:
         extras.append("junk_card")
+    if intent.ally_block > 0 and "block" not in extras:
+        extras.append("block")
+    if intent.ally_buffs and "status_buff" not in extras and intent.intent_type != IntentType.BUFF:
+        extras.append("status_buff")
+    if intent.lifesteal or intent.heal_allies > 0:
+        extras.append("heal")
+    if intent.self_destruct:
+        extras.append("fuse")
     return extras
 
 

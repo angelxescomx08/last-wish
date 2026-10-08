@@ -28,6 +28,9 @@ class Intent:
       the enemy itself.
     * ``cards``: ``(status card id, count, pile)`` added to the hero's
       ``"draw"`` pile (shuffled in), ``"discard"`` pile or ``"hand"``.
+    * ``lifesteal`` / ``ally_block`` / ``ally_buffs`` / ``heal_allies`` /
+      ``self_destruct``: regular-enemy extras (vampire bite, golem wall, acolyte
+      blessing and prayer, the Seta Explosiva).
     """
     intent_type: IntentType
     value: int = 0
@@ -39,6 +42,12 @@ class Intent:
     buffs: tuple[tuple[str, int], ...] = ()
     cards: tuple[tuple[str, int, str], ...] = ()
     description: str = ""
+    # Regular enemies (``application/enemy_roster.py``):
+    lifesteal: bool = False                              # heals the HP the hero lost to it
+    ally_block: int = 0                                  # block for every other living enemy
+    ally_buffs: tuple[tuple[str, int], ...] = ()         # statuses for every other living enemy
+    heal_allies: int = 0                                 # heals every living enemy (itself too)
+    self_destruct: bool = False                          # dies right after the action
 
     @property
     def is_multi_hit(self) -> bool:
@@ -74,6 +83,8 @@ ENTANGLED: str = "Enredado"
 STRENGTH: str = "Fuerza"
 # "Espadas" (El Caballero Hueco): how many floating swords he has; some moves hit once per sword.
 BLADES: str = "Espadas"
+# "Mecha" (Seta Explosiva): turns left before it explodes; burns down by 1 after each action.
+FUSE: str = "Mecha"
 
 # Spanish rule text of every status, for tooltips.
 STATUS_TEXT: dict[str, str] = {
@@ -85,6 +96,7 @@ STATUS_TEXT: dict[str, str] = {
     ENTANGLED: "Roba 1 carta menos por acumulación al inicio de su próximo turno.",
     STRENGTH: "Cada golpe inflige tantos puntos extra como acumulaciones.",
     BLADES: "Espadas flotantes: algunos ataques golpean una vez por espada.",
+    FUSE: "Turnos que le quedan antes de explotar. Al llegar a 1, explota y muere.",
 }
 # Statuses that wear off by 1 at the end of the hero's turn.
 HERO_TIMED_DEBUFFS: tuple[str, ...] = (WEAK, VULNERABLE, FRAIL)
@@ -144,6 +156,9 @@ class Enemy:
     ai_used: set[str] = field(default_factory=set)
     is_boss: bool = False
     floor: int = 1                    # scales the numbers of pattern moves
+    # Pairs (``enemy_roster.PAIRS``): the partner's id and the duo's Spanish name.
+    partner_id: str = ""
+    pair: str = ""
 
     @property
     def is_alive(self) -> bool:

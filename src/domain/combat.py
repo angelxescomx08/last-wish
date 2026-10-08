@@ -24,6 +24,8 @@ class EnemyAction:
     hits: list[int] = field(default_factory=list)
     cards: list[tuple[str, int, str]] = field(default_factory=list)
     debuffs: list[tuple[str, int]] = field(default_factory=list)
+    healed: int = 0                     # HP the enemy (or its allies) recovered
+    exploded: bool = False              # self-destructed (Seta Explosiva)
 
 
 @dataclass

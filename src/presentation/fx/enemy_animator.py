@@ -81,6 +81,55 @@ STYLES: dict[str, EnemyFxStyle] = {
                            shadow_w=170, blades=True),
 }
 
+# Regular enemies (application/enemy_roster.py). Cue points measured on each sheet's idle
+# frame (×2 px from the ground anchor); ``claw`` = where its hit lands (lunge, beam, flame).
+_ACID = ((236, 255, 170), (170, 240, 80), (96, 190, 50), (40, 110, 30))
+_FLESH = ((250, 236, 214), (214, 196, 170), (150, 140, 128), (86, 80, 90))
+_EARTH = ((122, 96, 70), (84, 62, 46), (46, 34, 28))
+_VIOLET_GLOW = ((240, 220, 255), (196, 150, 255), (140, 86, 220), (70, 40, 120))
+_BLOOD = ((255, 200, 200), (230, 70, 80), (160, 24, 44), (80, 10, 26))
+_FUR = ((150, 112, 120), (96, 66, 86), (54, 36, 52))
+_BONE = ((246, 236, 214), (210, 190, 160), (140, 118, 100))
+_TEAL_CAP = ((150, 200, 196), (70, 120, 124), (34, 62, 70))
+_MOSS = ((200, 250, 220), (120, 220, 170), (60, 160, 120), (30, 90, 80))
+_STONE = ((220, 226, 232), (150, 160, 172), (96, 104, 120), (56, 62, 76))
+_MOSS_BITS = ((150, 210, 90), (90, 150, 60), (50, 90, 40))
+_COINS = ((255, 250, 210), (255, 214, 90), (220, 150, 40), (130, 80, 20))
+_WOOD = ((176, 120, 74), (118, 76, 46), (66, 40, 26))
+
+STYLES.update({
+    "slime": EnemyFxStyle(wisp=_ACID, ecto=_ACID, spark=_ACID, shreds=_ACID[1:], glow=(50, 130, 30),
+                          chest=(0, -60), eyes=(-10, -72), body=(0, -50), claw=(-118, -40),
+                          shadow_w=180, ambient_rise=0.5, ambient_heavy=True),
+    "worm": EnemyFxStyle(wisp=_TOX, ecto=_FLESH, spark=_TOX, shreds=_EARTH, glow=(60, 100, 40),
+                         chest=(-10, -110), eyes=(-30, -128), body=(0, -70), claw=(-118, -96),
+                         shadow_w=150, ambient_rise=0.6),
+    "eye": EnemyFxStyle(wisp=_VIOLET_GLOW, ecto=_ICHOR, spark=_VIOLET_GLOW, shreds=_ICHOR[1:],
+                        glow=(100, 40, 150), chest=(0, -96), eyes=(-12, -108), body=(0, -92),
+                        claw=(-170, -108), shadow_w=90),
+    "skull": EnemyFxStyle(wisp=_EMBER, ecto=_EMBER, spark=_EMBER, shreds=_BONE, glow=(170, 70, 20),
+                          chest=(10, -92), eyes=(0, -100), body=(10, -92), claw=(-150, -82),
+                          shadow_w=110),
+    "bat": EnemyFxStyle(wisp=_BLOOD, ecto=_BLOOD, spark=_BLOOD, shreds=_FUR, glow=(110, 20, 40),
+                        chest=(0, -94), eyes=(-10, -108), body=(0, -92), claw=(-110, -90),
+                        shadow_w=130, ambient_rise=0.7),
+    "bomb": EnemyFxStyle(wisp=_EMBER, ecto=_FLESH, spark=_EMBER, shreds=_TEAL_CAP, glow=(160, 90, 20),
+                         chest=(0, -84), eyes=(0, -60), body=(0, -70), claw=(-100, -62),
+                         shadow_w=100),
+    "golem": EnemyFxStyle(wisp=_MOSS, ecto=_STONE, spark=_STONE, shreds=_MOSS_BITS, glow=(40, 120, 110),
+                          chest=(-10, -110), eyes=(-24, -140), body=(-10, -90), claw=(-150, -24),
+                          shadow_w=190, ambient_rise=0.5, ambient_heavy=True),
+    "acolyte": EnemyFxStyle(wisp=_EMBER, ecto=_EMBER, spark=_EMBER, shreds=_ASH, glow=(150, 70, 20),
+                            chest=(-10, -110), eyes=(-20, -134), body=(-10, -90), claw=(-104, -70),
+                            shadow_w=130, ambient_heavy=True),
+    "imp": EnemyFxStyle(wisp=_EMBER, ecto=_BLOOD, spark=_EMBER, shreds=_BLOOD[1:], glow=(160, 50, 20),
+                        chest=(10, -84), eyes=(0, -108), body=(10, -80), claw=(-112, -80),
+                        shadow_w=100),
+    "mimic": EnemyFxStyle(wisp=_COINS, ecto=_BLOOD, spark=_COINS, shreds=_WOOD, glow=(150, 110, 30),
+                          chest=(0, -60), eyes=(0, -72), body=(0, -56), claw=(-124, -40),
+                          shadow_w=170, ambient_rise=0.4, ambient_heavy=True),
+})
+
 # Floating swords (El Caballero Hueco): orbit, launch timing and flight.
 BLADE_ORBIT = (78.0, 20.0)        # ellipse radii around the body (px)
 BLADE_CENTER = (0.0, -118.0)      # orbit centre from the anchor
@@ -125,6 +174,7 @@ class EnemyAnimator:
         self._action_time = 0.0
         self._queue: list[list] = []                  # [name, delay]
         self._dead = False
+        self._final = "death"                         # the action that ended it (death / explode)
         self._wisp_clock = self._rng.uniform(0.0, 0.2)
         self._fx_time = self._rng.uniform(0.0, 10.0)
         self._anchor: tuple[float, float] | None = None
@@ -152,7 +202,7 @@ class EnemyAnimator:
     @property
     def death_done(self) -> bool:
         """The death animation has fully played (the sprite is gone)."""
-        return self._dead and self._action_time >= self.sheet.seconds("death")
+        return self._dead and self._action_time >= self.sheet.seconds(self._final)
 
     @property
     def busy(self) -> bool:
@@ -198,8 +248,9 @@ class EnemyAnimator:
     def _start(self, name: str, hits: int = 1) -> None:
         if self._dead:
             return
-        if name == "death":
+        if name == "death" or name in self.sheet.terminal:   # explode: dies acting
             self._dead = True
+            self._final = name
             self._queue.clear()
             self._drop_blades()
         self._action = name
@@ -254,6 +305,16 @@ class EnemyAnimator:
                             drag=3.0, gravity=-60, spread=18)
                     p.burst(x, y, 3, palette=st.wisp, speed=(0, 30), life=(0.25, 0.4), size=(26, 36),
                             style=GLOW, drag=4.0)
+        if name in self.sheet.terminal and strikes and self._once("boom", strikes[0]):
+            x, y = ax + st.body[0], ay + st.body[1]
+            p.burst(x, y, 60, palette=st.spark, speed=(200, 560), life=(0.3, 0.8), size=(1.5, 3),
+                    style=SPARK, drag=2.5)
+            p.burst(x, y, 40, palette=st.wisp, speed=(80, 300), life=(0.5, 1.2), size=(3, 6),
+                    drag=2.0, gravity=-40, spread=20)
+            p.burst(x, y, 24, palette=_ASH, speed=(30, 140), life=(0.8, 1.6), size=(5, 9),
+                    drag=1.5, gravity=-70, spread=24)
+            p.burst(x, y, 4, palette=st.spark, speed=(0, 20), life=(0.3, 0.5), size=(90, 120),
+                    style=GLOW, drag=4.0)
         if name == "hurt" and self._once("splash", 0.0):
             x, y = ax + st.body[0], ay + st.body[1]
             p.burst(x, y, 26, palette=st.ecto, speed=(90, 280), angle=(-math.pi * 0.45, math.pi * 0.45),
@@ -421,7 +482,7 @@ class EnemyAnimator:
         ax, ay = int(anchor[0]), int(anchor[1])
         fade = 1.0
         if self._dead:
-            fade = max(0.0, 1.0 - self._action_time / max(1e-6, self.sheet.seconds("death")))
+            fade = max(0.0, 1.0 - self._action_time / max(1e-6, self.sheet.seconds(self._final)))
         st = self.style
         if fade > 0:
             sw = st.shadow_w

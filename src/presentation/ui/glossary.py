@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from functools import cached_property
 
 from src.domain.entities import (
-    BLADES, ENTANGLED, FRAIL, MARKED, POISON, STATUS_TEXT, STRENGTH, VULNERABLE, WEAK,
+    BLADES, ENTANGLED, FRAIL, FUSE, MARKED, POISON, STATUS_TEXT, STRENGTH, VULNERABLE, WEAK,
 )
 from src.domain.keywords import KEYWORD_DEFS, Keyword
 
@@ -42,6 +42,7 @@ _STATUS_ICON: dict[str, str] = {
     BLADES: "blades",
     MARKED: "marked",
     RITUAL: "ritual",
+    FUSE: "fuse",
 }
 
 _KEYWORD_ICON: dict[Keyword, str] = {
@@ -80,7 +81,7 @@ def _keyword_rule(kw: Keyword) -> str:
 
 _STATUS_KIND: dict[str, bool] = {      # True = buff
     POISON: False, VULNERABLE: False, WEAK: False, FRAIL: False, ENTANGLED: False,
-    MARKED: False, STRENGTH: True, BLADES: True, RITUAL: True,
+    MARKED: False, STRENGTH: True, BLADES: True, RITUAL: True, FUSE: True,
 }
 
 STATUS_TERMS: dict[str, Term] = {

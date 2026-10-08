@@ -323,6 +323,16 @@ def intent_lines(enemy: Enemy, hit_damage: int | None = None,
         if n > 1 and not label.endswith("s"):
             label += "s"
         lines.append(f"[[cards]]Meterá {n} {label} en {_CARD_PILE.get(pile, pile)}.")
+    if it.lifesteal:
+        lines.append("[[heal]]Se curará tanta vida como te quite.")
+    if it.ally_block > 0:
+        lines.append(f"[[defend]]Dará {it.ally_block} de escudo a su compañero.")
+    for name, n in it.ally_buffs:
+        lines.append(f"[[buff]]Dará {n} de {name} a sus aliados.")
+    if it.heal_allies > 0:
+        lines.append(f"[[heal]]Curará {it.heal_allies} de vida a cada aliado (y a sí mismo).")
+    if it.self_destruct:
+        lines.append("[[fuse]]Después de atacar, explota y muere.")
     return lines
 
 
@@ -380,9 +390,21 @@ def status_tooltip(fx: StatusEffect, *, on_player: bool = False) -> TooltipConte
                           subtitle="Mejora" if fx.is_buff else "Perjuicio", accent=panel.color)
 
 
+def _identity(enemy: Enemy) -> str:
+    """"Agresivo: …" — the regular enemy's identity (``enemy_roster.ENEMIES``)."""
+    from src.application.enemy_roster import ENEMIES, NAME_TO_AI
+    d = ENEMIES.get(enemy.ai) or ENEMIES.get(NAME_TO_AI.get(enemy.name, ""))
+    return f"{d.identity}: {d.title}" if d is not None and not enemy.is_boss else ""
+
+
 def enemy_tooltip(enemy: Enemy, hit_damage: int | None = None,
                   player: Player | None = None) -> TooltipContent:
     lines: list[str] = [f"Vida: {enemy.current_hp} / {enemy.max_hp}"]
+    identity = _identity(enemy)
+    if identity:
+        lines.append(identity)
+    if enemy.pair:
+        lines.append(f"  Pareja: {enemy.pair}. Si cae su pareja, buscará Venganza.")
     if enemy.block > 0:
         lines.append(f"Bloqueo: {enemy.block} (absorbe el próximo daño)")
     it = enemy.intent

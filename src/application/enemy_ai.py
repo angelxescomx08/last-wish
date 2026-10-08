@@ -23,6 +23,7 @@ from typing import Callable
 
 from src.domain.entities import (BLADES, ENTANGLED, FRAIL, POISON, STRENGTH, VULNERABLE, WEAK,
                                  Enemy, Intent, IntentType, Player, add_status, status_stacks)
+from src.application import enemy_roster
 from src.domain.status_cards import MOLD_ID, SPORE_ID
 
 MYCELID = "micelida"
@@ -177,15 +178,18 @@ def _enraged(enemy: Enemy, key: str) -> bool:
 
 
 def has_pattern(enemy: Enemy) -> bool:
-    return enemy.ai in _PATTERNS
+    return enemy.ai in _PATTERNS or enemy.ai in enemy_roster.PATTERNS
 
 
-def next_intent(enemy: Enemy, player: Player | None) -> Intent:
-    """The boss's next move (advances its pattern). Unknown AI → an UNKNOWN intent."""
+def next_intent(enemy: Enemy, player: Player | None, allies: list[Enemy] | None = None) -> Intent:
+    """The next move (advances the pattern): bosses here, regular enemies in
+    ``enemy_roster`` (which also see their ``allies``). Unknown AI → an UNKNOWN intent."""
     pattern = _PATTERNS.get(enemy.ai)
-    if pattern is None:
-        return Intent(IntentType.UNKNOWN)
-    return pattern(enemy, player)
+    if pattern is not None:
+        return pattern(enemy, player)
+    if enemy.ai in enemy_roster.PATTERNS:
+        return enemy_roster.next_intent(enemy, player, allies)
+    return Intent(IntentType.UNKNOWN)
 
 
 def intent_hit_damage(enemy: Enemy, player: Player) -> int:

@@ -18,6 +18,7 @@ import pygame
 from src.domain.character import ALL_CHARACTERS
 from src.domain.chroma import CHROMA_DEFS, Chroma
 from src.domain.rarity import Rarity, luck_chroma_multiplier, rarity_odds
+from src.application.enemy_roster import ENCOUNTERS, encounter_label
 from src.application.enemy_ai import BOSSES, FLOOR1_BOSSES
 from src.domain.tuning import CHROMA_KINDS, TUNING, chroma_chance, chroma_key, hero_luck
 from src.infrastructure import colors
@@ -58,6 +59,7 @@ class _Row:
 
 
 _BOSS_LABELS = ("Al azar", *(BOSSES[ai].name for ai in FLOOR1_BOSSES))
+_ENCOUNTER_LABELS = tuple(encounter_label(i) for i in range(len(ENCOUNTERS) + 1))
 
 
 def _rows() -> list[_Row]:
@@ -81,6 +83,8 @@ def _rows() -> list[_Row]:
         _Row("Cartas extra por turno", _Kind.NUMBER, "extra_draw", 1, 0, 10, "+{}", column=1),
         _Row("Jefe del piso 1", _Kind.NUMBER, "forced_boss", 1, 0, len(_BOSS_LABELS) - 1,
              column=1, labels=_BOSS_LABELS),
+        _Row("Enemigos de los combates", _Kind.NUMBER, "forced_encounter", 1, 0,
+             len(_ENCOUNTER_LABELS) - 1, column=1, labels=_ENCOUNTER_LABELS),
         _Row("Todas las salas: el jefe", _Kind.TOGGLE, "boss_rooms", column=1),
         _Row("Todas las salas: gachapón", _Kind.TOGGLE, "gacha_rooms", column=1),
         # --- actions (left column, bottom) ---
@@ -235,22 +239,29 @@ class DevSettingsScene:
                 color = _ON if getattr(TUNING, row.attr) else _OFF
             else:
                 color = colors.TEXT_PRIMARY
-            minus = pygame.Rect(rect.right - 212, rect.top + 5, 28, 28)
+            wide = 80 if row.labels else 0                 # option names need more room
+            minus = pygame.Rect(rect.right - 212 - wide, rect.top + 5, 28, 28)
             plus = pygame.Rect(rect.right - 44, rect.top + 5, 28, 28)
             self._buttons.append((minus, plus))
             for button, sign in ((minus, "-"), (plus, "+")):
                 pygame.draw.rect(surface, colors.BG_DARK, button, border_radius=5)
                 s = self._fonts.get(18).render(sign, True, colors.TEXT_PRIMARY)
                 surface.blit(s, s.get_rect(center=button.center))
+            room = plus.left - minus.right - 8
             v = self._fonts.get(16).render(value, True, color)
+            for size in (14, 12):                           # long option names shrink to fit
+                if v.get_width() <= room:
+                    break
+                v = self._fonts.get(size).render(value, True, color)
             surface.blit(v, v.get_rect(center=((minus.right + plus.left) // 2, rect.centery)))
-        y = _TOP + slots[1] * _ROW_GAP + 8
+        pc = 0 if slots[0] < slots[1] else 1             # luck preview under the shorter column
+        y = _TOP + slots[pc] * _ROW_GAP + 8
         head = self._fonts.get(13).render("Con esta suerte (personaje + extra):", True, colors.TEXT_SECONDARY)
-        surface.blit(head, (col_x[1] + 4, y))
+        surface.blit(head, (col_x[pc] + 4, y))
         for k, line in enumerate(luck_preview_lines()):
             color = colors.TEXT_PRIMARY if k % 2 == 0 else colors.TEXT_SECONDARY
             t = self._fonts.get(11).render(line, True, color)
-            surface.blit(t, (col_x[1] + 4, y + 22 + k * 17))
+            surface.blit(t, (col_x[pc] + 4, y + 22 + k * 17))
         hint = self._fonts.get(12).render(self._HINT, True, colors.TEXT_SECONDARY)
         surface.blit(hint, hint.get_rect(centerx=cx, centery=696))
 

@@ -62,6 +62,14 @@ def describe_action(enemy_name: str, intent: Intent, action: EnemyAction) -> tup
         card = make_status_card(card_id)
         label = _plural(card.name if card else card_id, n)
         parts.append(f"mete {n} {label} en {_PILE.get(pile, pile)}")
+    if intent.ally_block > 0:
+        parts.append(f"da {intent.ally_block} de escudo a su compañero")
+    for name, n in intent.ally_buffs:
+        parts.append(f"da {n} de {name} a sus aliados")
+    if action.healed > 0:
+        parts.append(f"recupera {action.healed} de vida")
+    if action.exploded:
+        parts.append("¡explota y muere!")
     return intent_icon(intent), title, " · ".join(parts)
 
 

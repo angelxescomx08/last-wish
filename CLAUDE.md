@@ -112,7 +112,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY`, `relic_total(relics, tag, amount)` | Passive items with a tag identifying their mechanic (34 tags). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged). `relic_total` = amount × chroma per active relic with that tag (domain code uses it directly) |
 | `rarity.py` | `Rarity`, `RARITY_LABEL`, `rarity_weight`, `rarity_odds`, `luck_chroma_multiplier`, `weighted_sample` | Five tiers shared by cards and relics (`CardRarity` is an alias). Luck-weighted tier odds and chroma boost |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
-| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect`, `deal_damage`, `status_stacks`, `enemy_hit_damage`, `vulnerable`, `frail`, `POISON`, `MARKED`, `WEAK`, `VULNERABLE`, `FRAIL`, `ENTANGLED`, `STRENGTH`, `BLADES`, `STATUS_TEXT` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck`. **Every hit on an enemy goes through `deal_damage(enemy, amount)`** (Marcado bonus, then block absorbs; returns HP lost) |
+| `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect`, `deal_damage`, `status_stacks`, `enemy_hit_damage`, `vulnerable`, `frail`, `POISON`, `MARKED`, `WEAK`, `VULNERABLE`, `FRAIL`, `ENTANGLED`, `STRENGTH`, `BLADES`, `FUSE`, `STATUS_TEXT` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck`. **Every hit on an enemy goes through `deal_damage(enemy, amount)`** (Marcado bonus, then block absorbs; returns HP lost) |
 | `pile.py` | `DrawPile`, `DiscardPile`, `Hand` | Card containers with `count` and `is_full` |
 | `gacha.py` | `PullKind`, `PULLS`, `PRICE_GROWTH`, `pull_price(kind, pulls)`, `tier_weight`, `pull_odds(kind, luck, tiers)`, `roll_pull(items, kind, rng, rarity_of, luck)` | Gachapón rules: normal / stellar pull odds and rising prices (see *Gachapón*) |
 | `status_cards.py` | `spore()`, `mold()`, `make_status_card(id)`, `STATUS_CARD_FACTORIES` | Status cards enemies add to the piles for one combat (Espora, Moho) |
@@ -134,11 +134,12 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `card_preview.py` | `CardBonus(attack, block).for_card(card)`, `run_card_bonus(run)` (character + Pruebas + relics), `combat_card_bonus(state)`, `NO_BONUS` | The numbers a card shows **outside the hand** (rewards, packs, deck/pile viewers, El Brujo) = the same effective values as in combat. Every screen that shows a card must pass these bonuses |
 | `luck.py` | `luck_report(run)` → `LuckReport` (luck now vs the character's own, relic sources, tier odds, golden chance per card/relic/pack, `rare_or_better()`, `gacha(kind, base=)`, `extra_card`, `summary()`), `golden_chance(kind, luck)`, `at_least(odds, tier)` | What luck does to every drop, for the screens that show it |
 | `hero_stats.py` | `hero_sheet(run, state=None)` → `HeroSheet` (`stats: list[HeroStat]`, gold, floor, deck size/by type, relic count, golden card/relic and Épica+ odds, statuses, turn); `HeroStat(key, name, icon, value, base, sources, effect, current, reference)` with `bonus` and `breakdown()` ("Base 6 · Orbe de Fuego +2"); `StatSource(label, amount)` | Data of the hero sheet: per-relic contributions measured by calling each `relic_effects` query with that relic alone, "Pruebas" and "Este combate" (live `CombatState` values) as sources |
-| `enemy_ai.py` | `BOSSES`, `FLOOR1_BOSSES`, `create_boss(ai, floor)`, `next_intent(enemy, player)`, `has_pattern`, `intent_hit_damage` | Pattern AI of the floor-1 bosses (see *Floor-1 bosses*) |
+| `enemy_ai.py` | `BOSSES`, `FLOOR1_BOSSES`, `create_boss(ai, floor)`, `next_intent(enemy, player, allies=None)`, `has_pattern`, `intent_hit_damage` | Pattern AI of the floor-1 bosses (see *Floor-1 bosses*); delegates regular enemies to `enemy_roster` |
+| `enemy_roster.py` | `ENEMIES` (`EnemyDef`), `PAIRS` (`PairDef`), `ENCOUNTERS`, `create_enemy(ai, floor, id, hp_factor=)`, `create_pair(key, floor, prefix)`, `roll_encounter(rng, floor, room_id, forced=0)`, `create_encounter`, `encounter_label`, `next_intent(enemy, player, allies)`, `react_to_deaths(enemies)`, `after_action(enemy)`, `VENGEANCE_ID` | The eleven regular enemies (identity + fixed pattern), the six pairs, encounter odds and Venganza (see *Regular enemies and pairs*) |
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
-| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory(run, hp, enemies, bonus_gold=0)`, `gain_gold(run, amount)` → interest (every gold *gain* goes through it: combat victories and events), `generate_event_gold`, `pick_treasure_relic`, `pick_treasure_relics` (2 with Llave Maestra), `pick_boss_relics`, `shop_price(run, base)`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
+| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies` (→ `enemy_roster.roll_encounter`, seeded with `zlib.crc32(room_id)`), `generate_boss`, `apply_combat_victory(run, hp, enemies, bonus_gold=0)`, `gain_gold(run, amount)` → interest (every gold *gain* goes through it: combat victories and events), `generate_event_gold`, `pick_treasure_relic`, `pick_treasure_relics` (2 with Llave Maestra), `pick_boss_relics`, `shop_price(run, base)`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
 | `card_rewards.py` | `allowed_card_classes(run)`; `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]`; `lucky_cards(run, seed, exclude)` | Seeded card reward selection after combat and pack opening, filtered to the run's allowed classes (packs topped up from other themes if ever short), plus luck's "Cartas de la suerte" at the end (`Card.lucky_drop`). Seeds use `zlib.crc32(room_id)` (stable across runs) |
 
 ### Infrastructure layer — `src/infrastructure/`
@@ -151,7 +152,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
-| `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py` and `scripts/generate_boss_*.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`, bosses → `mycelid`/`weaver`/`knight`), `BOSS_SHEET_IDS`; boss data on `EnemySheet`: `strike_seconds(anim)`, `animation_for_move(move_id, fallback)`, `is_boss`, `blade_frames`, `top`, `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
+| `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py`, `scripts/generate_enemy_<id>.py` and `scripts/generate_boss_*.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`, the ten regular enemies, bosses → `mycelid`/`weaver`/`knight`), `REGULAR_SHEET_IDS`, `BOSS_SHEET_IDS`, `EnemySheet.terminal` (clips that end the enemy like death: the Seta's `explode`); boss data on `EnemySheet`: `strike_seconds(anim)`, `animation_for_move(move_id, fallback)`, `is_boss`, `blade_frames`, `top`, `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
 | `ui_icons.py` | `ui_icon(name, scale=2)` (cached, nearest) / `has_ui_icon(name)` from `assets/ui/icons.png` + `icons.json` (written by `scripts/generate_ui_icons.py`): intent icons 18 px (`attack_1`…`attack_4`, `defend`, `buff`, `debuff`, `cards`, `unknown`, `lethal`), status/keyword icons 14 px (one per status, `status_buff`/`status_debuff` fallbacks, `block`, `junk_card`, `combo`, `singular`, `void`, `spoil`, `exhaust`, `ethereal`, `unplayable`, `damage`, `draw`, `mana`, `heal`); `None` when missing |
 | `ui_kit.py` | HUD kit from `assets/ui/kit.png` + `kit.json` (written by `scripts/generate_ui_kit.py`): `kit_piece(name, scale=2)`, `kit_slice(name, w, h, scale=2)` (9-slice / 3-slice with **tiled** edges and centre, exact size, cached), `has_kit`, `kit_names`. Pieces: `panel`, `btn_{bronze,gold}_{idle,hover,press,off}`, `orb_back/frame/glass`, `orb_liquid_0..7`, `pile_draw/discard/empty`, `topbar`, `trim`, `ribbon` |
 | `gacha_assets.py` | `load_gacha_assets()` → `GachaAssets` (cached, ×2 nearest): machine, glass overlay, crank frames, pile capsules, prize capsules per tier (drop size; stage size closed/top/bottom), coin, chute flap, `meta`; `point(name)` / `rect(name)` anchors; `None` when missing |
@@ -586,6 +587,9 @@ One test file per source module. All test files follow the same structure:
 | `presentation/ui/test_readability.py` | `ui_icons`, `scripts/generate_ui_icons.py`, `rich_text`, `glossary`, tooltips, `entity_widget` intents/badges, `action_banner`, `CombatScene` hover | every icon exists (one per status), generator = assets, colours (damage/block/keyword/poison/mana/HP), terms found in order without repeats, intent sentences (multi-hit totals, modifiers, block absorbed, lethal, extras), panels not repeated, timed debuff duration, card keyword/flag panels, renderer on screen / 2 columns / beside a card, intent number/extras/hitboxes, banner texts and lifecycle, hover intent / hero status / enemy status, banner after end turn |
 | `presentation/ui/test_hud_kit.py` | `ui_kit`, `scripts/generate_ui_kit.py`, `pixel_ui`, HUD widgets, `hero_stats`, `hero_sheet`, SceneManager/CombatScene wiring | pieces + generator = assets, exact 9/3-slice sizes, tiling keeps corners, buttons in every style/state, mana orb (sync, splash, easing, flash, shake, max 0, 10^9 dt stress), End Turn variants, piles, stat bases/relic sources/golden relic/inactive/Pruebas/live combat/odds/huge luck/deck by type, sheet fill order/closing/phases/stress, C key + button + Escape order + overlay guard, End Turn locked while enemies act, orb shakes on unaffordable card |
 | `presentation/ui/test_card_ready_and_preview.py` | `card_preview`, reward/pack/pile screens, `fx/card_fx`, card widgets, `MainMenuScene` | hero/relic/Pruebas bonuses = combat hand, per-card rule, no run, 10^100, screens wired; ready keywords only for layers the card has, colour cycling, comets on the edge/moving/tilted, badge position, golden + ready drawn together, combat hand; menu buttons, no overlap, click/keys, fade-in, 1000-frame stress |
+| `application/test_enemy_roster.py` | `enemy_roster`, its hooks in `end_turn`/`play_card`, `generate_enemies`, Pruebas encounter | 11 enemies (sheet, texts, every move has a clip), identities, floor scaling, pairs (linked, 80 % HP, golem/acolyte support), encounter odds over 2000 seeds, floor gating, trios, forced encounters, lifesteal, ally block kept, ally buffs, heals, explosion, Mecha countdown, killed in time, Venganza (card kill, explosion, once, solo never), 300-turn stress per encounter |
+| `presentation/scenes/test_combat_pairs.py` | sheets/styles, `EnemyAnimator` terminal clip, `CombatScene` with pairs, tooltips, extras, banners | explode latches and sparks, pair banner, survivor keeps its slot and animator, exploding enemy keeps drawing, victory waits for the blast, ¡VENGANZA! once, trio, 60-turn stress per encounter, identity/pair/lifesteal/explosion tooltip lines, intent extras, Mecha icon, banner texts, Pruebas row |
+| `test_enemy_roster_sprites.py` | `scripts/generate_enemy_<id>.py` (10 enemies) | Espectro art contract (idle loop, actions end on idle 0, fits the cell, death/explode end empty, flash, strike events, moves → clips, random poses, sheets on disk), every pattern move has a clip |
 | `application/test_luck.py` | `application/luck`, lucky cards in `card_rewards`, `rarity.lucky_card_*`, luck badge, screens | report with/without the Trébol, sources, monotonic, huge luck capped; the Trébol makes pack/reward cards rarer and more golden, shop packs golden, gachapón odds and pulls better (60 seeds); lucky-card chances 0/50/100/200/300/10^9, count range, Trébol guarantees one, Rara+, no duplicates, allowed classes, deterministic, rare for base heroes; badge text/anchor; shop/gachapón/reward/pack draw with luck and marks |
 | `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
@@ -673,7 +677,7 @@ name is in `ENEMY_SHEET_IDS`, draws it unframed (`draw_enemy(framed=False)`) at
 rect: the flash is baked), kill → `death` (`combat_won` waits on `enemies_dying`), end
 turn → `attack` for ATTACK intents and `cast` otherwise, staggered 0.14 s per enemy; the
 hero's `hurt` and hit number are delayed until the first claws land (`strike_time()`).
-"Espectro" is in `run_manager.generate_enemies` templates (42 HP, attacks 11, floor-scaled).
+"Espectro" is one of the regular enemies of `application/enemy_roster.py` (42 HP, Zarpazo 11 ×2 then Lamento, floor-scaled).
 New animated enemy: add a renderer/poses (or reuse the script), a sheet id in
 `ENEMY_SHEET_IDS`. Preview: `output/espectro-preview.gif`.
 
@@ -1075,4 +1079,41 @@ Legendaria because it does nothing in a fight.
   later — `GoldHud.note`, delayed entries hidden while age < 0); combat and boss reward
   screens print "Oro obtenido: +X  (+N de interés)".
 - Tests: `tests/application/test_compound_interest.py`; `test_relic` tag count now 35.
+
+## Regular enemies and pairs (2026-10-08)
+
+User: ~10 more enemies like the Espectro (code-drawn pixel art with animations), each with
+its own identity and abilities/strategy (debuffers, very aggressive ones…), and predefined
+pairs that fight together (before, floor 1 only had lone enemies and the rest were random
+static sprites with random intents).
+
+- **Art:** `scripts/generate_enemy_<id>.py` (stdlib, Espectro method, `pixel_kit`) for
+  `slime` Babosa Ácida, `worm` Gusano de Tumba, `eye` Ojo Vigilante, `skull` Cráneo Ígneo,
+  `bat` Murciélago Vampiro, `bomb` Seta Explosiva, `golem` Gólem de Musgo, `acolyte` Acólito de
+  Ceniza, `imp` Diablillo, `mimic` Mímico → `assets/enemies/<id>_sheet.png/json` with
+  `events` (strike frames), `moves` (move id → clip) and, for the Seta, `terminal: ["explode"]`.
+  Every sheet has idle/attack/cast/hurt/death plus its own clips (spit, burrow, explode,
+  fireball, lick). Each has an `EnemyFxStyle` in `fx/enemy_animator.STYLES` (palettes, cue points).
+- **Rules:** `application/enemy_roster.py` — identity + fixed pattern per enemy (numbers in
+  `docs/game_design.md` → *Enemigos*), the Espectro included. `generate_enemies` now only uses
+  the roster (the old Cultista/Guardián/Brujo/Esqueleto/Golem/Asesino templates are no longer
+  generated; their sprite mappings remain). Pairs: `PAIRS` (6, `min_floor`), members at
+  `PAIR_HP_FACTOR` 80 % HP, linked by `Enemy.partner_id`, `Enemy.pair` = duo name. Odds:
+  `pair_chance` 35/50/60 %, `trio_chance` 25 % from floor 3. Pruebas: `TUNING.forced_encounter`
+  ("Enemigos de los combates", `ENCOUNTERS` index).
+- **New intent extras** (`Intent`): `lifesteal`, `ally_block`, `ally_buffs`, `heal_allies`,
+  `self_destruct`; `EnemyAction.healed` / `exploded`. Status `FUSE` "Mecha" (icon `fuse`)
+  burns down in `enemy_roster.after_action`. **Enemy block now resets for all enemies at the
+  start of the enemy phase** (not at each one's own action), so block given by an ally lasts.
+- **Venganza:** `react_to_deaths` (after `play_card` and at turn start) and `next_intent` turn
+  the survivor's intent into Venganza (+3 Fuerza, 6 block) once when its partner dies or explodes.
+- **Combat screen:** animators keyed by enemy id (`_anim_by_id`; `_enemy_anims` = current
+  index view rebuilt by `_sync_enemy_anims`), each enemy keeps its starting slot
+  (`_slot_of`), enemies that left the list keep drawing in `_gone` until their death/explosion
+  clip ends (victory waits). Opening banner "¡Pareja! …" + synergy; "¡VENGANZA!" over the
+  survivor; green "+N" when enemies heal. Fixed: HP checks after the enemy turn compared the
+  old HP list with the already-filtered enemy list.
+- Tooltip: identity line ("Agresivo: …"), pair line, lines for every new extra; intent extra
+  icons heal / block / status_buff / fuse; banners "da 8 de escudo a su compañero",
+  "recupera N de vida", "¡explota y muere!".
 

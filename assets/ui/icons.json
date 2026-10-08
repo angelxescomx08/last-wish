@@ -115,146 +115,152 @@
    14,
    14
   ],
-  "status_buff": [
+  "fuse": [
    306,
    0,
    14,
    14
   ],
-  "status_debuff": [
+  "status_buff": [
    320,
    0,
    14,
    14
   ],
-  "block": [
+  "status_debuff": [
    334,
    0,
    14,
    14
   ],
-  "junk_card": [
+  "block": [
    348,
    0,
    14,
    14
   ],
-  "combo": [
+  "junk_card": [
    362,
    0,
    14,
    14
   ],
-  "singular": [
+  "combo": [
    376,
    0,
    14,
    14
   ],
-  "void": [
+  "singular": [
    390,
    0,
    14,
    14
   ],
-  "spoil": [
+  "void": [
    404,
    0,
    14,
    14
   ],
-  "exhaust": [
+  "spoil": [
    418,
    0,
    14,
    14
   ],
-  "ethereal": [
+  "exhaust": [
    432,
    0,
    14,
    14
   ],
-  "unplayable": [
+  "ethereal": [
    446,
    0,
    14,
    14
   ],
-  "damage": [
+  "unplayable": [
    460,
    0,
    14,
    14
   ],
-  "draw": [
+  "damage": [
    474,
    0,
    14,
    14
   ],
-  "mana": [
+  "draw": [
    488,
    0,
    14,
    14
   ],
-  "heal": [
+  "mana": [
    502,
    0,
    14,
    14
   ],
-  "gear": [
+  "heal": [
    516,
    0,
    14,
    14
   ],
-  "helmet": [
+  "gear": [
    530,
    0,
    14,
    14
   ],
-  "bag": [
+  "helmet": [
    544,
    0,
    14,
    14
   ],
-  "hand_cards": [
+  "bag": [
    558,
    0,
    14,
    14
   ],
-  "clover": [
+  "hand_cards": [
    572,
    0,
    14,
    14
   ],
-  "tower": [
+  "clover": [
    586,
    0,
    14,
    14
   ],
-  "hourglass": [
+  "tower": [
    600,
    0,
    14,
    14
   ],
-  "deck": [
+  "hourglass": [
    614,
    0,
    14,
    14
   ],
-  "coin": [
+  "deck": [
    628,
+   0,
+   14,
+   14
+  ],
+  "coin": [
+   642,
    0,
    14,
    14

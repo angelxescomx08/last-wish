@@ -9,7 +9,7 @@ player learns the picture once and then reads the board at a glance.
   with the damage), ``defend``, ``buff``, ``debuff``, ``cards``, ``unknown``,
   ``lethal``.
 * Status / keyword icons are 14×14 (shown ×2): poison, vulnerable, weak, frail,
-  entangled, strength, blades, marked, ritual, status_buff, status_debuff,
+  entangled, strength, blades, marked, ritual, fuse, status_buff, status_debuff,
   block, junk_card, combo, singular, void, spoil, exhaust, ethereal, unplayable, damage,
   draw, mana, heal; HUD: gear, helmet, bag, hand_cards, clover, tower,
   hourglass, deck, coin.
@@ -665,6 +665,16 @@ def coin() -> Canvas:
     return cv
 
 
+def fuse_bomb() -> Canvas:
+    """Mecha: a round black bomb with a lit, sparking fuse (Seta Explosiva countdown)."""
+    cv = Canvas(12, 12)
+    fill(cv, lambda x, y: math.hypot(x - 5, y - 7) <= 4.4, GREY[:4], 5, 7, 4.6, base=0.45)
+    cv.put(3, 5, GREY[4]); cv.put(4, 5, GREY[3]); cv.put(3, 6, GREY[3])      # highlight
+    cv.put(7, 3, GREY[2]); cv.put(8, 2, BROWN[2]); cv.put(9, 2, BROWN[3])      # collar + fuse
+    cv.put(10, 1, ORANGE[3]); cv.put(11, 0, ORANGE[4]); cv.put(11, 2, ORANGE[2]); cv.put(9, 0, ORANGE[2])
+    return cv
+
+
 ICONS_16 = {
     "attack_1": lambda: sword(6, 2),
     "attack_2": lambda: sword(9, 2),
@@ -688,6 +698,7 @@ ICONS_12 = {
     "blades": blades,
     "marked": crosshair,
     "ritual": eye,
+    "fuse": fuse_bomb,
     "status_buff": lambda: mini_arrow(True, BLUE),
     "status_debuff": lambda: mini_arrow(False, VIOLET),
     "block": block_small,

@@ -11,9 +11,10 @@ Responsibilities:
 from __future__ import annotations
 
 import random
+import zlib
 from dataclasses import replace
 
-from src.application import enemy_ai, relic_effects
+from src.application import enemy_roster, enemy_ai, relic_effects
 from src.application.map_generator import generate_map
 from src.domain.card import CardClass
 from src.domain.card_pool import ALL_PACKS, PackDef, class_for_character, starter_deck
@@ -54,7 +55,7 @@ def create_run(character: Character, seed: int) -> Run:
 # ---------------------------------------------------------------------------
 
 def _enemy_seed(run: Run, room_id: str) -> int:
-    h = hash(room_id) & 0xFFFF_FFFF
+    h = zlib.crc32(room_id.encode("utf-8")) & 0xFFFF_FFFF    # stable across runs (hash() is salted)
     return (run.seed * _ENEMY_PRIME + run.floor * 997 + h) & 0xFFFF_FFFF_FFFF_FFFF
 
 
@@ -63,37 +64,15 @@ def _scale(base: int, floor: int) -> int:
 
 
 def generate_enemies(run: Run, room_id: str) -> list[Enemy]:
-    """Return a list of enemies appropriate for the floor (Pruebas: the floor boss)."""
+    """The enemies of a combat room (Pruebas: the floor boss, or a fixed encounter).
+
+    Regular enemies come from ``enemy_roster``: one enemy alone or a fixed pair
+    (and from floor 3, sometimes a pair plus one more), each with its own pattern.
+    """
     if TUNING.boss_rooms:
         return generate_boss(run)
-    rng   = random.Random(_enemy_seed(run, room_id))
-    floor = run.floor
-
-    templates = [
-        ("Cultista",  _scale(55,  floor), IntentType.ATTACK, _scale(10, floor)),
-        ("Guardián",  _scale(45,  floor), IntentType.BLOCK,  _scale(8,  floor)),
-        ("Brujo",     _scale(40,  floor), IntentType.BUFF,   0),
-        ("Esqueleto", _scale(35,  floor), IntentType.ATTACK, _scale(8,  floor)),
-        ("Golem",     _scale(70,  floor), IntentType.BLOCK,  _scale(12, floor)),
-        ("Asesino",   _scale(30,  floor), IntentType.ATTACK, _scale(14, floor)),
-        ("Espectro",  _scale(42,  floor), IntentType.ATTACK, _scale(11, floor)),
-    ]
-
-    # Pick 1–3 enemies; higher floors → more enemies
-    max_enemies = min(1 + floor // 2, 3)
-    count       = rng.randint(1, max_enemies)
-    pool        = rng.sample(templates, min(count, len(templates)))
-
-    enemies: list[Enemy] = []
-    for i, (name, hp, itype, ival) in enumerate(pool):
-        enemies.append(Enemy(
-            id=f"{room_id}_e{i}",
-            name=name,
-            max_hp=hp,
-            current_hp=hp,
-            intent=Intent(itype, ival),
-        ))
-    return enemies
+    rng = random.Random(_enemy_seed(run, room_id))
+    return enemy_roster.roll_encounter(rng, run.floor, room_id, TUNING.forced_encounter)
 
 
 def floor_boss_ai(run: Run) -> str | None:
