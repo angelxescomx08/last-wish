@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pygame
 
+from src.application.card_preview import run_card_bonus
 from src.domain.card import Card
 from src.domain.run import Run
 from src.infrastructure import colors
@@ -37,6 +38,7 @@ class CombatRewardScene:
     ) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
         self._run          = run
+        self._bonus        = run_card_bonus(run)     # same numbers as in the hand
         self._gold_earned  = gold_earned
         self._cards        = cards
         self._fonts        = fonts
@@ -89,9 +91,10 @@ class CombatRewardScene:
         self._card_rects = []
         for i, card in enumerate(self._cards):
             cx_card = start_x + i * (CARD_W + _GAP)
+            dmg, blk = self._bonus.for_card(card)
             rect    = draw_card(
                 surface, card, cx_card, card_y, self._fonts,
-                hovered=(self._hovered == i),
+                hovered=(self._hovered == i), bonus_damage=dmg, bonus_block=blk,
             )
             self._card_rects.append(rect)
 
@@ -108,7 +111,8 @@ class CombatRewardScene:
 
         # Tooltip
         if self._hovered is not None and self._hovered < len(self._cards):
-            tip = card_tooltip(self._cards[self._hovered])
+            dmg, blk = self._bonus.for_card(self._cards[self._hovered])
+            tip = card_tooltip(self._cards[self._hovered], bonus_damage=dmg, bonus_block=blk)
             draw_tooltip(surface, tip, self._mouse, self._fonts)
 
     # ------------------------------------------------------------------

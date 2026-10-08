@@ -34,6 +34,7 @@ import random
 
 import pygame
 
+from src.application.card_preview import NO_BONUS, CardBonus
 from src.domain.card import Card, CardRarity
 from src.domain.chroma import Chroma, effect_multiplier
 from src.infrastructure import colors
@@ -135,8 +136,10 @@ class PackOpeningScene:
         theme: str | None = None,
         seed: int = 0,
         chroma: Chroma | None = None,
+        bonus: CardBonus = NO_BONUS,
     ) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
+        self._bonus = bonus          # the hero's stats, so numbers match the hand
         self._cards      = cards
         self._pack_name  = pack_name
         self._fonts      = fonts
@@ -698,7 +701,7 @@ class PackOpeningScene:
             f = _clamp01((t - fs) / FLIP_T)
             pulse = 1.0 + 0.12 * math.sin(math.pi * f)
             sx = abs(math.cos(math.pi * f)) * scale * pulse
-            img = self._back if f < 0.5 else render_card_surface(card, self._fonts)
+            img = self._back if f < 0.5 else self._face(card)
             if f >= 0.5 and card.chroma is not None:
                 img = chroma_fx.animate_card_face(img, card.chroma, self._time)
             if _is_special(card):
@@ -707,6 +710,10 @@ class PackOpeningScene:
                 if f == 0.0 and pre > 0:
                     x += math.sin(self._time * 60.0) * 2.5 * pre
             self._blit_card(surface, img, x + ox, y + oy, sx, scale * pulse, angle)
+
+    def _face(self, card: Card) -> pygame.Surface:
+        dmg, blk = self._bonus.for_card(card)
+        return render_card_surface(card, self._fonts, bonus_damage=dmg, bonus_block=blk)
 
     def _draw_pick(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         n = len(self._cards)
@@ -718,8 +725,10 @@ class PackOpeningScene:
             pulse = 0.85 + 0.15 * math.sin(self._time * 3.0 + i)
             self._halo(surface, card, cx + ox, cy + oy - (20 if self._hovered == i else 0),
                        pulse * (1.25 if self._hovered == i else 1.0))
+            dmg, blk = self._bonus.for_card(card)
             rect = draw_card(surface, card, start_x + i * (CARD_W + _GAP) + ox, _CARD_Y + oy,
-                             self._fonts, hovered=(self._hovered == i), selected=(i in self._chosen))
+                             self._fonts, hovered=(self._hovered == i), selected=(i in self._chosen),
+                             bonus_damage=dmg, bonus_block=blk)
             self._card_rects.append(rect.move(-ox, -oy))
 
     def _draw_outro(self, surface: pygame.Surface, ox: int, oy: int) -> None:
@@ -728,7 +737,7 @@ class PackOpeningScene:
             if i in self._chosen:
                 continue
             cx, cy = self._slot_center(i)
-            self._blit_card(surface, render_card_surface(card, self._fonts), cx + ox,
+            self._blit_card(surface, self._face(card), cx + ox,
                             cy + 60 * u + oy, alpha=int(255 * (1.0 - u)))
         n = len(self._chosen)
         for k, idx in enumerate(self._chosen):
@@ -742,7 +751,7 @@ class PackOpeningScene:
             radius = int(150 * scale)
             surface.blit(soft_glow(scaled(col, 0.55), radius),
                          (int(x) - radius + ox, int(y) - radius + oy), special_flags=pygame.BLEND_RGB_ADD)
-            face = render_card_surface(card, self._fonts)
+            face = self._face(card)
             if card.chroma is not None:
                 face = chroma_fx.animate_card_face(face, card.chroma, self._time)
             self._blit_card(surface, face, x + ox, y + oy, scale, scale)
@@ -778,7 +787,8 @@ class PackOpeningScene:
             surface.blit(ss, sr)
 
             if self._hovered is not None and self._hovered < len(self._cards):
-                tip = card_tooltip(self._cards[self._hovered])
+                dmg, blk = self._bonus.for_card(self._cards[self._hovered])
+                tip = card_tooltip(self._cards[self._hovered], bonus_damage=dmg, bonus_block=blk)
                 draw_tooltip(surface, tip, self._mouse, self._fonts)
         elif phase != "outro":
             skip = self._fonts.get(12).render("Clic para saltar", True, colors.TEXT_SECONDARY)

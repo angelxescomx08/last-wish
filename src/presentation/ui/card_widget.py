@@ -27,7 +27,7 @@ from src.domain.numbers import BigValue
 from src.infrastructure import colors
 from src.infrastructure.card_assets import card_frame, card_illustration, card_layout
 from src.infrastructure.fonts import FontRegistry
-from src.presentation.fx import chroma_fx
+from src.presentation.fx import card_fx, chroma_fx
 from src.presentation.ui import rich_text
 
 # ---------------------------------------------------------------------------
@@ -69,10 +69,6 @@ _ATK_INK = (255, 150, 120)
 _DEF_INK = (150, 210, 255)
 _BONUS_INK = (140, 240, 140)
 _HOLE = (18, 16, 24)
-KEYWORD_READY_GLOW = (70, 225, 170)   # aura on cards whose Combo is ready
-SINGULAR_READY_GLOW = (185, 140, 255)  # aura on cards whose Singular is ready
-VOID_READY_GLOW = (90, 170, 255)       # aura on cards whose Vacío is ready
-SPOIL_READY_GLOW = (240, 150, 60)      # aura on cards whose Despojo is ready
 
 _CACHE_MAX = 256
 _cache: "OrderedDict[tuple, pygame.Surface]" = OrderedDict()
@@ -107,20 +103,6 @@ def _wrap(text: str, font: pygame.font.Font, max_w: int) -> list[str]:
     if current:
         lines.append(current)
     return lines or [""]
-
-
-def _keyword_glow(card: Card, combo: bool, singular: bool,
-                  void: bool = False, spoil: bool = False) -> tuple[int, int, int] | None:
-    """Aura colour for a card whose keyword is ready (Combo > Despojo > Vacío > Singular), or None."""
-    if combo and card.combo_effects():
-        return KEYWORD_READY_GLOW
-    if spoil and card.spoil_effects():
-        return SPOIL_READY_GLOW
-    if void and card.void_effects():
-        return VOID_READY_GLOW
-    if singular and card.singular_effects():
-        return SINGULAR_READY_GLOW
-    return None
 
 
 def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = False,
@@ -354,10 +336,10 @@ def draw_card(
     body = render_card_surface(card, fonts, affordable=affordable, bonus_damage=bonus_damage,
                                bonus_block=bonus_block, combo=combo, singular=singular, void=void,
                                spoil=spoil, cost=cost)
-    glow = _keyword_glow(card, combo, singular, void, spoil)
-    if glow is not None:
-        chroma_fx.draw_silhouette_aura(surface, body, rect.center, glow, chroma_fx.now(),
-                                       key=(CARD_W, CARD_H, card.rarity), speed=4.0)
+    ready = card_fx.ready_keywords(card, combo, singular, void, spoil)
+    if ready:                      # keyword condition met: aura behind, comets + badge in front
+        card_fx.draw_ready_back(surface, body, rect.center, ready, chroma_fx.now(),
+                                key=(CARD_W, CARD_H, card.rarity))
     if card.chroma is not None:
         t = chroma_fx.now()
         chroma_fx.draw_card_aura(surface, body, rect.center, card.chroma, t,
@@ -366,6 +348,8 @@ def draw_card(
     surface.blit(body, rect.topleft)
     if card.chroma is not None:
         chroma_fx.draw_motes(surface, rect, card.chroma, chroma_fx.now())
+    if ready:
+        card_fx.draw_ready_front(surface, rect.center, rect.size, ready, chroma_fx.now(), fonts)
 
     if selected or hovered:
         glow = _RARITY_COLOR.get(card.rarity, colors.CARD_HOVER)
@@ -424,10 +408,10 @@ def draw_card_at(
                                bonus_block=bonus_block, combo=combo, singular=singular, void=void,
                                spoil=spoil, cost=cost)
     tilt = int(round(angle))
-    glow = _keyword_glow(card, combo, singular, void, spoil)
-    if glow is not None:   # keyword ready: pulsing aura hugging the card
-        chroma_fx.draw_silhouette_aura(surface, body, (round(center[0]), round(center[1])), glow,
-                                       chroma_fx.now(), key=(w, h, card.rarity), angle=tilt, speed=4.0)
+    ready = card_fx.ready_keywords(card, combo, singular, void, spoil)
+    if ready:              # keyword condition met: aura behind (comets + badge drawn on top below)
+        card_fx.draw_ready_back(surface, body, (round(center[0]), round(center[1])), ready,
+                                chroma_fx.now(), key=(w, h, card.rarity), angle=tilt)
     if card.chroma is not None:
         # Animated each frame, so it bypasses the rotation cache.
         t = chroma_fx.now()
@@ -455,4 +439,7 @@ def draw_card_at(
     rect = pygame.Rect(round(center[0]) - w // 2, round(center[1]) - h // 2, w, h)
     if outline is not None and not tilt:
         pygame.draw.rect(surface, outline, rect.inflate(6, 6), 3, border_radius=12)
+    if ready:
+        card_fx.draw_ready_front(surface, (round(center[0]), round(center[1])), (w, h), ready,
+                                 chroma_fx.now(), fonts, angle=tilt)
     return rect

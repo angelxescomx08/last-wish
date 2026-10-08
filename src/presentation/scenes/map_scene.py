@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pygame
 
+from src.application.card_preview import run_card_bonus
 from src.domain.game_map import GameMap
 from src.domain.map_node import MapNode, RoomType
 from src.domain.run import Run
@@ -358,7 +359,7 @@ class MapScene:
             self._sound.play_confirm()
             return
         if self._deck_collection_rect.collidepoint(pos):
-            self._overlay = PileViewer('Tu mazo', self._run.deck, self._fonts)
+            self._overlay = PileViewer('Tu mazo', self._run.deck, self._fonts, run_card_bonus(self._run))
             self._sound.play_card()
             return
         gm = self._run.current_map

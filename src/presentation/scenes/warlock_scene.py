@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pygame
 
+from src.application.card_preview import run_card_bonus
 from src.application.warlock import buy_upgrade, can_buy_upgrade, upgrade_price
 from src.domain.card import Card
 from src.domain.card_upgrade import can_upgrade, describe_upgrade, upgraded_preview
@@ -73,7 +74,8 @@ class _UpgradeGrid(CollectionViewer):
         label = self._fonts.get(15).render(text, True, color)
         surface.blit(label, label.get_rect(centerx=rect.centerx, centery=rect.y + 24))
         shown = upgraded_preview(item) if self.show_upgraded and can_upgrade(item) else item
-        draw_card(surface, shown, rect.x + 20, rect.y + 44, self._fonts)
+        dmg, blk = run_card_bonus(self._run).for_card(shown)
+        draw_card(surface, shown, rect.x + 20, rect.y + 44, self._fonts, bonus_damage=dmg, bonus_block=blk)
         if not can_buy_upgrade(self._run, item):
             dim = pygame.Surface((CARD_W, CARD_H), pygame.SRCALPHA)
             dim.fill((0, 0, 0, 130))
@@ -90,7 +92,9 @@ class _UpgradeGrid(CollectionViewer):
         surface.blit(label, label.get_rect(center=self.toggle_rect.center))
 
     def _tooltip(self, item):
-        tip = card_tooltip(upgraded_preview(item) if self.show_upgraded and can_upgrade(item) else item)
+        shown = upgraded_preview(item) if self.show_upgraded and can_upgrade(item) else item
+        dmg, blk = run_card_bonus(self._run).for_card(shown)
+        tip = card_tooltip(shown, bonus_damage=dmg, bonus_block=blk)
         if can_upgrade(item):
             extra = [f"Al mejorarla: {describe_upgrade(item)}",
                      f"Precio: {upgrade_price(item)} de oro"]
@@ -216,8 +220,10 @@ class WarlockScene:
 
         preview = upgraded_preview(card)
         top = _PANEL.top + 70
-        draw_card(surface, card, cx - 60 - CARD_W, top, self._fonts)
-        draw_card(surface, preview, cx + 60, top, self._fonts)
+        bonus = run_card_bonus(self._run)
+        for shown, x in ((card, cx - 60 - CARD_W), (preview, cx + 60)):
+            dmg, blk = bonus.for_card(shown)
+            draw_card(surface, shown, x, top, self._fonts, bonus_damage=dmg, bonus_block=blk)
         arrow = self._fonts.get(40).render('→', True, _ACCENT)
         surface.blit(arrow, arrow.get_rect(center=(cx, top + CARD_H // 2)))
 

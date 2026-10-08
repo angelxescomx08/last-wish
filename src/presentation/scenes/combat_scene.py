@@ -9,6 +9,7 @@ from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
+from src.application.card_preview import combat_card_bonus
 from src.application.enemy_ai import intent_hit_damage
 from src.domain.entities import BLADES, IntentType, status_stacks
 from src.infrastructure.enemy_sprites import sheet_for_enemy
@@ -963,20 +964,23 @@ class CombatScene:
             self._sound.play_confirm()
             return
         if self._hand_collection_rect.collidepoint(pos):
-            self._overlay = PileViewer('Tu mano', list(self._state.hand.cards), self._fonts)
+            self._overlay = PileViewer('Tu mano', list(self._state.hand.cards), self._fonts,
+                                       combat_card_bonus(self._state))
             self._sound.play_card()
             return
         # Pile viewers
         if self._draw_pile_rect and self._draw_pile_rect.collidepoint(pos):
             self._overlay = PileViewer(
-                "Pila de Robo", list(self._state.draw_pile.cards), self._fonts
+                "Pila de Robo", list(self._state.draw_pile.cards), self._fonts,
+                combat_card_bonus(self._state),
             )
             self._sound.play_card()
             return
 
         if self._disc_pile_rect and self._disc_pile_rect.collidepoint(pos):
             self._overlay = PileViewer(
-                "Pila de Descarte", list(self._state.discard_pile.cards), self._fonts
+                "Pila de Descarte", list(self._state.discard_pile.cards), self._fonts,
+                combat_card_bonus(self._state),
             )
             self._sound.play_card()
             return

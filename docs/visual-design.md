@@ -384,3 +384,12 @@ in glass (level = mana, splash on spend, glow on refill, shake when a card can't
 Text on the HUD is always outlined. The hero sheet uses the same frames: one row per stat,
 base in the stat colour and bonus in green.
 
+## Ready keyword effect and main menu (2026-10-07)
+
+A card whose keyword condition is met ("¡Combo activo!") must be obvious in the hand, and
+still read on top of a golden card. Rule: **chromas own the face** (gilded frame, sheen,
+halo, floating motes); **ready keywords own the border and the space above** (comets
+travelling the edge with trails in the keyword colour, corner flares, a badge with the
+keyword icon above the card). Several ready keywords share the badge and cycle the aura
+colour. The main menu uses the same room, kit buttons and title glow as the game.
+

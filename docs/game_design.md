@@ -90,6 +90,11 @@ tooltip que lo explica. Pasar el ratón por una insignia muestra su regla.
   Robo y Mano máxima con barra base + bonus (verde), de dónde viene cada punto (reliquia,
   Pruebas, este combate) y qué hace; oro, piso, mazo por tipo, reliquias y probabilidades
   de dorado/Épica según la Suerte.
+- **Cartas listas**: si la condición de Combo, Singular, Vacío o Despojo se cumple, la carta
+  brilla con su color, unos cometas recorren su borde y sale un cartel ("¡COMBO!") encima;
+  se ve también sobre las cartas doradas.
+- **Números de las cartas**: en recompensas, sobres, el mazo y El Brujo las cartas muestran
+  el daño y el escudo con tus estadísticas, igual que en la mano.
 - **HUD pixel art**: barra superior de hierro con remate dorado, botón Terminar turno dorado
   (late cuando no queda nada que jugar; gris durante el turno enemigo), orbe de maná con
   líquido animado, pilas de cartas dibujadas y botones de Pausa (Esc) y Héroe (C).
