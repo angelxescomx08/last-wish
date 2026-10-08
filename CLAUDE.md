@@ -138,7 +138,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `combat_manager.py` | `create_sample_combat()` → `CombatState` | Builds the sample battle (used for dev/testing), calls `draw_opening_hand` |
 | `combat_factory.py` | `create_combat_for_character(character)` → `CombatState`; `create_combat_from_run(run, enemies)` → `CombatState` | Builds battles from a selected character or a live run; `create_combat_from_run` starts with no relics |
 | `map_generator.py` | `generate_map(seed, floor)` → `GameMap` | Seeded map generation with **orthogonal-only edges** (horizontal = same row adjacent col; vertical = same col adjacent row). Rows = min(7 + (floor-1)//2, 12), cols = min(5 + (floor-1)//3, 8), paths = min(3 + (floor-1)//3, 6). Horizontal edges are bidirectional (player can walk sideways before ascending). Nodes with no upward connection are optional side rooms. |
-| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory(run, hp, enemies, bonus_gold=0)`, `generate_event_gold`, `pick_treasure_relic`, `pick_treasure_relics` (2 with Llave Maestra), `pick_boss_relics`, `shop_price(run, base)`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
+| `run_manager.py` | `create_run(character, seed)` → `Run`; `generate_enemies`, `generate_boss`, `apply_combat_victory(run, hp, enemies, bonus_gold=0)`, `gain_gold(run, amount)` → interest (every gold *gain* goes through it: combat victories and events), `generate_event_gold`, `pick_treasure_relic`, `pick_treasure_relics` (2 with Llave Maestra), `pick_boss_relics`, `shop_price(run, base)`, `advance_floor` | Full roguelike run lifecycle: create, populate rooms, advance floors |
 | `card_rewards.py` | `allowed_card_classes(run)`; `pick_reward_cards(run, room_id, count=3)` → `list[Card]`; `pick_pack_cards(run, theme, count=5)` → `list[Card]`; `lucky_cards(run, seed, exclude)` | Seeded card reward selection after combat and pack opening, filtered to the run's allowed classes (packs topped up from other themes if ever short), plus luck's "Cartas de la suerte" at the end (`Card.lucky_drop`). Seeds use `zlib.crc32(room_id)` (stable across runs) |
 
 ### Infrastructure layer — `src/infrastructure/`
@@ -370,6 +370,8 @@ A full roguelike run persists state across rooms via the `Run` domain object and
 | `current_map` | `GameMap` | The current floor's node map |
 | `current_room_id` | `str \| None` | ID of the room the player is currently in |
 | `gacha_pulls` | `int` | Gachapón pulls made this run (every pull raises the next price) |
+| `interest_earned` | `int` | Gold paid by Interés Compuesto this run (the manager notes the growth on the gold counter) |
+| `last_interest` | `int` | Interest paid by the latest `gain_gold` (0 if none; reward screens show it) |
 
 Mutation methods: `add_card(card)`, `add_relic(relic)`, `apply_combat_result(hp_after)`.
 
@@ -801,7 +803,7 @@ Cards and relics share **five tiers**: Común, Poco común, Rara, Épica, Legend
 | Común | Saco de Trapos (Pícara), Bolsa de Dagas (Pícara), Máscara del Ladrón |
 | Poco común | Corazón de Hierro, Orbe de Fuego, Broche de Evasión, Cuchillo Arrojadizo, Pañuelo del Duelista, Garfio, Vaina Afilada, Frasco de Veneno (Pícara); Moneda de la Suerte, Herradura de Plata |
 | Rara | Tótem Roto, Piedra de Energía, Cinta Roja, Bolsillo Roto, Colmillo de Víbora (Pícara), Guante de Seda, Botas Silenciosas |
-| Épica | Amuleto de Combate, Hilo de Araña, Llave Maestra |
+| Épica | Amuleto de Combate, Hilo de Araña, Llave Maestra, Interés Compuesto |
 | Legendaria | Escudo Espectral, Trébol de Siete Hojas, Ankh, Espejo Singular, Panacea, Fuente Eterna, Daga Partida (Pícara), Reloj Roto |
 
 Luck = `run.character.stats.luck` (Guerrera 2, Mago 5, Pícara 8). It no longer draws cards.
@@ -835,6 +837,7 @@ boss reward and shop). The relic tooltip shows "Solo para …" for class relics.
 |---|---|---|---|---|
 | Amuleto de Vitalidad | `VITALITY_AMULET` | Neutral | Común | +10 max HP (`max_hp_bonus`) |
 | Trébol de Siete Hojas | `SEVEN_LEAF_CLOVER` | Neutral | Legendaria | +100 luck (`luck_bonus`) |
+| Interés Compuesto | `COMPOUND_INTEREST` | Neutral | Épica | Every gold gain (`run_manager.gain_gold`) adds 10 % of the total gold after the gain, rounded down (golden 20 %); the interest itself earns none (`compound_interest_percent`) |
 | Espejo Singular | `SINGULAR_MIRROR` | Neutral | Legendaria | On pickup: removes repeated cards, one copy of each kept (golden copy preferred) |
 | Ankh | `ANKH` | Neutral | Legendaria | Fatal hit: revive at full HP, once (golden: twice) (`try_ankh`) |
 | Broche de Evasión | `EVASION_BROOCH` | Pícara | Poco común | A card's Combo resolves: +1 block |
@@ -1055,4 +1058,21 @@ nothing on screen showed it. Now:
   gachapón.
 - `card_rewards._reward_seed` now hashes the room id with `zlib.crc32` (the old `hash()` was
   salted per process, so rewards were not reproducible from the seed).
+
+## Interés Compuesto (2026-10-07)
+
+User: a neutral relic "interés compuesto": every time you get gold, gain 10 % of your total
+gold; pick its rarity. Chosen tier: **Épica** — it is a pure economy relic with no combat
+power, but it snowballs (more gold → more shop/gachapón → more power), so above Rara; not
+Legendaria because it does nothing in a fight.
+
+- `RelicTag.COMPOUND_INTEREST` (Épica), relic `r_interest` "Interés Compuesto" (neutral,
+  sprite `item/gold/gold_pile_25.png`), `relic_effects.compound_interest_percent` (10, golden 20, stacks).
+- `run_manager.gain_gold(run, amount)` is the single entry point for gold gains (combat
+  victory incl. Carterista gold, events): adds the gain, then `gold × % // 100`; 0/negative
+  gains pay nothing; spending never pays. Records `Run.last_interest` / `interest_earned`.
+- Feedback: the gold counter shows "+N interés" (purple, one line under the gain, a beat
+  later — `GoldHud.note`, delayed entries hidden while age < 0); combat and boss reward
+  screens print "Oro obtenido: +X  (+N de interés)".
+- Tests: `tests/application/test_compound_interest.py`; `test_relic` tag count now 35.
 

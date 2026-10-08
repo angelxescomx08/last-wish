@@ -224,6 +224,7 @@ RELIC_SPRITE_PATHS: dict[str, str] = {
     "Hilo de Araña":         "item/misc/misc_disc_new.png",
     "Llave Maestra":         "item/misc/key.png",
     "Reloj Roto":            "item/misc/misc_lamp_old.png",
+    "Interés Compuesto":     "item/gold/gold_pile_25.png",
 }
 
 

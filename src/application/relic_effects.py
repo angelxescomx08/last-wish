@@ -70,6 +70,11 @@ def max_mana_per_turn(relics: list[Relic]) -> int:
     return _sum(relics, RelicTag.ETERNAL_FOUNT, 1)
 
 
+def compound_interest_percent(relics: list[Relic]) -> int:
+    """Interés Compuesto: % of your total gold added every time you gain gold (golden: x2)."""
+    return _sum(relics, RelicTag.COMPOUND_INTEREST, 10)
+
+
 def luck_bonus(relics: list[Relic]) -> int:
     """Extra luck from relics (Trébol de Siete Hojas: +100, Herradura de Plata: +30)."""
     return (_sum(relics, RelicTag.SEVEN_LEAF_CLOVER, 100)

@@ -100,6 +100,11 @@ class GoldHud:
         self._deltas.clear()
         self._synced = True
 
+    def note(self, text: str, color=(200, 160, 255)) -> None:
+        """Float an extra label from the counter (e.g. "+12 interés")."""
+        self._deltas.append([text, color, -0.25, -2])     # starts a beat after, one line below the gain
+        del self._deltas[:-_MAX_DELTAS]
+
     def update(self, dt: float, amount: int) -> None:
         dt = min(0.1, max(0.0, dt))
         self._time += dt
@@ -183,9 +188,13 @@ class GoldHud:
             pygame.draw.circle(surface, (140, 90, 20), (cx, cy), 9, 2)
         surface.blit(number, number.get_rect(midleft=(rect.x + 46, rect.centery)))
         for text, color, age, direction in self._deltas:
-            img = self._outlined(text, 20, color)
+            if age < 0:                             # delayed note: not shown yet
+                continue
+            img = self._outlined(text, 20 if direction != -2 else 16, color)
             img.set_alpha(int(255 * max(0.0, 1 - age / 1.3)))
-            if direction < 0:                       # gains rise up towards the plate
+            if direction == -2:                     # note under the gain (interest…)
+                y = rect.bottom + 56 - min(1.0, age / 0.5) * 18
+            elif direction < 0:                     # gains rise up towards the plate
                 y = rect.bottom + 34 - min(1.0, age / 0.5) * 18
             else:                                   # losses drop away from it
                 y = rect.bottom + 16 + age * 22

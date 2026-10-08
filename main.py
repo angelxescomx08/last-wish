@@ -14,6 +14,7 @@ from src.application.run_manager import (
     generate_boss,
     generate_enemies,
     generate_event_gold,
+    gain_gold,
     pick_boss_relics,
     pick_treasure_relics,
     create_run,
@@ -115,6 +116,7 @@ class SceneManager:
         self._ui_time = 0.0
         self._gold_hud = GoldHud(fonts)       # shared gold counter on every run screen
         self._gold_run_id: int | None = None
+        self._interest_seen = 0
 
     # ------------------------------------------------------------------
     # Stack operations
@@ -231,6 +233,10 @@ class SceneManager:
         if self._gold_run_id != id(run):          # a new run: show its gold without counting
             self._gold_run_id = id(run)
             self._gold_hud.sync(run.gold)
+            self._interest_seen = run.interest_earned
+        if run.interest_earned > self._interest_seen:     # Interés Compuesto paid out
+            self._gold_hud.note(f"+{run.interest_earned - self._interest_seen} interés")
+            self._interest_seen = run.interest_earned
         self._gold_hud.update(dt, run.gold)
 
     @property
@@ -447,7 +453,7 @@ class SceneManager:
             return
         scene.cleared = False
         run = self._run
-        run.gold += scene._gold
+        gain_gold(run, scene._gold)
         self.pop()
 
     def _t_boss_reward(self, scene: BossRewardScene) -> None:

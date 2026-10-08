@@ -45,6 +45,7 @@ class RelicTag(Enum):
     SPIDER_THREAD   = "spider_thread"    # acabar el turno sin cartas en la mano → +6 de escudo
     MASTER_KEY      = "master_key"       # los tesoros ofrecen 2 reliquias a elegir
     BROKEN_CLOCK    = "broken_clock"     # 1 vez por combate: a 0 de maná con cartas en mano, recupéralo
+    COMPOUND_INTEREST = "compound_interest"  # cada vez que ganas oro, +10 % de tu oro total
 
 
 # Tier of each relic (same five tiers as cards). Luck makes higher tiers likelier.
@@ -83,6 +84,7 @@ RELIC_RARITY: dict[RelicTag, Rarity] = {
     RelicTag.SPIDER_THREAD:   Rarity.EPIC,
     RelicTag.MASTER_KEY:      Rarity.EPIC,
     RelicTag.BROKEN_CLOCK:    Rarity.LEGENDARY,
+    RelicTag.COMPOUND_INTEREST: Rarity.EPIC,
 }
 
 

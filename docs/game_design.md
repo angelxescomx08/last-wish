@@ -277,6 +277,7 @@ Torbellino, Veneno, Lluvia de Golpes, Tormenta de Veneno, Mazo Impecable y Finta
 | Botas Silenciosas | En el primer turno de cada combate robas 2 cartas extra. | Rara | ✅ |
 | Hilo de Araña | Si terminas el turno sin cartas en la mano, ganas 6 de escudo. | Épica | ✅ |
 | Llave Maestra | Las salas del tesoro te dejan elegir entre 2 reliquias. | Épica | ✅ |
+| Interés Compuesto | Cada vez que ganas oro, ganas además un 10% de tu oro total (tras sumar la ganancia, redondeado hacia abajo; dorada 20%). El interés no genera más interés. | Épica | ✅ |
 | Reloj Roto | Una vez por combate, al quedarte en 0 de maná con cartas en la mano, recuperas todo el maná. | Legendaria | ✅ |
 
 ### Pícara

@@ -150,8 +150,26 @@ def apply_combat_victory(run: Run, hp_after: int, enemies: list[Enemy], bonus_go
     new_hp = min(hp_after + heal, run.player_max_hp)
     run.apply_combat_result(new_hp)
     gold = _combat_gold(run, enemies) + max(0, bonus_gold)
-    run.gold += gold
+    gain_gold(run, gold)
     return gold
+
+
+def gain_gold(run: Run, amount: int) -> int:
+    """Add ``amount`` gold (every gold *gain* of the run goes through here). Returns the interest.
+
+    Interés Compuesto: after the gain, add ``compound_interest_percent`` % of the new
+    total (rounded down). The interest itself does not earn more interest. Recorded in
+    ``Run.last_interest`` (0 when none) and ``Run.interest_earned``.
+    """
+    run.last_interest = 0
+    if amount <= 0:
+        return 0
+    run.gold += amount
+    interest = run.gold * relic_effects.compound_interest_percent(run.relics) // 100
+    run.gold += interest
+    run.last_interest = interest
+    run.interest_earned += interest
+    return interest
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +273,9 @@ def _all_relic_defs() -> list[Relic]:
               tag=RelicTag.SPIDER_THREAD),
         Relic("r_key",      "Llave Maestra",
               "Las salas del tesoro te dejan elegir entre 2 reliquias.", tag=RelicTag.MASTER_KEY),
+        Relic("r_interest", "Interés Compuesto",
+              "Cada vez que ganas oro, ganas además un 10% de tu oro total.",
+              tag=RelicTag.COMPOUND_INTEREST),
         Relic("r_clock",    "Reloj Roto",
               "Una vez por combate, al quedarte en 0 de maná con cartas en la mano, recuperas todo el maná.",
               tag=RelicTag.BROKEN_CLOCK),

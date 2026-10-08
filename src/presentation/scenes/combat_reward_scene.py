@@ -43,6 +43,7 @@ class CombatRewardScene:
         self._run          = run
         self._bonus        = run_card_bonus(run)     # same numbers as in the hand
         self._gold_earned  = gold_earned
+        self._interest     = getattr(run, "last_interest", 0)   # Interés Compuesto
         self._cards        = cards
         self._fonts        = fonts
         self._card_rects:  list[pygame.Rect] = []
@@ -78,7 +79,7 @@ class CombatRewardScene:
 
         # Gold
         g = self._fonts.get(18).render(
-            f"Oro obtenido: +{self._gold_earned}", True, pygame.Color(220, 190, 50)
+            f"Oro obtenido: +{self._gold_earned}" + (f"  (+{self._interest} de interés)" if self._interest else ""), True, pygame.Color(220, 190, 50)
         )
         surface.blit(g, g.get_rect(centerx=cx, centery=108))
 

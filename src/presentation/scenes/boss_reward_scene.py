@@ -56,6 +56,7 @@ class BossRewardScene:
         self._sound = sound if sound is not None else SoundPlayer()
         self._run          = run
         self._gold_earned  = gold_earned
+        self._interest     = getattr(run, "last_interest", 0)   # Interés Compuesto
         self._relics       = relics
         self._fonts        = fonts
         self._phase        = _Phase.GOLD
@@ -111,7 +112,7 @@ class BossRewardScene:
         surface.blit(t, t.get_rect(centerx=cx, centery=80))
 
         g = self._fonts.get(20).render(
-            f"Oro obtenido: +{self._gold_earned}", True, pygame.Color(220, 190, 50)
+            f"Oro obtenido: +{self._gold_earned}" + (f"  (+{self._interest} de interés)" if self._interest else ""), True, pygame.Color(220, 190, 50)
         )
         surface.blit(g, g.get_rect(centerx=cx, centery=150))
 
