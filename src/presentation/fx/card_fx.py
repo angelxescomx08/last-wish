@@ -203,3 +203,30 @@ def _draw_badge(surface, center, h, styles, t, fonts, scale, angle) -> pygame.Re
         surface.blit(text, (px, ty))
         px += text.get_width() + 10
     return rect
+
+
+# ---------------------------------------------------------------- "Carta de la suerte"
+
+LUCKY_COLOR: Color = (120, 230, 110)
+LUCKY_LIGHT: Color = (220, 255, 200)
+
+
+def draw_lucky_back(surface: pygame.Surface, rect: pygame.Rect, t: float) -> None:
+    """Green glow behind a card that luck added to a pack or reward (``Card.lucky_drop``)."""
+    pulse = 0.5 + 0.5 * math.sin(t * 4.0)
+    glow = soft_glow(tuple(int(c * (0.35 + 0.25 * pulse)) for c in LUCKY_COLOR), max(rect.w, rect.h) // 2 + 30)
+    surface.blit(glow, glow.get_rect(center=rect.center), special_flags=pygame.BLEND_RGB_ADD)
+
+
+def draw_lucky_front(surface: pygame.Surface, rect: pygame.Rect, t: float,
+                     fonts: FontRegistry | None = None) -> pygame.Rect | None:
+    """Clover sparks circling the card and a bobbing "¡SUERTE!" badge above it."""
+    for k in range(6):
+        u = t * 0.18 + k / 6
+        x, y = perimeter_point(u, rect.w + 10, rect.h + 10)
+        pygame.draw.rect(surface, LUCKY_LIGHT if k % 2 else LUCKY_COLOR,
+                         (rect.centerx + int(x) - 2, rect.centery + int(y) - 2, 4, 4))
+    if fonts is None:
+        return None
+    style = ReadyStyle("¡SUERTE!", LUCKY_COLOR, LUCKY_LIGHT, "clover")
+    return _draw_badge(surface, rect.center, rect.h + 4, [style], t, fonts, max(0.6, rect.w / 150), 0.0)

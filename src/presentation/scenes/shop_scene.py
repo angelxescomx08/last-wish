@@ -14,6 +14,8 @@ from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
 from src.presentation.fx import chroma_fx
 from src.presentation.ui.card_widget import _wrap
+from src.application.luck import luck_report
+from src.presentation.ui.luck_badge import draw_luck_badge
 
 _RELIC_COST = 150
 _TILE_W = 330
@@ -80,6 +82,7 @@ class ShopScene:
                                 self._hovered == (kind, i))
         if self._feedback_time > 0:
             self._label(surface, self._feedback_text, (cx, 601), 16, self._feedback_color)
+        draw_luck_badge(surface, "bottomleft", (16, 704), luck_report(self._run), self._fonts)
         self._exit_rect = pygame.Rect(cx - 80, 625, 160, 42)
         pygame.draw.rect(surface, colors.BG_PANEL, self._exit_rect, border_radius=6)
         self._label(surface, 'Salir', self._exit_rect.center, 16, colors.TEXT_PRIMARY)

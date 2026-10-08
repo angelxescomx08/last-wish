@@ -69,6 +69,27 @@ def rarity_odds(luck: int = 0, tiers: Sequence[Rarity] | None = None) -> dict[Ra
     return {t: (w / total if total > 0 else 0.0) for t, w in weights.items()}
 
 
+# "Carta de la suerte": packs and card rewards may add extra cards thanks to luck.
+LUCKY_CARD_LUCK: int = 100       # luck for a sure first lucky card (chance = luck / 100)
+
+
+def lucky_card_chances(luck: int) -> tuple[float, float]:
+    """Chance of a first and of a second lucky extra card (the second needs luck above 100)."""
+    luck = max(0, luck)
+    first = min(1.0, luck / LUCKY_CARD_LUCK)
+    second = min(1.0, max(0, luck - LUCKY_CARD_LUCK) / (2 * LUCKY_CARD_LUCK))
+    return first, second
+
+
+def lucky_card_count(luck: int, rng: random.Random) -> int:
+    """How many lucky extra cards a pack or a reward gets (0, 1 or 2; two rng calls)."""
+    first, second = lucky_card_chances(luck)
+    a, b = rng.random(), rng.random()
+    if a >= first:
+        return 0
+    return 2 if b < second else 1
+
+
 def luck_chroma_multiplier(luck: int = 0) -> float:
     """Factor applied to every chroma drop chance (1.0 with 0 luck)."""
     return 1.0 + LUCK_CHROMA_STEP * max(0, luck)

@@ -45,6 +45,7 @@ from src.presentation.ui.gold_hud import DEFAULT_POS as GOLD_HUD_POS
 from src.presentation.ui.gold_hud import GoldHud
 from src.presentation.scenes.warlock_scene import WarlockScene
 from src.application.card_preview import run_card_bonus
+from src.application.luck import luck_report
 from src.application.hero_stats import hero_sheet
 from src.presentation.ui.hero_sheet import HeroSheetOverlay
 from src.presentation.ui.pause_menu import (
@@ -422,7 +423,7 @@ class SceneManager:
             pack_name        = chroma_title(pack_def_for_theme(theme).name, chroma, masculine=True)
             self.push(PackOpeningScene(cards, pack_name, self._fonts, sound=self._sound,
                                        theme=theme.value, seed=run.floor, chroma=chroma,
-                                       bonus=run_card_bonus(run)))
+                                       bonus=run_card_bonus(run), luck=luck_report(run)))
 
         elif scene.cleared:
             scene.cleared = False
@@ -458,7 +459,7 @@ class SceneManager:
             name   = pack_def_for_theme(PackTheme.EPICO).name
             self.push(PackOpeningScene(cards, name, self._fonts, sound=self._sound,
                                        theme=PackTheme.EPICO.value, seed=run.floor,
-                                       bonus=run_card_bonus(run)))
+                                       bonus=run_card_bonus(run), luck=luck_report(run)))
 
         elif scene.cleared:
             scene.cleared = False

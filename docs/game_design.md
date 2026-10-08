@@ -95,6 +95,11 @@ tooltip que lo explica. Pasar el ratón por una insignia muestra su regla.
   se ve también sobre las cartas doradas.
 - **Números de las cartas**: en recompensas, sobres, el mazo y El Brujo las cartas muestran
   el daño y el escudo con tus estadísticas, igual que en la mano.
+- **Suerte en todo**: la Suerte (y el Trébol de Siete Hojas, +100) mejora las rarezas y el
+  dorado de recompensas, sobres, reliquias y gachapón, y además da **Cartas de la suerte**:
+  cartas extra (Rara o mejor) en sobres y recompensas — probabilidad Suerte/100 (con el Trébol,
+  siempre una) y una segunda por encima de 100 de Suerte. Se ve en un cartel de Suerte en la
+  tienda, los sobres y las recompensas, y con flechas verdes en las probabilidades del gachapón.
 - **HUD pixel art**: barra superior de hierro con remate dorado, botón Terminar turno dorado
   (late cuando no queda nada que jugar; gris durante el turno enemigo), orbe de maná con
   líquido animado, pilas de cartas dibujadas y botones de Pausa (Esc) y Héroe (C).
@@ -260,7 +265,7 @@ Torbellino, Veneno, Lluvia de Golpes, Tormenta de Veneno, Mazo Impecable y Finta
 | Reliquia | Efecto | Rareza | Estado |
 |---|---|---|---|
 | Amuleto de Vitalidad | +10 de vida máxima. | Común | ✅ |
-| Trébol de Siete Hojas | +100 de suerte (muchísima suerte). Referencia a Futurama. | Legendaria | ✅ |
+| Trébol de Siete Hojas | +100 de suerte: mejores rarezas y más dorado en sobres, recompensas, reliquias y gachapón, y siempre una Carta de la suerte extra en cada sobre y recompensa. Referencia a Futurama. | Legendaria | ✅ |
 | Ankh | Al recibir un golpe fatal, revives con toda tu vida (una vez). | Legendaria | ✅ |
 | Espejo Singular | Al obtenerla, elimina todas tus cartas repetidas: te quedas con una copia de cada carta. | Legendaria | ✅ |
 | Panacea | Eres inmune a cualquier debuff de los enemigos (p. ej. Débil). | Legendaria | ✅ |

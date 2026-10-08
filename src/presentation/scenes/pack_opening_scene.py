@@ -35,6 +35,8 @@ import random
 import pygame
 
 from src.application.card_preview import NO_BONUS, CardBonus
+from src.application.luck import LuckReport
+from src.presentation.ui.luck_badge import draw_luck_badge
 from src.domain.card import Card, CardRarity
 from src.domain.chroma import Chroma, effect_multiplier
 from src.infrastructure import colors
@@ -42,7 +44,7 @@ from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.card_assets import card_back, pack_art
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.fx.bursts import GLOW, SPARK, SQUARE, BurstParticles, scaled, soft_glow
-from src.presentation.fx import chroma_fx
+from src.presentation.fx import card_fx, chroma_fx
 from src.presentation.fx.particles import EmitterConfig, ParticleSystem
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card, render_card_surface
 from src.presentation.ui.tooltip import card_tooltip, draw_tooltip
@@ -113,7 +115,7 @@ def _rarity(card: Card) -> CardRarity:
 
 def _is_special(card: Card) -> bool:
     """Rare or better, or any chroma (golden…): gets anticipation and a halo."""
-    return _rarity(card).value >= CardRarity.RARE.value or card.chroma is not None
+    return _rarity(card).value >= CardRarity.RARE.value or card.chroma is not None or card.lucky_drop
 
 
 def _reveal_palette(card: Card) -> tuple[Color, ...]:
@@ -137,9 +139,11 @@ class PackOpeningScene:
         seed: int = 0,
         chroma: Chroma | None = None,
         bonus: CardBonus = NO_BONUS,
+        luck: LuckReport | None = None,
     ) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
         self._bonus = bonus          # the hero's stats, so numbers match the hand
+        self._luck = luck            # shown bottom-left: what luck did to this pack's odds
         self._cards      = cards
         self._pack_name  = pack_name
         self._fonts      = fonts
@@ -563,6 +567,8 @@ class PackOpeningScene:
             self._veil.set_alpha(int(255 * min(1.0, self._flash)))
             surface.blit(self._veil, (0, 0))
         self._draw_ui(surface, phase)
+        if self._luck is not None:
+            draw_luck_badge(surface, "bottomleft", (16, 704), self._luck, self._fonts)
 
     def _draw_background_glow(self, surface: pygame.Surface, phase: str, ox: int, oy: int) -> None:
         if phase in ("intro", "idle", "charge"):
@@ -726,9 +732,15 @@ class PackOpeningScene:
             self._halo(surface, card, cx + ox, cy + oy - (20 if self._hovered == i else 0),
                        pulse * (1.25 if self._hovered == i else 1.0))
             dmg, blk = self._bonus.for_card(card)
+            if card.lucky_drop:                         # luck added this card: mark it
+                lift = -20 if (self._hovered == i or i in self._chosen) else 0
+                card_fx.draw_lucky_back(surface, pygame.Rect(start_x + i * (CARD_W + _GAP) + ox,
+                                                             _CARD_Y + oy + lift, CARD_W, CARD_H), self._time)
             rect = draw_card(surface, card, start_x + i * (CARD_W + _GAP) + ox, _CARD_Y + oy,
                              self._fonts, hovered=(self._hovered == i), selected=(i in self._chosen),
                              bonus_damage=dmg, bonus_block=blk)
+            if card.lucky_drop:
+                card_fx.draw_lucky_front(surface, rect, self._time, self._fonts)
             self._card_rects.append(rect.move(-ox, -oy))
 
     def _draw_outro(self, surface: pygame.Surface, ox: int, oy: int) -> None:

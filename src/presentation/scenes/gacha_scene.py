@@ -46,6 +46,8 @@ from src.presentation.fx import chroma_fx
 from src.presentation.fx.bursts import GLOW, SPARK, SQUARE, BurstParticles, scaled, soft_glow
 from src.presentation.ui.card_widget import RARITY_COLOR, _wrap
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
+from src.application.luck import luck_report
+from src.infrastructure.ui_icons import ui_icon
 
 Color = tuple[int, int, int]
 
@@ -1082,15 +1084,27 @@ class GachaScene:
         self._label(surface, "Probabilidades", (box.centerx, top + 16), 15, colors.TEXT_ACCENT)
         self._label(surface, "Normal", (x0 + 178, top + 40), 12, colors.TEXT_SECONDARY)
         self._label(surface, "Estelar", (x0 + 246, top + 40), 12, (255, 220, 140))
+        report = luck_report(self._run)
+        lucky = report.bonus > 0
+        clover = ui_icon("clover", 1)
+        if clover is not None:
+            surface.blit(clover, clover.get_rect(midleft=(x0 + 12, top + 40)))
+        self._label_left(surface, f"Suerte {report.luck}" + (" ▲" if lucky else ""), (x0 + 30, top + 40), 12,
+                         (140, 240, 120) if lucky else colors.TEXT_SECONDARY)
         normal = gacha_odds(self._run, PullKind.NORMAL)
         stellar = gacha_odds(self._run, PullKind.STELLAR)
+        base = {PullKind.NORMAL: report.gacha(PullKind.NORMAL, base=True),
+                PullKind.STELLAR: report.gacha(PullKind.STELLAR, base=True)}
         for i, rarity in enumerate(_TIERS):
             y = top + 66 + i * 32
             col = tier_color(rarity)
             pygame.draw.rect(surface, col, (x0 + 14, y - 6, 12, 12), border_radius=3)
             self._label_left(surface, rarity_label(rarity), (x0 + 34, y), 14, col)
-            for cx, odds in ((x0 + 178, normal), (x0 + 246, stellar)):
+            for cx, odds, kind in ((x0 + 178, normal, PullKind.NORMAL), (x0 + 246, stellar, PullKind.STELLAR)):
                 p = odds[rarity]
+                up = p > base[kind][rarity] + 0.0005          # your luck raised this tier
+                if up and rarity.value >= 2:
+                    self._label(surface, "▲", (cx + 31, y - 2), 10, (140, 240, 120))
                 bar = int(52 * p)
                 pygame.draw.rect(surface, scaled(col, 0.35), (cx - 26, y + 8, 52, 3))
                 if bar:

@@ -136,8 +136,8 @@ class TestRewardsRespectClasses:
             allowed = allowed_card_classes(run)
             for theme in PackTheme:
                 cards = pick_pack_cards(run, theme)
-                assert len(cards) == PACK_SIZE
-                assert len({c.id for c in cards}) == PACK_SIZE
+                assert len([c for c in cards if not c.lucky_drop]) == PACK_SIZE   # + luck's extra cards
+                assert len({c.id for c in cards}) == len(cards)
                 assert all(c.card_class in allowed for c in cards)
 
     @pytest.mark.parametrize("cid", list(CharacterId))

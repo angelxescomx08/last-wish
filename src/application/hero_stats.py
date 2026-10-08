@@ -160,8 +160,8 @@ def hero_sheet(run: Run, state: CombatState | None = None) -> HeroSheet:
     odds = rarity_odds(luck_total)
     epic = odds[Rarity.EPIC] + odds[Rarity.LEGENDARY]
     luck = HeroStat("luck", "Suerte", "clover", luck_total, stats.luck, tuple(luck_sources),
-                    f"Carta dorada {gold_card:.0%} · reliquia dorada {gold_relic:.0%} · "
-                    f"reliquia Épica o mejor {epic:.0%}.", reference=20)
+                    f"En sobres, premios y gachapón: Rara o mejor {odds[Rarity.RARE] + epic:.0%} · "
+                    f"carta dorada {gold_card:.0%}.", reference=20)
 
     # Robo y mano
     draw_sources = _per_relic(relics, lambda rs: relic_effects.extra_draw_per_turn(rs) - TUNING.extra_draw)

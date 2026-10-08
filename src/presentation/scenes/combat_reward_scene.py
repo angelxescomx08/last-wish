@@ -12,6 +12,9 @@ from __future__ import annotations
 import pygame
 
 from src.application.card_preview import run_card_bonus
+from src.application.luck import luck_report
+from src.presentation.fx import card_fx
+from src.presentation.ui.luck_badge import draw_luck_badge
 from src.domain.card import Card
 from src.domain.run import Run
 from src.infrastructure import colors
@@ -46,6 +49,7 @@ class CombatRewardScene:
         self._hovered:     int | None = None
         self._skip_rect:   pygame.Rect | None = None
         self._mouse:       tuple[int, int] = (0, 0)
+        self._t = 0.0
 
         self.cleared:      bool = False
         self.chosen_card:  Card | None = None
@@ -62,7 +66,7 @@ class CombatRewardScene:
             self._handle_click(event.pos)
 
     def update(self, dt: float) -> None:
-        pass
+        self._t += max(0.0, min(dt, 0.1))
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(_BG)
@@ -92,10 +96,15 @@ class CombatRewardScene:
         for i, card in enumerate(self._cards):
             cx_card = start_x + i * (CARD_W + _GAP)
             dmg, blk = self._bonus.for_card(card)
+            if card.lucky_drop:                        # luck added this card
+                card_fx.draw_lucky_back(surface, pygame.Rect(cx_card, card_y - (20 if self._hovered == i else 0),
+                                                             CARD_W, CARD_H), self._t)
             rect    = draw_card(
                 surface, card, cx_card, card_y, self._fonts,
                 hovered=(self._hovered == i), bonus_damage=dmg, bonus_block=blk,
             )
+            if card.lucky_drop:
+                card_fx.draw_lucky_front(surface, rect, self._t, self._fonts)
             self._card_rects.append(rect)
 
         # Skip button
@@ -108,6 +117,8 @@ class CombatRewardScene:
         pygame.draw.rect(surface, colors.BG_PANEL, self._skip_rect, border_radius=5)
         pygame.draw.rect(surface, colors.PANEL_BORDER, self._skip_rect, 1, border_radius=5)
         surface.blit(skip_surf, skip_rect)
+
+        draw_luck_badge(surface, "bottomleft", (16, 704), luck_report(self._run), self._fonts)
 
         # Tooltip
         if self._hovered is not None and self._hovered < len(self._cards):
