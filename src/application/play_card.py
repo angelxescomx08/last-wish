@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import Counter
+
 import random
 from dataclasses import dataclass, field
 from enum import Enum
@@ -24,6 +26,7 @@ class PlayResult:
     casts: int = 1          # times the card resolved (golden: 2)
     cast_hits: list[list[int]] = field(default_factory=list)   # per cast, HP lost by each enemy
     # Snapshots after each cast, so the UI can replay the casts one by one:
+    cast_drawn: list[int] = field(default_factory=list)       # cards that entered the hand per cast
     cast_enemy_hp: list[list[int]] = field(default_factory=list)
     cast_enemy_block: list[list[int]] = field(default_factory=list)
     cast_player_block: list[int] = field(default_factory=list)
@@ -119,8 +122,10 @@ def play_card(
     snap_hp: list[list[int]] = []
     snap_blk: list[list[int]] = []
     snap_player: list[int] = []
+    cast_drawn: list[int] = []
     for k in range(casts):
         before = [e.current_hp for e in state.enemies]
+        hand_before = Counter(id(c) for c in state.hand.cards)
         target = _cast_target(state, card, target_enemy_index, needs_target)
         _resolve_cast(state, card, combo, target, singular, void, damage_bonus, spoil,
                       extra_combo, extra_spoil)
@@ -131,6 +136,8 @@ def play_card(
         if k == casts - 1:          # relic triggers once per play, shown with the last cast
             relic_effects.on_card_played(state, card, combo, spoil=spoil)
             relic_effects.spread_poison(state)
+        hand_after = Counter(id(c) for c in state.hand.cards)
+        cast_drawn.append(sum((hand_after - hand_before).values()))
         cast_hits.append([b - e.current_hp for b, e in zip(before, state.enemies)])
         snap_hp.append([e.current_hp for e in state.enemies])
         snap_blk.append([e.block for e in state.enemies])
@@ -152,7 +159,7 @@ def play_card(
                + (" — ¡Combo!" if combo else "") + (" — ¡Singular!" if singular else "")
                + (" — ¡Vacío!" if void else "") + (" — ¡Despojo!" if spoil else ""))
     return PlayResult(True, message, combo=combo, singular=singular, void=void, spoil=spoil,
-                      casts=casts, cast_hits=cast_hits,
+                      casts=casts, cast_hits=cast_hits, cast_drawn=cast_drawn,
                       cast_enemy_hp=snap_hp, cast_enemy_block=snap_blk, cast_player_block=snap_player)
 
 

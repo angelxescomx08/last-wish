@@ -41,6 +41,18 @@ def card_layout() -> dict | None:
 
 
 def _load(path: Path) -> pygame.Surface | None:
+    """A source image, loaded from disk once (frames are ~1064×1478: reloading one for every
+    new card size was a visible hitch when a card shrank to the discard pile or a reward
+    screen opened). Missing files are remembered too."""
+    return _load_cached(str(path))
+
+
+@lru_cache(maxsize=160)
+def _load_cached(path: str) -> pygame.Surface | None:
+    return _load_uncached(Path(path))
+
+
+def _load_uncached(path: Path) -> pygame.Surface | None:
     try:
         surf = pygame.image.load(str(path))
     except (pygame.error, OSError, FileNotFoundError):
@@ -59,6 +71,24 @@ def card_frame(rarity: str, w: int, h: int) -> pygame.Surface | None:
     if src is None:
         return None
     return pygame.transform.smoothscale(src, (w, h))
+
+
+def prewarm(sizes: tuple[tuple[int, int], ...] = ()) -> int:
+    """Load every frame/back/placeholder source once, and scale the frames to ``sizes``.
+
+    Called at startup so no PNG is decoded in the middle of a fight or when a reward
+    screen opens. Returns how many surfaces are ready.
+    """
+    layout = card_layout()
+    ready = 0
+    paths = [CARDS_DIR / info["file"] for info in (layout or {}).get("frames", {}).values()]
+    paths += [CARD_BACK_PATH] + [_DCSS / rel for rel in PLACEHOLDER_ART.values()]
+    for path in paths:
+        ready += _load(path) is not None
+    for rarity in (layout or {}).get("frames", {}):
+        for w, h in sizes:
+            ready += card_frame(rarity, w, h) is not None
+    return ready
 
 
 @lru_cache(maxsize=8)

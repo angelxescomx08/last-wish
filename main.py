@@ -517,6 +517,14 @@ def _transform_mouse(event: pygame.event.Event, viewport: Viewport) -> pygame.ev
 # Bootstrap
 # ---------------------------------------------------------------------------
 
+def _prewarm_assets() -> None:
+    """Decode the card frames once at startup (and scale them to the common card sizes), so
+    the first reward screen or a card shrinking into the discard pile never stalls a frame."""
+    from src.infrastructure import card_assets
+    from src.presentation.ui.card_widget import card_size
+    card_assets.prewarm(tuple(card_size(k) for k in (1.0, 1.1, 1.3)))
+
+
 def run(settings: GameSettings) -> None:
     pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
     pygame.init()
@@ -531,6 +539,7 @@ def run(settings: GameSettings) -> None:
     fonts         = FontRegistry()
     prefs         = load_preferences()
     load_dev_settings()
+    _prewarm_assets()
     sound = SoundPlayer(sfx_volume=prefs.sfx_volume, music_volume=prefs.music_volume)
     sound.start_music()
     scene_manager = SceneManager(MainMenuScene(fonts, sound=sound), fonts, prefs, sound=sound)

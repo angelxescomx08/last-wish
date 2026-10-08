@@ -151,7 +151,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
-| `card_assets.py` | `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
+| `card_assets.py` | Source PNGs decoded once (`_load` → `_load_cached`, also remembers missing files); `prewarm(sizes)` (called by `main._prewarm_assets` at startup) decodes every frame/back/placeholder and scales the frames to the common card sizes. `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
 | `enemy_sprites.py` | Animated enemy sheets from `assets/enemies/<id>_sheet.png/json` (written by `scripts/generate_enemy_sprites.py`, `scripts/generate_enemy_<id>.py` and `scripts/generate_boss_*.py`). `ENEMY_SHEET_IDS` (name → id, `"Espectro"` → `wraith`, the ten regular enemies, bosses → `mycelid`/`weaver`/`knight`), `REGULAR_SHEET_IDS`, `BOSS_SHEET_IDS`, `EnemySheet.terminal` (clips that end the enemy like death: the Seta's `explode`); boss data on `EnemySheet`: `strike_seconds(anim)`, `animation_for_move(move_id, fallback)`, `is_boss`, `blade_frames`, `top`, `enemy_sheet_id`, `load_enemy_sheet(id)` (cached; cells scaled ×2 nearest) → `EnemySheet` (`size`, `anchor`, `animations`, `frames`, `frame(anim, elapsed)`, `seconds(anim)`), `sheet_for_enemy(name)`; `None` when missing |
 | `ui_icons.py` | `ui_icon(name, scale=2)` (cached, nearest) / `has_ui_icon(name)` from `assets/ui/icons.png` + `icons.json` (written by `scripts/generate_ui_icons.py`): intent icons 18 px (`attack_1`…`attack_4`, `defend`, `buff`, `debuff`, `cards`, `unknown`, `lethal`), status/keyword icons 14 px (one per status, `status_buff`/`status_debuff` fallbacks, `block`, `junk_card`, `combo`, `singular`, `void`, `spoil`, `exhaust`, `ethereal`, `unplayable`, `damage`, `draw`, `mana`, `heal`); `None` when missing |
 | `ui_kit.py` | HUD kit from `assets/ui/kit.png` + `kit.json` (written by `scripts/generate_ui_kit.py`): `kit_piece(name, scale=2)`, `kit_slice(name, w, h, scale=2)` (9-slice / 3-slice with **tiled** edges and centre, exact size, cached), `has_kit`, `kit_names`. Pieces: `panel`, `btn_{bronze,gold}_{idle,hover,press,off}`, `orb_back/frame/glass`, `orb_liquid_0..7`, `pile_draw/discard/empty`, `topbar`, `trim`, `ribbon` |
@@ -189,6 +189,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fx/card_fx.py` | "Ready" effect for cards whose keyword condition holds (Combo, Singular, Vacío, Despojo): `ready_keywords(card, combo, singular, void, spoil)`, `READY_STYLES` (label, colour, light, icon per keyword), `draw_ready_back` (breathing aura behind; colours cycle when several are ready), `draw_ready_front` (comets running round the edge with trails, corner flares, bobbing "¡COMBO!" badge with icon; follows tilt and scale), `perimeter_point`, `comet_positions`, `current_color`. Shapes no chroma uses, so it reads on top of the golden sheen/halo/motes |
 | `ui/luck_badge.py` | `draw_luck_badge(surface, anchor, pos, report, fonts)`, `luck_line(report)` — kit plate "Suerte N ▲ · Rara o mejor X % · dorada Y % · carta extra Z %" (green when relics raise luck); shop, pack opening, card reward |
 | `fx/hero_fx.py` | `HeroFx(strike, seed)` — code-drawn hero only: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
+| `fx/card_deal.py` | Drawn cards fly in from the draw pile: `Deal(wait, start)` (`advance`, `waiting`, `progress`, `done`), `deal_pose(u, start, goal)` (arc above both ends, ease-out, scale with a small overshoot, tilt straightens), `flip_width(u)` (back narrows to an edge, face widens; done at `FLIP_END`), `draw_dealt_card(surface, face, pose, u)`, `DEAL_SECONDS`, `DEAL_STAGGER`, `TRAIL`/`TRAIL_GOLD` |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
 | `ui/gold_hud.py` | `GoldHud` (one instance in `SceneManager`): plate + spinning pixel coin + big outlined amount that counts towards the real gold, `+N`/`−N` labels, sparkles and border flash on change; `sync`, `update(dt, amount)`, `draw(surface, anchor, pos)`, `rect`; `format_gold`, `DEFAULT_POS` |
 | `ui/hud_widget.py` | Kit-drawn combat HUD: `draw_relics` (iron slots, rarity rim, hover lift), `draw_mana(…, orb=)`, `draw_pile_widget(…, hovered=)` (card-back stack + count badge, `PILE_W/PILE_H`), `draw_end_turn_button(…, hovered, pressed, enabled, ready, t)` (gold button, hourglass, key E; pulses when `ready`, "TURNO ENEMIGO" when disabled), `draw_turn_counter` (red ribbon) |
@@ -426,7 +427,7 @@ chromas with unusual behaviour. `Card.chroma` / `Relic.chroma` (None = normal).
   (golden: twice). `play_card` pays once, then `_resolve_cast` runs each full
   cast (damage + attack bonuses, block + dexterity, mana, every `on_play`,
   draws, combo layer), then the chroma hook. It counts as one card played.
-  `PlayResult` carries per-cast snapshots (`cast_hits`, `cast_enemy_hp`,
+  `PlayResult` carries per-cast snapshots (`cast_hits`, `cast_drawn`, `cast_enemy_hp`,
   `cast_enemy_block`, `cast_player_block`). `CombatScene` **replays** the casts:
   the card flies to a stage (`_CAST_STAGE`), each cast fires `_CAST_GAP` apart
   (hero attack, hit number, HP/block drawn step by step via `_shown_enemies`,
@@ -591,6 +592,7 @@ One test file per source module. All test files follow the same structure:
 | `presentation/scenes/test_combat_pairs.py` | sheets/styles, `EnemyAnimator` terminal clip, `CombatScene` with pairs, tooltips, extras, banners | explode latches and sparks, pair banner, survivor keeps its slot and animator, exploding enemy keeps drawing, victory waits for the blast, ¡VENGANZA! once, trio, 60-turn stress per encounter, identity/pair/lifesteal/explosion tooltip lines, intent extras, Mecha icon, banner texts, Pruebas row |
 | `test_enemy_roster_sprites.py` | `scripts/generate_enemy_<id>.py` (10 enemies) | Espectro art contract (idle loop, actions end on idle 0, fits the cell, death/explode end empty, flash, strike events, moves → clips, random poses, sheets on disk), every pattern move has a clip |
 | `application/test_luck.py` | `application/luck`, lucky cards in `card_rewards`, `rarity.lucky_card_*`, luck badge, screens | report with/without the Trébol, sources, monotonic, huge luck capped; the Trébol makes pack/reward cards rarer and more golden, shop packs golden, gachapón odds and pulls better (60 seeds); lucky-card chances 0/50/100/200/300/10^9, count range, Trébol guarantees one, Rara+, no duplicates, allowed classes, deterministic, rare for base heroes; badge text/anchor; shop/gachapón/reward/pack draw with luck and marks |
+| `presentation/fx/test_card_deal.py` | `fx/card_deal`, `PlayResult.cast_drawn`, deal in `CombatScene`, `card_assets` source cache/prewarm | easing/flip/arc/scale math, wait→flight, huge frame lands, drawing back/face/edge; draws per cast (normal, golden, none, empty pile); golden draw 2 → 2 cards after each cast, normal draw waits for the cast, waiting cards out of the fan and not clickable, pile/hand counts follow the screen, cards land in their slots, end turn (old hand to discard, new hand dealt after the enemy turn), opening hand staggered, redrawn card flies again, 20-play stress; frames decoded once |
 | `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
@@ -1116,4 +1118,29 @@ static sprites with random intents).
 - Tooltip: identity line ("Agresivo: …"), pair line, lines for every new extra; intent extra
   icons heal / block / status_buff / fuse; banners "da 8 de escudo a su compañero",
   "recupera N de vida", "¡explota y muere!".
+
+## Cast-by-cast draws, card deal animation, no end-of-combat hitch (2026-10-08)
+
+User: a golden "draw 2" card played its cast animation twice but all its cards appeared at
+once; each cast should resolve its effect in turn (cast → draw 2 with an animation → cast →
+draw 2), with a smoother, nicer draw animation; and a small lag sometimes when a combat ends.
+
+- **Draws follow their cast.** The rules still resolve instantly (`play_card`), and
+  `PlayResult.cast_drawn` says how many cards each cast put in the hand. `CombatScene._plan_draws`
+  turns that into deal delays: normal card `_DRAW_AFTER_CAST` (0.28 s), golden cast k
+  `_cast_time(k) + _DRAW_AFTER_GOLDEN_CAST`, `DEAL_STAGGER` between cards. New hand cards without
+  a plan (opening hand, cards an enemy adds…) are dealt one after another. End of turn: the old
+  hand flies to the discard pile and the new hand is dealt after `_DRAW_AFTER_ENEMY_TURN` (1.1 s).
+- **Deal animation** (`fx/card_deal.py`, `CombatScene._fly_card` / `_draw_dealt`): from the draw
+  pile, small and tilted, face down → arc upwards → flips in the air → straightens and settles
+  into its slot with a small overshoot, a trail of motes (gold for golden cards) and a spark on
+  landing; it aims at its slot as the fan opens. Waiting cards are not in the fan
+  (`_waiting_indices`; `_target_poses` lays out the rest), flying ones are not clickable
+  (`_dealing_indices`); the "Mano n/m" button and the draw pile count what is on screen. The
+  played card's key is dropped, so a card that draws itself back flies in again.
+- **Hitch fixed:** `card_assets._load` decoded the ~1064×1478 frame PNG again for every new card
+  size (a card shrinking into the discard pile, the first reward screen: 50–60 ms frames). Sources
+  are now cached and prewarmed at startup (reward screen first frame 59 → 12 ms in the container).
+  The pause before the reward screen itself is intended: victory waits for the death animation
+  (~1.1–1.3 s) and `_KILL_HOLD`.
 

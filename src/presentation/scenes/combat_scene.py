@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
 
 import pygame
 
+from src.presentation.fx.card_deal import (DEAL_STAGGER, FLIP_END, START_ANGLE, START_SCALE, TRAIL,
+                                          TRAIL_GOLD, Deal, deal_pose, draw_dealt_card)
 from src.application.enemy_roster import PAIRS, VENGEANCE_ID
 from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
@@ -32,7 +35,8 @@ from src.presentation.ui.pixel_ui import (
     ManaOrb, button_state, draw_button, draw_panel, draw_topbar, draw_trim, outlined,
 )
 from src.infrastructure.ui_icons import ui_icon
-from src.presentation.ui.card_widget import CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card, draw_card_at
+from src.presentation.ui.card_widget import (CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card,
+                                            draw_card_at, render_card_surface)
 from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
 from src.presentation.ui.entity_widget import (
     ENEMY_H,
@@ -96,6 +100,9 @@ _END_TURN_Y: int = 9
 _END_TURN_W: int = 196
 _END_TURN_H: int = 48
 _ENEMY_PHASE: float = 1.3      # seconds the End Turn button shows "Turno enemigo"
+_DRAW_AFTER_CAST: float = 0.28          # a card's draws leave the pile once its cast has played
+_DRAW_AFTER_GOLDEN_CAST: float = 0.22   # … after each golden cast fires
+_DRAW_AFTER_ENEMY_TURN: float = 1.1     # the new hand is dealt once the enemies have acted
 
 _ENEMY_SLOTS: list[tuple[int, int]] = [
     (762, _ENEMY_Y),
@@ -231,6 +238,12 @@ class CombatScene:
         self._mouse: tuple[int, int] = (0, 0)
         self._play = CardPlayInput(_PLAY_LINE_Y)
         self._motion: dict[tuple[int, int], CardPose] = {}
+        # Cards being dealt from the draw pile (fx/card_deal.py), and the delays the next new
+        # cards in hand will wait — set when a play or the turn start draws them, so each
+        # card arrives when it is really drawn (the second cast of a golden card, after
+        # the enemy turn…). Cards without a planned delay are dealt one after another.
+        self._deals: dict[tuple[int, int], Deal] = {}
+        self._deal_plan: list[float] = []
         self._leaving: list[list] = []         # [card, pose, age, bonus_dmg, bonus_blk]
         self._sequence: dict | None = None     # multi-cast replay in progress (golden cards)
         self._hold_time = 0.0                  # delay before victory after a killing blow
@@ -618,8 +631,9 @@ class CombatScene:
         cards = self._state.hand.cards
         poses = self._target_poses()
         held = self._held_index()
+        dealing = self._dealing_indices()
         self._card_rects = [_pose_rect(poses[i]) for i in range(len(cards))]
-        self._card_draw_order = [i for i in range(len(cards)) if i != held]
+        self._card_draw_order = [i for i in range(len(cards)) if i != held and i not in dealing]
         hovered = self._hovered_card if held is None else None
         if hovered in self._card_draw_order:
             self._card_draw_order.remove(hovered)
@@ -644,8 +658,11 @@ class CombatScene:
                 spoil        = self._state.spoil_ready(card),
             )
 
+        self._draw_dealt(surface, dealing)
+        waiting = len(self._waiting_indices())       # still "in the pile" on screen
+
         self._draw_pile_rect = draw_pile_widget(
-            surface, "ROBO", self._state.draw_pile.count,
+            surface, "ROBO", self._state.draw_pile.count + waiting,
             _DRAW_X, _DRAW_Y, self._fonts, hovered=self._hovered_draw_pile,
         )
         self._disc_pile_rect = draw_pile_widget(
@@ -654,9 +671,31 @@ class CombatScene:
         )
 
         hc = self._hand_collection_rect
-        draw_button(surface, hc, f"Mano {self._state.hand.count}/{self._state.hand.max_size}", self._fonts,
+        draw_button(surface, hc, f"Mano {self._state.hand.count - waiting}/{self._state.hand.max_size}", self._fonts,
                     icon="hand_cards", state=button_state(hc, self._mouse, self._mouse_down),
                     t=self._idle_time, size=14)
+
+    def _draw_dealt(self, surface: pygame.Surface, dealing: set[int]) -> None:
+        """Cards in flight from the draw pile: back → flip → face, on top of the hand."""
+        cards, keys = self._state.hand.cards, self._card_keys()
+        for i in sorted(dealing):
+            deal = self._deals.get(keys[i])
+            pose = self._motion.get(keys[i])
+            if deal is None or pose is None or deal.waiting:
+                continue
+            card = cards[i]
+            dmg, blk = self._bonuses(card)
+            u = deal.progress
+            if u < FLIP_END:
+                face = render_card_surface(card, self._fonts, bonus_damage=dmg, bonus_block=blk,
+                                           cost=self._state.card_cost(card),
+                                           affordable=self._state.mana.can_afford(self._state.card_cost(card)))
+                draw_dealt_card(surface, face, (pose.x, pose.y, pose.scale, pose.angle), u)
+            else:
+                draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
+                             angle=pose.angle, bonus_damage=dmg, bonus_block=blk,
+                             cost=self._state.card_cost(card),
+                             affordable=self._state.mana.can_afford(self._state.card_cost(card)))
 
     def _card_hit_order(self) -> list[int]:
         # Match actual stacking so the visible, raised card receives the click.
@@ -724,10 +763,26 @@ class CombatScene:
             x, y = _DRAW_X + 40, _DRAW_Y + 40
         return CardPose(float(x), float(y), 0.3, 0.0)
 
+    def _waiting_indices(self) -> set[int]:
+        """Hand cards not drawn on screen yet (their deal is still waiting)."""
+        keys = self._card_keys()
+        return {i for i, key in enumerate(keys) if (d := self._deals.get(key)) is not None and d.waiting}
+
+    def _dealing_indices(self) -> set[int]:
+        """Hand cards still waiting or flying in from the draw pile (not playable on screen yet)."""
+        keys = self._card_keys()
+        return {i for i, key in enumerate(keys) if key in self._deals}
+
     def _target_poses(self) -> dict[int, CardPose]:
         held = self._held_index()
         hovered = self._hovered_card if held is None else None
-        poses = _hand_layout(self._state.hand.count, hovered=hovered, held=held)
+        waiting = self._waiting_indices()
+        order = [i for i in range(self._state.hand.count) if i not in waiting]
+        sub = _hand_layout(len(order), hovered=order.index(hovered) if hovered in order else None,
+                           held=order.index(held) if held in order else None)
+        poses = {order[k]: pose for k, pose in sub.items()}
+        for i in waiting:
+            poses[i] = self._spawn_pose()
         if held is not None:
             if self._play.aiming or self._play.by_key:
                 poses[held] = CardPose(*_AIM_CENTER, _AIM_SCALE, 0.0)
@@ -736,17 +791,52 @@ class CombatScene:
                 poses[held] = CardPose(float(px), float(py), 1.0, 0.0)
         return poses
 
+    def _fly_card(self, key, pose: CardPose, goal: CardPose, deal: Deal, dt: float, card) -> bool:
+        """Move a dealt card along its arc. Returns False once it has landed (normal easing)."""
+        deal.advance(dt)
+        if deal.waiting:
+            pose.x, pose.y = deal.start
+            pose.scale, pose.angle = START_SCALE, START_ANGLE
+            return True
+        if deal.done:
+            del self._deals[key]
+            pose.x, pose.y, pose.scale, pose.angle = goal.x, goal.y, goal.scale, goal.angle
+            self._bursts.burst(goal.x, goal.y - 40, 8, palette=self._trail(card), speed=(40, 140),
+                               life=(0.2, 0.45), size=(1.5, 2.5), style=SPARK, drag=3.0, spread=30)
+            return False
+        x, y, scale, angle = deal_pose(deal.progress, deal.start, (goal.x, goal.y, goal.scale, goal.angle))
+        if dt > 0:                                        # a trail of motes behind it
+            vx, vy = (x - pose.x) / dt, (y - pose.y) / dt
+            for _ in range(2):
+                self._bursts.emit(x + random.uniform(-14, 14), y + random.uniform(-20, 20),
+                                  -vx * 0.08 + random.uniform(-30, 30), -vy * 0.08 + random.uniform(-30, 30),
+                                  life=random.uniform(0.25, 0.5), palette=self._trail(card),
+                                  size=random.uniform(1.5, 3.0), drag=2.5)
+        pose.x, pose.y, pose.scale, pose.angle = x, y, scale, angle
+        return True
+
+    @staticmethod
+    def _trail(card) -> tuple:
+        return TRAIL_GOLD if getattr(card, "chroma", None) is not None else TRAIL
+
     def _advance_cards(self, dt: float) -> None:
         poses = self._target_poses()
         held = self._held_index()
         keys = self._card_keys()
         k = 1.0 - math.exp(-_EASE * dt)
         k_held = 1.0 - math.exp(-_EASE_HELD * dt)
+        fresh = 0
         for i, key in enumerate(keys):
             pose = self._motion.get(key)
             if pose is None:
                 pose = self._motion[key] = self._spawn_pose()
+                delay = self._deal_plan.pop(0) if self._deal_plan else fresh * DEAL_STAGGER
+                fresh += 1
+                self._deals[key] = Deal(delay, (pose.x, pose.y))
             goal = poses[i]
+            deal = self._deals.get(key)
+            if deal is not None and self._fly_card(key, pose, goal, deal, dt, self._state.hand.cards[i]):
+                continue
             f = k_held if i == held else k
             pose.x += (goal.x - pose.x) * f
             pose.y += (goal.y - pose.y) * f
@@ -755,6 +845,8 @@ class CombatScene:
         live = set(keys)
         for key in [key for key in self._motion if key not in live]:
             del self._motion[key]
+        for key in [key for key in self._deals if key not in live]:
+            del self._deals[key]
         if self._disc_pile_rect is not None:
             dx, dy = self._disc_pile_rect.center
         else:
@@ -1096,7 +1188,8 @@ class CombatScene:
 
         self._play.cancel()
         played = state.hand.cards[card_idx] if 0 <= card_idx < state.hand.count else None
-        played_pose = self._motion.get(self._card_keys()[card_idx]) if played is not None else None
+        played_key = self._card_keys()[card_idx] if played is not None else None
+        played_pose = self._motion.get(played_key) if played is not None else None
         bonuses = self._bonuses(played) if played is not None else (0, 0)
 
         result = play_card(state, card_idx, target_idx)
@@ -1107,6 +1200,9 @@ class CombatScene:
         self._feedback_time = 0.0
         self._hovered_card = None
         self._sound.play_card()
+        self._motion.pop(played_key, None)        # if the same card is drawn again, it flies in
+        self._deals.pop(played_key, None)
+        self._plan_draws(result)
         if result.combo and self._player_rect:
             self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10, "¡COMBO!",
                               (90, 235, 180), lifetime=1.1)
@@ -1156,6 +1252,16 @@ class CombatScene:
     # ------------------------------------------------------------------
     # Multi-cast replay (golden cards cast twice)
     # ------------------------------------------------------------------
+
+    def _plan_draws(self, result) -> None:
+        """Cards a play put in the hand arrive after its cast — each golden cast's draws
+        right after that cast fires — one after another."""
+        plan: list[float] = []
+        drawn = list(result.cast_drawn) or [0]
+        for k, n in enumerate(drawn):
+            at = (self._cast_time(k) + _DRAW_AFTER_GOLDEN_CAST) if result.casts > 1 else _DRAW_AFTER_CAST
+            plan += [at + j * DEAL_STAGGER for j in range(n)]
+        self._deal_plan = plan
 
     def _cast_time(self, k: int) -> float:
         return _CAST_INTRO + k * _CAST_GAP
@@ -1350,7 +1456,15 @@ class CombatScene:
         self._play.cancel()
         self._sound.play_end_turn()
         self._enemy_phase = _ENEMY_PHASE
+        for card, key in zip(state.hand.cards, self._card_keys()):   # the hand flies to the discard
+            pose = self._motion.get(key)
+            if pose is not None and key not in self._deals:
+                self._leaving.append([card, CardPose(pose.x, pose.y, pose.scale, pose.angle), 0.0,
+                                      *self._bonuses(card)])
         end_player_turn(state)
+        self._motion.clear()                  # every card of the new hand is dealt in
+        self._deals.clear()
+        self._deal_plan = [_DRAW_AFTER_ENEMY_TURN + j * DEAL_STAGGER for j in range(state.hand.count)]
         self._announce_actions(state.enemy_log, intents, names)
 
         # Animated enemies act out their move: the sheet may have a clip for it (bosses),
