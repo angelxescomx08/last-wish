@@ -45,6 +45,7 @@ _FILL_AVAIL: dict[RoomType, pygame.Color] = {
     RoomType.WARLOCK:  pygame.Color( 30, 140, 110),
     RoomType.GACHA:    pygame.Color(205,  70, 150),
     RoomType.PURGE:    pygame.Color(215, 105,  35),
+    RoomType.ELITE:    pygame.Color(170,  28,  70),
 }
 _FILL_LOCKED: dict[RoomType, pygame.Color] = {
     t: pygame.Color(max(c.r - 130, 14), max(c.g - 130, 14), max(c.b - 130, 14))
@@ -69,6 +70,7 @@ _LABELS: dict[RoomType, str] = {
     RoomType.WARLOCK:  "Brujo",
     RoomType.GACHA:    "Gacha",
     RoomType.PURGE:    "Purga",
+    RoomType.ELITE:    "ÉLITE",
 }
 
 # ---------------------------------------------------------------------------

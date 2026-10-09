@@ -155,6 +155,7 @@ class Enemy:
     ai_step: int = 0
     ai_used: set[str] = field(default_factory=set)
     is_boss: bool = False
+    is_elite: bool = False            # mini-boss of the floor's elite room (``application/elites.py``)
     floor: int = 1                    # scales the numbers of pattern moves
     # Pairs (``enemy_roster.PAIRS``): the partner's id and the duo's Spanish name.
     partner_id: str = ""

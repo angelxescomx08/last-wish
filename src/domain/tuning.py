@@ -35,6 +35,8 @@ class Tuning:
     forced_boss: int = 0              # floor-1 boss: 0 = by seed, 1.. = index in FLOOR1_BOSSES
     forced_encounter: int = 0         # combat rooms: 0 = random, 1.. = enemy_roster.ENCOUNTERS index
     boss_rooms: bool = False          # every combat room is the floor's boss (to test bosses)
+    forced_elite: int = 0             # elite rooms: 0 = random, 1.. = index in elites.ELITE_ORDER
+    elite_rooms: bool = False         # every combat room is an elite room (to test elites)
     gacha_rooms: bool = False         # every combat room opens the gachapón (to test it)
 
     def reset(self) -> None:

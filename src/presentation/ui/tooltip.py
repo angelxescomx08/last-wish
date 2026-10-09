@@ -391,9 +391,11 @@ def status_tooltip(fx: StatusEffect, *, on_player: bool = False) -> TooltipConte
 
 
 def _identity(enemy: Enemy) -> str:
-    """"Agresivo: …" — the regular enemy's identity (``enemy_roster.ENEMIES``)."""
+    """"Agresivo: …" — the identity of a regular enemy (``enemy_roster.ENEMIES``) or an elite."""
+    from src.application.elites import ELITES
     from src.application.enemy_roster import ENEMIES, NAME_TO_AI
-    d = ENEMIES.get(enemy.ai) or ENEMIES.get(NAME_TO_AI.get(enemy.name, ""))
+    d = (ELITES.get(enemy.ai) if enemy.is_elite else None) or ENEMIES.get(enemy.ai) \
+        or ENEMIES.get(NAME_TO_AI.get(enemy.name, ""))
     return f"{d.identity}: {d.title}" if d is not None and not enemy.is_boss else ""
 
 
@@ -415,8 +417,11 @@ def enemy_tooltip(enemy: Enemy, hit_damage: int | None = None,
     panels += [status_panel(fx) for fx in enemy.status_effects]
     panels += _intent_panels(enemy)
     content = TooltipContent(
-        title=enemy.name, lines=lines, tag="JEFE" if enemy.is_boss else "",
-        subtitle="Jefe del piso" if enemy.is_boss else "Enemigo", panels=panels,
+        title=enemy.name, lines=lines,
+        tag="JEFE" if enemy.is_boss else "ÉLITE" if enemy.is_elite else "",
+        subtitle=("Jefe del piso" if enemy.is_boss else
+                  "Élite del piso: suelta una reliquia" if enemy.is_elite else "Enemigo"),
+        panels=panels,
     )
     _glossary(content)
     return content

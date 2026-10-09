@@ -1,7 +1,9 @@
 """Post-combat reward scene.
 
 Shows gold earned and three card choices.  The player picks one to add to their
-deck, then continues back to the map.
+deck, then continues back to the map. After an elite, a ``relic`` is shown too (it is
+the elite's drop, always obtained; the manager adds it when the scene clears) and the
+cards were rolled with a little more luck (``elites.ELITE_CARD_LUCK``).
 
 Public flag consumed by SceneManager:
   cleared: bool  — True when the player has finished choosing.
@@ -16,15 +18,21 @@ from src.application.luck import luck_report
 from src.presentation.fx import card_fx
 from src.presentation.ui.luck_badge import draw_luck_badge
 from src.domain.card import Card
+from src.domain.chroma import chroma_title
+from src.domain.relic import Relic
 from src.domain.run import Run
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.ui.card_widget import CARD_H, CARD_W, draw_card
-from src.presentation.ui.tooltip import TooltipContent, card_tooltip, draw_tooltip
+from src.presentation.fx import chroma_fx
+from src.presentation.ui.text_fit import fit
+from src.presentation.ui.tooltip import TooltipContent, card_tooltip, draw_tooltip, relic_tooltip
 
 _BG  = pygame.Color(12, 18, 12)
 _GAP = 30
+_RELIC_W, _RELIC_H = 600, 70           # elite drop panel
+_RELIC_GOLD = pygame.Color(220, 190, 60)
 
 
 class CombatRewardScene:
@@ -38,6 +46,7 @@ class CombatRewardScene:
         fonts: FontRegistry,
         *,
         sound: SoundPlayer | None = None,
+        relic: Relic | None = None,
     ) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
         self._run          = run
@@ -51,6 +60,8 @@ class CombatRewardScene:
         self._skip_rect:   pygame.Rect | None = None
         self._mouse:       tuple[int, int] = (0, 0)
         self._t = 0.0
+        self.relic: Relic | None = relic       # elite drop (shown; obtained when the scene clears)
+        self._relic_rect: pygame.Rect | None = None
 
         self.cleared:      bool = False
         self.chosen_card:  Card | None = None
@@ -83,16 +94,24 @@ class CombatRewardScene:
         )
         surface.blit(g, g.get_rect(centerx=cx, centery=108))
 
+        prompt_y, card_y = 148, 190
+        if self.relic is not None:
+            self._draw_relic(surface, cx)
+            prompt_y, card_y = 228, 266
         h = self._fonts.get(14).render(
             "Elige una carta para añadir a tu mazo:", True, colors.TEXT_PRIMARY
         )
-        surface.blit(h, h.get_rect(centerx=cx, centery=148))
+        surface.blit(h, h.get_rect(centerx=cx, centery=prompt_y))
+        if self.relic is not None:
+            note = self._fonts.get(11).render(
+                "Cartas de élite: algo más de probabilidad de ser raras", True, colors.TEXT_SECONDARY)
+            surface.blit(note, note.get_rect(centerx=cx, centery=prompt_y + 18))
+            card_y += 8
 
         # Cards
         n         = len(self._cards)
         total_w   = n * CARD_W + max(0, n - 1) * _GAP
         start_x   = cx - total_w // 2
-        card_y    = 190
         self._card_rects = []
         for i, card in enumerate(self._cards):
             cx_card = start_x + i * (CARD_W + _GAP)
@@ -122,10 +141,31 @@ class CombatRewardScene:
         draw_luck_badge(surface, "bottomleft", (16, 704), luck_report(self._run), self._fonts)
 
         # Tooltip
-        if self._hovered is not None and self._hovered < len(self._cards):
+        if self.relic is not None and self._relic_rect and self._relic_rect.collidepoint(self._mouse):
+            draw_tooltip(surface, relic_tooltip(self.relic), self._mouse, self._fonts)
+        elif self._hovered is not None and self._hovered < len(self._cards):
             dmg, blk = self._bonus.for_card(self._cards[self._hovered])
             tip = card_tooltip(self._cards[self._hovered], bonus_damage=dmg, bonus_block=blk)
             draw_tooltip(surface, tip, self._mouse, self._fonts)
+
+    def _draw_relic(self, surface: pygame.Surface, cx: int) -> None:
+        """Elite drop: "Reliquia obtenida" panel with the relic's name and rule text."""
+        relic = self.relic
+        box = pygame.Rect(cx - _RELIC_W // 2, 136, _RELIC_W, _RELIC_H)
+        self._relic_rect = box
+        pygame.draw.rect(surface, colors.BG_PANEL, box, border_radius=8)
+        pygame.draw.rect(surface, _RELIC_GOLD, box, 2, border_radius=8)
+        head = self._fonts.get(11).render("RELIQUIA OBTENIDA", True, colors.TEXT_SECONDARY)
+        surface.blit(head, head.get_rect(centerx=box.centerx, top=box.y + 6))
+        name_font = self._fonts.get(16)
+        name = fit(name_font, chroma_title(relic.name, relic.chroma), box.w - 24)
+        ns = name_font.render(name, True, _RELIC_GOLD)
+        surface.blit(ns, ns.get_rect(centerx=box.centerx, top=box.y + 20))
+        desc_font = self._fonts.get(13)
+        ds = desc_font.render(fit(desc_font, relic.description, box.w - 24), True, colors.TEXT_PRIMARY)
+        surface.blit(ds, ds.get_rect(centerx=box.centerx, top=box.y + 44))
+        if relic.chroma is not None:
+            chroma_fx.draw_chroma_box(surface, box, relic.chroma, chroma_fx.now(), radius=8)
 
     # ------------------------------------------------------------------
     # Input

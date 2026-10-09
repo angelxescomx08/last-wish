@@ -38,11 +38,18 @@ ENEMY_SHEET_IDS: dict[str, str] = {
     "Acólito de Ceniza": "acolyte",
     "Diablillo": "imp",
     "Mímico": "mimic",
+    # Elites (scripts/generate_elite_<id>.py, application/elites.py) — big slot like the bosses
+    "El Verdugo": "executioner",
+    "Bruja del Pantano": "hag",
+    "Gárgola": "gargoyle",
+    "Minotauro": "minotaur",
+    "Escorpión Rey": "scorpion",
 }
 REGULAR_SHEET_IDS = ("wraith", "slime", "worm", "eye", "skull", "bat", "bomb", "golem", "acolyte",
                      "imp", "mimic")
 ENEMY_ANIMATIONS = ("idle", "attack", "hurt", "cast", "death")
 BOSS_SHEET_IDS = ("mycelid", "weaver", "knight")
+ELITE_SHEET_IDS = ("executioner", "hag", "gargoyle", "minotaur", "scorpion")
 
 
 @dataclass(frozen=True)

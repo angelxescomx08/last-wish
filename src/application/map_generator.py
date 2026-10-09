@@ -193,6 +193,35 @@ def generate_map(seed: int, floor: int) -> GameMap:
     if purge_id:
         nodes[purge_id].room_type = RoomType.PURGE
 
+    # Élite: exactly one per floor, in a room the player can walk around (it is a risk you
+    # choose), never in the first two rows: row 2 up to the row before the boss first, then
+    # any middle row, then any combat room between the entry and the boss's row. Chosen
+    # last, so the other rooms keep their places.
+    def _avoidable(nid: str) -> bool:
+        start = node_id(*start_pos)
+        seen, todo = {start}, [start]
+        while todo:
+            for nxt in nodes[todo.pop()].connections:
+                if nxt != nid and nxt not in seen:
+                    seen.add(nxt)
+                    todo.append(nxt)
+        return node_id(*boss_pos) in seen
+
+    late_rows = list(range(2, rows - 1))
+    elite_id = None
+    for rows_ok in (late_rows, mid_rows, list(range(1, rows - 1))):
+        for need_avoid in (True, False):
+            options = sorted(nid for nid, n in nodes.items()
+                             if n.room_type == RoomType.COMBAT and n.row in rows_ok
+                             and (not need_avoid or _avoidable(nid)))
+            if options:
+                elite_id = rng.choice(options)
+                break
+        if elite_id:
+            break
+    if elite_id:
+        nodes[elite_id].room_type = RoomType.ELITE
+
     return GameMap(
         floor=floor,
         nodes=nodes,

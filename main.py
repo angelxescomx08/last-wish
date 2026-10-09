@@ -13,12 +13,15 @@ from src.application.run_manager import (
     apply_combat_victory,
     generate_boss,
     generate_enemies,
+    generate_elite,
     generate_event_gold,
     gain_gold,
     pick_boss_relics,
+    pick_elite_relic,
     pick_treasure_relics,
     create_run,
 )
+from src.application.elites import ELITE_CARD_LUCK
 from src.domain.card_pool import PackTheme
 from src.domain.map_node import RoomType
 from src.infrastructure.colors import TEXT_ACCENT, TEXT_PRIMARY
@@ -355,6 +358,11 @@ class SceneManager:
             state   = create_combat_from_run(run, enemies)
             self.push(CombatScene(state, self._fonts, sound=self._sound))
 
+        elif node.room_type == RoomType.ELITE:
+            enemies = generate_elite(run, node.id)
+            state   = create_combat_from_run(run, enemies)
+            self.push(CombatScene(state, self._fonts, sound=self._sound))
+
         elif node.room_type == RoomType.BOSS:
             enemies = generate_boss(run)
             state   = create_combat_from_run(run, enemies)
@@ -393,6 +401,14 @@ class SceneManager:
                                                 scene.state.enemies, scene.state.gold_earned)
                 relics   = pick_boss_relics(run)
                 self.push(BossRewardScene(run, gold, relics, self._fonts, sound=self._sound))
+            elif scene.is_elite:
+                room     = run.current_room_id or "unknown"
+                gold     = apply_combat_victory(run, scene.state.player.current_hp,
+                                                scene.state.enemies, scene.state.gold_earned)
+                relic    = pick_elite_relic(run, room)
+                cards    = pick_reward_cards(run, room, luck_bonus=ELITE_CARD_LUCK)
+                self.push(CombatRewardScene(run, gold, cards, self._fonts, sound=self._sound,
+                                            relic=relic))
             else:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
                                                 scene.state.enemies, scene.state.gold_earned)
@@ -410,6 +426,8 @@ class SceneManager:
             return
         scene.cleared = False
         run = self._run
+        if scene.relic is not None:                     # elite drop: always obtained
+            acquire_relic(run, scene.relic)
         if scene.chosen_card is not None:
             run.add_card(scene.chosen_card)
         self.pop()          # pop CombatRewardScene

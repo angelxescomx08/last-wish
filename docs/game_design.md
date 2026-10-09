@@ -223,6 +223,33 @@ combate un cartel presenta la pareja y su sinergia.
 
 ---
 
+## Élites ✅
+
+Una sala **ÉLITE** por piso (fila 2 o más, casi siempre se puede rodear: es un riesgo que
+eliges). Un mini-jefe más fuerte que los enemigos normales y más débil que el jefe, con
+patrón fijo y un movimiento único la primera vez que baja a la mitad de vida. Números del
+piso 1; +15 % por piso. Dibujados por código y animados como los jefes (ocupan el hueco
+grande).
+
+**Recompensa:** el oro de siempre + **una reliquia segura** (puede ser dorada) + 3 cartas a
+elegir con **algo más de probabilidad de ser raras** (+5 de suerte solo para la rareza: con
+suerte 0, Rara o mejor pasa del 22 % al 35 %; las doradas no cambian). Aunque omitas las
+cartas, la reliquia te la quedas.
+
+| Élite | PV | Identidad | Patrón | ≤50 % (una vez) |
+|---|---|---|---|---|
+| El Verdugo | 92 | Ejecución | Sentencia (Vulnerable 2, 8 de escudo) · Hachazo 14 · Afilar (+2 Fuerza, 10 de escudo) · Decapitar 21 | Sed de Sangre: +3 Fuerza |
+| Bruja del Pantano | 80 | Maleficios | Maleficio (Débil 2, Frágil 2) · Rayo de Ciénaga 9 + 3 Veneno · Caldero Burbujeante (10 de escudo, 2 Moho a tu pila de robo) · Muñeco Vudú 4×3 | Brebaje Prohibido: se cura 15 y +2 Fuerza |
+| Gárgola | 84 | Piel de piedra | Petrificar 18 de escudo · Picado 5×3 · Zarpazo de Piedra 11 + Frágil 2 | Despertar: +3 Fuerza, 10 de escudo |
+| Minotauro | 100 | Embestida | Escarbar 12 de escudo · Embestida 15 (+5 cada vez: 15, 20, 25…) · Pisotón 9 + Enredado 1 | Furia Taurina: +3 Fuerza |
+| Escorpión Rey | 88 | Veneno letal | Aguijonazo 7 + 4 Veneno · Pinzas 5×2 + Débil 1 · Caparazón 14 de escudo · Toxina 6 Veneno | Frenesí: +2 Fuerza, 8 de escudo |
+
+Al empezar el combate un cartel presenta a la élite ("¡Élite! …") y su identidad. Pruebas →
+"Élite de las salas élite" fija cuál sale y "Todas las salas: élite" convierte cada combate
+en una élite.
+
+---
+
 ## Cartas
 
 ### Neutrales

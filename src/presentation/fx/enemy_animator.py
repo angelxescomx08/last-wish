@@ -130,6 +130,49 @@ STYLES.update({
                           shadow_w=170, ambient_rise=0.4, ambient_heavy=True),
 })
 
+# Elites (application/elites.py): cue points measured by each generator on idle frame 0.
+_ASH_FALL = ((255, 212, 118), (250, 140, 40), (200, 70, 18), (78, 72, 72))
+_RED_BLOOD = ((232, 70, 62), (176, 26, 30), (110, 12, 18), (56, 6, 10))
+_HOOD = ((138, 54, 50), (106, 36, 38), (78, 25, 29), (34, 12, 16))
+_SWAMP_MIST = ((184, 214, 164), (134, 174, 124), (92, 130, 96), (58, 86, 66))
+_SWAMP_GOO = ((182, 246, 100), (100, 194, 54), (44, 122, 38), (22, 64, 30))
+_HEX = ((236, 255, 196), (182, 246, 100), (210, 150, 255), (150, 74, 204))
+_RAGS = ((106, 124, 70), (78, 98, 56), (58, 76, 48), (29, 41, 32))
+_GRIT = ((176, 174, 169), (128, 124, 124), (92, 88, 92), (60, 56, 62))
+_CHIPS = ((206, 204, 218), (138, 135, 157), (86, 83, 109), (48, 45, 68))
+_AMBER = ((255, 252, 228), (255, 234, 164), (255, 192, 74), (226, 132, 28))
+_FLAKES = ((222, 220, 214), (176, 174, 169), (124, 122, 119), (98, 96, 94))
+_STEAM = ((255, 255, 255), (232, 242, 252), (186, 204, 222), (132, 150, 172))
+_FUR_BLOOD = ((200, 146, 100), (166, 62, 52), (94, 26, 30), (36, 9, 13))
+_RAGE = ((255, 255, 255), (255, 170, 90), (240, 80, 40), (176, 30, 20))
+_DIRT = ((172, 156, 132), (130, 112, 92), (84, 53, 36), (43, 25, 20))
+_VENOM = ((214, 255, 160), (122, 226, 72), (44, 140, 52), (18, 64, 34))
+_ICHOR_RED = ((250, 222, 196), (184, 92, 78), (114, 38, 44), (52, 15, 27))
+_GOLD = ((255, 244, 198), (255, 208, 104), (212, 146, 42), (146, 86, 22))
+_SHELL = ((160, 70, 64), (78, 23, 34), (33, 11, 21), (9, 5, 10))
+
+STYLES.update({
+    "executioner": EnemyFxStyle(wisp=_ASH_FALL, ecto=_RED_BLOOD, spark=_EMBER, shreds=_HOOD,
+                                glow=(150, 40, 20), chest=(-10, -104), eyes=(-21, -157),
+                                body=(-14, -84), claw=(-148, -36), shadow_w=120,
+                                ambient_rise=0.5, ambient_heavy=True),
+    "hag": EnemyFxStyle(wisp=_SWAMP_MIST, ecto=_SWAMP_GOO, spark=_HEX, shreds=_RAGS,
+                        glow=(60, 130, 40), chest=(-10, -88), eyes=(-35, -119), body=(-22, -68),
+                        claw=(-268, -100), shadow_w=150, ambient_rise=0.5),
+    "gargoyle": EnemyFxStyle(wisp=_GRIT, ecto=_CHIPS, spark=_AMBER, shreds=_FLAKES,
+                             glow=(150, 100, 30), chest=(-12, -100), eyes=(-54, -134),
+                             body=(8, -96), claw=(-138, -50), shadow_w=150, ambient_rise=0.5,
+                             ambient_heavy=True),
+    "minotaur": EnemyFxStyle(wisp=_STEAM, ecto=_FUR_BLOOD, spark=_RAGE, shreds=_DIRT,
+                             glow=(150, 40, 20), chest=(-24, -122), eyes=(-57, -145),
+                             body=(-10, -99), claw=(-255, -111), shadow_w=130,
+                             ambient_rise=0.5, ambient_heavy=True),
+    "scorpion": EnemyFxStyle(wisp=_VENOM, ecto=_ICHOR_RED, spark=_GOLD, shreds=_SHELL,
+                             glow=(50, 130, 40), chest=(-64, -39), eyes=(-66, -56),
+                             body=(-4, -48), claw=(-246, -37), shadow_w=260, ambient_rise=0.5,
+                             ambient_heavy=True),
+})
+
 # Floating swords (El Caballero Hueco): orbit, launch timing and flight.
 BLADE_ORBIT = (78.0, 20.0)        # ellipse radii around the body (px)
 BLADE_CENTER = (0.0, -118.0)      # orbit centre from the anchor

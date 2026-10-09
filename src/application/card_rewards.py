@@ -70,12 +70,16 @@ def allowed_card_classes(run: Run) -> frozenset[CardClass]:
     return frozenset({CardClass.NEUTRAL, own}) | relic_effects.unlocked_card_classes(run.relics)
 
 
-def pick_reward_cards(run: Run, room_id: str, count: int = 3) -> list[Card]:
-    """Return `count` distinct card choices for a combat reward."""
+def pick_reward_cards(run: Run, room_id: str, count: int = 3, *, luck_bonus: int = 0) -> list[Card]:
+    """Return `count` distinct card choices for a combat reward.
+
+    ``luck_bonus`` (elites: ``elites.ELITE_CARD_LUCK``) only raises the rarity roll of these
+    cards; golden chances and the luck's extra cards keep the run's luck.
+    """
     seed = _reward_seed(run, room_id)
     rng = random.Random(seed)
     pool = card_factories_for_classes(allowed_card_classes(run))
-    chosen = _pick(pool, count, rng, _luck(run))
+    chosen = _pick(pool, count, rng, _luck(run) + max(0, luck_bonus))
     cards = _with_chromas([factory() for factory in chosen], seed, _luck(run))
     return cards + lucky_cards(run, seed, {c.id for c in cards})
 

@@ -18,6 +18,7 @@ import pygame
 from src.domain.character import ALL_CHARACTERS
 from src.domain.chroma import CHROMA_DEFS, Chroma
 from src.domain.rarity import Rarity, luck_chroma_multiplier, rarity_odds
+from src.application.elites import ELITE_ORDER, elite_label
 from src.application.enemy_roster import ENCOUNTERS, encounter_label
 from src.application.enemy_ai import BOSSES, FLOOR1_BOSSES
 from src.domain.tuning import CHROMA_KINDS, TUNING, chroma_chance, chroma_key, hero_luck
@@ -60,6 +61,7 @@ class _Row:
 
 _BOSS_LABELS = ("Al azar", *(BOSSES[ai].name for ai in FLOOR1_BOSSES))
 _ENCOUNTER_LABELS = tuple(encounter_label(i) for i in range(len(ENCOUNTERS) + 1))
+_ELITE_LABELS = tuple(elite_label(i) for i in range(len(ELITE_ORDER) + 1))
 
 
 def _rows() -> list[_Row]:
@@ -85,7 +87,10 @@ def _rows() -> list[_Row]:
              column=1, labels=_BOSS_LABELS),
         _Row("Enemigos de los combates", _Kind.NUMBER, "forced_encounter", 1, 0,
              len(_ENCOUNTER_LABELS) - 1, column=1, labels=_ENCOUNTER_LABELS),
+        _Row("Élite de las salas élite", _Kind.NUMBER, "forced_elite", 1, 0, len(_ELITE_LABELS) - 1,
+             column=1, labels=_ELITE_LABELS),
         _Row("Todas las salas: el jefe", _Kind.TOGGLE, "boss_rooms", column=1),
+        _Row("Todas las salas: élite", _Kind.TOGGLE, "elite_rooms", column=1),
         _Row("Todas las salas: gachapón", _Kind.TOGGLE, "gacha_rooms", column=1),
         # --- actions (left column, bottom) ---
         _Row("Restablecer valores", _Kind.ACTION, "reset"),

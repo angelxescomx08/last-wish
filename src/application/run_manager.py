@@ -7,6 +7,7 @@ Responsibilities:
   - Generating events (gold rewards).
   - Generating treasure (relic selection pool).
   - Generating boss enemy.
+  - Generating the elite of an elite room and its relic.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import random
 import zlib
 from dataclasses import replace
 
-from src.application import enemy_roster, enemy_ai, relic_effects
+from src.application import elites, enemy_roster, enemy_ai, relic_effects
 from src.application.map_generator import generate_map
 from src.domain.card import CardClass
 from src.domain.card_pool import ALL_PACKS, PackDef, class_for_character, starter_deck
@@ -71,8 +72,16 @@ def generate_enemies(run: Run, room_id: str) -> list[Enemy]:
     """
     if TUNING.boss_rooms:
         return generate_boss(run)
+    if TUNING.elite_rooms:
+        return generate_elite(run, room_id)
     rng = random.Random(_enemy_seed(run, room_id))
     return enemy_roster.roll_encounter(rng, run.floor, room_id, TUNING.forced_encounter)
+
+
+def generate_elite(run: Run, room_id: str) -> list[Enemy]:
+    """The elite of an elite room: one of the five ``elites`` (seeded per room; Pruebas can fix it)."""
+    rng = random.Random(_enemy_seed(run, room_id) ^ 0xE117E)
+    return elites.roll_elite(rng, run.floor, room_id, TUNING.forced_elite)
 
 
 def floor_boss_ai(run: Run) -> str | None:
@@ -314,6 +323,13 @@ def pick_treasure_relics(run: Run, room_id: str) -> list[Relic]:
     rng = random.Random(_enemy_seed(run, room_id) ^ 0x1234)
     relics = _pick_relics(pool, min(count, len(pool)), rng, run_luck(run))
     return _with_chroma(relics, rng, run_luck(run))
+
+
+def pick_elite_relic(run: Run, room_id: str) -> Relic:
+    """The relic an elite drops (luck-weighted like a treasure, may be golden)."""
+    pool = _relic_pool(run, 1)
+    rng = random.Random(_enemy_seed(run, room_id) ^ 0xE1173)
+    return _with_chroma(_pick_relics(pool, 1, rng, run_luck(run)), rng, run_luck(run))[0]
 
 
 def shop_price(run: Run, base: int) -> int:

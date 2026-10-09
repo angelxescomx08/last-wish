@@ -9,6 +9,7 @@ import pygame
 from src.presentation.fx.card_deal import (DEAL_STAGGER, FLIP_END, START_ANGLE, START_SCALE, TRAIL,
                                           TRAIL_GOLD, Deal, deal_pose, draw_dealt_card)
 from src.application.enemy_roster import PAIRS, VENGEANCE_ID
+from src.application.elites import ELITES
 from src.application import relic_effects
 from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import TargetKind, play_card, target_kind
@@ -227,6 +228,7 @@ class CombatScene:
         self._hero_id = hero_id_for(state.player.name) or "warrior"
         self._hero_action_time = 0.0
         self._is_boss             = is_boss
+        self._is_elite            = any(e.is_elite for e in state.enemies)
         self._death_acknowledged  = False
         self._victory_acknowledged = False
         self._initial_enemy_count = len(state.enemies)
@@ -446,6 +448,11 @@ class CombatScene:
     @property
     def is_boss(self) -> bool:
         return self._is_boss
+
+    @property
+    def is_elite(self) -> bool:
+        """An elite room's fight (its reward adds a relic and better card odds)."""
+        return self._is_elite
 
     @property
     def turn_reached(self) -> int:
@@ -1439,7 +1446,11 @@ class CombatScene:
                     anim.play("cast", delay=_VENGEANCE_DELAY)
 
     def _announce_pair(self) -> None:
-        """Opening banner when the fight is a pair: its name and how the two work together."""
+        """Opening banner when the fight is a pair (name + synergy) or an elite (name + identity)."""
+        for e in self._state.enemies:
+            d = ELITES.get(e.ai) if e.is_elite else None
+            if d is not None:
+                self._banners.add("buff", f"¡Élite! {d.name}", f"{d.identity}: {d.title}", delay=0.4)
         names = {e.pair for e in self._state.enemies if e.pair}
         for pair in PAIRS.values():
             if pair.name in names:
