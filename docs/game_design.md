@@ -366,6 +366,13 @@ siempre pagando oro; después la sala se cierra (una carta por altar).
 - Siempre te queda al menos 1 carta en el mazo.
 - La carta elegida arde en el altar, de abajo hacia arriba, con brasas.
 
+## Interfaz: textos ✅
+
+- Fuente pixel Pixel Operator (CC0), negrita en las cartas; Tiny5 solo para nombres largos.
+- Ningún texto se sale de su cuadro: las descripciones se parten en líneas dentro del panel y,
+  si aun así no caben, terminan en "…" (selección de personaje, recompensa de jefe, tienda,
+  visor de reliquias, avisos del turno enemigo, hoja del héroe).
+
 ## Mejoras de cartas — El Brujo ✅
 
 - Aparece **una vez por piso** en el mapa (sala "Brujo").

@@ -16,6 +16,7 @@ import math
 
 import pygame
 
+from src.presentation.ui.text_fit import fit
 from src.application.hero_stats import HeroSheet, HeroStat
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import SpriteLoader
@@ -206,8 +207,9 @@ class HeroSheetOverlay:
         value = outlined(f.get(26), value_txt, (255, 255, 255))
         surface.blit(value, value.get_rect(topright=(BAR_X - 14, y - 4)))
         effect = rich_text.render_line(stat.effect, f.get(13), (226, 220, 206))
-        if effect.get_width() > BAR_X + BAR_W - ROW_X - 48:
-            effect = rich_text.render_lines(stat.effect, f.get(12), BAR_X + BAR_W - ROW_X - 48, (226, 220, 206))[0]
+        room = BAR_X + BAR_W - ROW_X - 48
+        if effect.get_width() > room:
+            effect = rich_text.render_line(fit(f.get(12), stat.effect, room), f.get(12), (226, 220, 206))
         surface.blit(effect, (ROW_X + 48, y + 30))
         self._draw_bar(surface, i, stat, color, y + 4)
         detail = outlined(f.get(11), stat.breakdown(), DIM)

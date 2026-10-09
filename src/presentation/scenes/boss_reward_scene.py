@@ -16,6 +16,7 @@ from enum import Enum, auto
 
 import pygame
 
+from src.presentation.ui.text_fit import fit, render_wrapped
 from src.domain.chroma import chroma_def, chroma_title
 from src.domain.relic import Relic
 from src.domain.run import Run
@@ -157,12 +158,18 @@ class BossRewardScene:
             pygame.draw.rect(surface, colors.BG_PANEL, rect, border_radius=8)
             pygame.draw.rect(surface, border,          rect, 2, border_radius=8)
 
-            ns = self._fonts.get(14).render(chroma_title(relic.name, relic.chroma), True,
+            ns = self._fonts.get(14).render(fit(self._fonts.get(14), chroma_title(relic.name, relic.chroma), rect.w - 16), True,
                                             pygame.Color(220, 190, 60))
             surface.blit(ns, ns.get_rect(centerx=rect.centerx, centery=rect.top + 35))
 
-            ds = self._fonts.get(11).render(relic.description, True, colors.TEXT_SECONDARY)
-            surface.blit(ds, ds.get_rect(centerx=rect.centerx, centery=rect.top + 90))
+            font = self._fonts.get(13)
+            line_h = font.get_linesize() - 2
+            room = (rect.top + (105 if relic.chroma is not None else rect.h - 10)) - (rect.top + 58)
+            lines = render_wrapped(font, relic.description, rect.w - 24, colors.TEXT_SECONDARY,
+                                   max_lines=max(1, room // line_h))
+            top = rect.top + 58 + (room - len(lines) * line_h) // 2
+            for k, ds in enumerate(lines):
+                surface.blit(ds, ds.get_rect(centerx=rect.centerx, top=top + k * line_h))
             if relic.chroma is not None:
                 cn = self._fonts.get(11).render(chroma_def(relic.chroma).short_note, True,
                                                 chroma_fx.style(relic.chroma).main)

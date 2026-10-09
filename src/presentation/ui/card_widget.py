@@ -185,6 +185,12 @@ def _backdrop(card_type: CardType, size: tuple[int, int]) -> pygame.Surface:
     return surf
 
 
+def _card_font(fonts: FontRegistry, size: int):
+    """The text on a card uses the bold pixel face (the regular one is too thin there)."""
+    bold = getattr(fonts, "bold", None)
+    return bold(size) if bold is not None else fonts.get(size)
+
+
 def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: int = CARD_H,
                         affordable: bool = True, bonus_damage: int = 0,
                         bonus_block: int = 0, combo: bool = False,
@@ -249,10 +255,12 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
 
     name_rect = _rect(z["name"], w, h)
     size = max(8, round(name_rect.h * 0.78))
-    name_font = fonts.get(size)
+    name_font = _card_font(fonts, size)
     while size > 7 and name_font.size(card.name)[0] > name_rect.w - 4:   # shrink before truncating
         size -= 1
-        name_font = fonts.get(size)
+        name_font = _card_font(fonts, size)
+    if name_font.size(card.name)[0] > name_rect.w - 4 and hasattr(fonts, "tiny"):
+        name_font = fonts.tiny(8 * max(1, name_rect.h // 13))           # narrow pixel font
     name_s = name_font.render(_fit(card.name, name_font, name_rect.w - 4), True, _INK_DARK)
     surf.blit(name_s, name_s.get_rect(center=name_rect.center))
 
@@ -267,7 +275,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     lines = _ability_lines(card, damage, block, combo, singular, void, spoil)
     if lines:
         # Colour-coded like the tooltips: damage red, block blue, keywords gold.
-        font = fonts.get(max(8, round(h * 0.052)))
+        font = _card_font(fonts, max(8, round(h * 0.052)))
         wrapped: list[pygame.Surface] = []
         for raw in lines:
             wrapped.extend(rich_text.render_lines(raw, font, text_rect.w, _INK_LIGHT))

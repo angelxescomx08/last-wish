@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import pygame
 
+from src.presentation.ui.text_fit import render_wrapped
 from src.domain.character import ALL_CHARACTERS, Character, CharacterStats
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
@@ -195,9 +196,13 @@ class CharacterSelectScene:
         pygame.draw.line(surface, colors.PANEL_BORDER,
                          (x + 12, y + 50), (x + _PANEL_W - 12, y + 50))
 
-        # Description (single line, truncated to fit)
-        desc_surf = self._fonts.get(11).render(character.description, True, colors.TEXT_SECONDARY)
-        surface.blit(desc_surf, desc_surf.get_rect(centerx=cx, centery=y + 68))
+        # Description: wrapped to the panel (at most 2 lines)
+        lines = render_wrapped(self._fonts.get(11), character.description, _PANEL_W - 28,
+                               colors.TEXT_SECONDARY, max_lines=2)
+        line_h = self._fonts.get(11).get_linesize()
+        top = y + 68 - len(lines) * line_h // 2
+        for k, desc_surf in enumerate(lines):
+            surface.blit(desc_surf, desc_surf.get_rect(centerx=cx, top=top + k * line_h))
 
         sprite = self._sprites.get_player_sprite(character.name, 96, elapsed=self._idle_time)
         if sprite is not None:

@@ -1,5 +1,6 @@
 """Relic inventory: every owned relic, its effect and its activation state."""
 import pygame
+from src.presentation.ui.text_fit import fit
 from src.domain.relic import Relic
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
@@ -28,7 +29,12 @@ class RelicViewer(CollectionViewer):
             surface.blit(icon, icon.get_rect(center=(box.x + 48, box.centery)))
         name = self._fonts.get(18).render(chroma_title(item.name, item.chroma), True, colors.TEXT_ACCENT)
         surface.blit(name, (box.x + 96, box.y + 12))
-        for line_index, line in enumerate(_wrap(item.description, self._fonts.get(14), box.width - 115)):
+        lines = _wrap(item.description, self._fonts.get(14), box.width - 115)
+        room = max(1, (box.bottom - 28 - (box.y + 43)) // 19)
+        if len(lines) > room:
+            lines = lines[:room]
+            lines[-1] = fit(self._fonts.get(14), lines[-1] + "…", box.width - 115)
+        for line_index, line in enumerate(lines):
             text = self._fonts.get(14).render(line, True, colors.TEXT_PRIMARY)
             surface.blit(text, (box.x + 96, box.y + 43 + line_index * 19))
         status = 'Activa' if item.is_active else 'Agotada'

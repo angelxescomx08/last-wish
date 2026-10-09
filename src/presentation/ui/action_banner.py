@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 import pygame
 
+from src.presentation.ui.text_fit import fit
 from src.domain.combat import EnemyAction
 from src.domain.entities import Intent, IntentType
 from src.domain.status_cards import make_status_card
@@ -128,11 +129,15 @@ class ActionBanners:
             if a <= 0:
                 continue
             icon = ui_icon(b.icon, 2)
-            title = title_font.render(b.title, True, (246, 220, 150))
-            detail = rich_text.render_line(b.detail, detail_font, (230, 224, 212), shadow=True) if b.detail else None
-            text_w = max(title.get_width(), detail.get_width() if detail else 0)
-            w = min(self.WIDTH, max(260, text_w + (icon.get_width() if icon else 0) + 40))
-            h = 50 if detail else 36
+            icon_w = icon.get_width() + 6 if icon is not None else 0
+            text_max = self.WIDTH - icon_w - 24
+            title = title_font.render(fit(title_font, b.title, text_max), True, (246, 220, 150))
+            details = (rich_text.render_lines(b.detail, detail_font, text_max, (230, 224, 212), shadow=True)[:3]
+                       if b.detail else [])
+            text_w = max([title.get_width()] + [d.get_width() for d in details])
+            w = min(self.WIDTH, max(260, text_w + icon_w + 24))
+            line_h = detail_font.get_linesize()
+            h = (36 + line_h * len(details) - 2) if details else 36
             panel = pygame.Surface((w, h), pygame.SRCALPHA)
             pygame.draw.rect(panel, (12, 8, 20, 215), panel.get_rect(), border_radius=6)
             pygame.draw.rect(panel, (150, 110, 70, 255), panel.get_rect(), 1, border_radius=6)
@@ -140,9 +145,9 @@ class ActionBanners:
             if icon is not None:
                 panel.blit(icon, icon.get_rect(midleft=(x - 2, h // 2)))
                 x += icon.get_width() + 6
-            panel.blit(title, (x, 5 if detail else (h - title.get_height()) // 2))
-            if detail is not None:
-                panel.blit(detail, (x, h - detail.get_height() - 5))
+            panel.blit(title, (x, 5 if details else (h - title.get_height()) // 2))
+            for k, d in enumerate(details):
+                panel.blit(d, (x, 5 + title.get_height() + 3 + k * line_h))
             slide = int((1 - min(1.0, a * 1.2)) * -10)
             panel.set_alpha(int(255 * a))
             surface.blit(panel, panel.get_rect(midtop=(cx, y + slide)))

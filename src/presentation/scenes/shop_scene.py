@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pygame
 
+from src.presentation.ui.text_fit import fit
 from src.application.run_manager import acquire_relic, pick_shop_stock, shop_price
 from src.domain.card_pool import PackTheme
 from src.domain.chroma import chroma_def, chroma_title
@@ -114,6 +115,10 @@ class ShopScene:
             if not sold:
                 chroma_fx.draw_chroma_box(surface, rect, chroma, chroma_fx.now(), radius=8)
         lines = _wrap(description, self._fonts.get(13), 205)
+        room = max(1, (rect.bottom - 52 - (rect.y + 65)) // 19 + 1)
+        if len(lines) > room:
+            lines = lines[:room]
+            lines[-1] = fit(self._fonts.get(13), lines[-1] + "…", 205)
         for i, line in enumerate(lines):
             self._label(surface, line, (text_x, rect.y + 65 + i * 19), 13, color)
         label = 'Agotado' if sold else f'{cost} oro'

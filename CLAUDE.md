@@ -148,7 +148,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | File | Responsibility |
 |---|---|
 | `colors.py` | Named `pygame.Color` constants for the entire project |
-| `fonts.py` | `FontRegistry` — lazy font cache, keyed by point size |
+| `fonts.py` | `FontRegistry` — pixel font cache: `get(size)` snaps every requested size to a whole multiple of the pixel grid (`pixel_size`: ≤11 → `LastWish8` 8 px, ≤17 → `LastWish` 16 px, ≤23 → `LastWish8` 16, ≤30 → `LastWish` 32, ≤38 → `LastWish8` 24, then `LastWish8` 8 × round(size/10)) and returns a `PixelFont` (always hard-edged, rendered on a 32-bit alpha surface); `bold(size)` = the Bold face at the same snapped size (card text and names); `tiny(size)` = Tiny5 for long card names; `pixel`; system font fallback when the TTFs are missing |
 | `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
@@ -182,6 +182,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui/targeting.py` | `draw_arrow(surface, start, end, *, hot, phase)` chevron arrow (pure curve helpers `control_point`, `sample_curve`, `segment_placements`, `head_placement`; cached pre-rotated pixel sprites) and `draw_reticle(surface, rect, color, t)` |
 | `ui/entity_widget.py` | `draw_player(…, incoming_loss=, t=, hitboxes=)`, `draw_enemy(…, framed=True, intent_damage=, lethal=, t=, hitboxes=)` (`framed=False`: no body panel, used by animated enemies). STS-style intent `draw_intent` (big icon — the sword grows with total damage — + number "4×3" + small extra icons; red glow + skull when `lethal`), `intent_number`, `intent_extras`, `intent_label` (text fallback); status badges = icon + stacks (`status_rects`); block = shield with number on the HP bar (blue rim); hero HP bar blinks the HP the coming attacks take + "−N" chip. `hitboxes` gets `"intent"` and `"statuses"` rects for hover |
 | `ui/glossary.py` | Keyword glossary: `Term` (name, rule, icon, colour), `STATUS_TERMS`, `KEYWORD_TERMS`, `EXHAUST`/`ETHEREAL`/`UNPLAYABLE`/`SHIELD`, `terms_in(texts, exclude=, include_shield=)`, `status_icon`, `status_term`; shared text colours (`KEYWORD` gold, `DAMAGE` red, `BLOCK` blue, `POISON_INK` green, `MANA`) |
+| `ui/text_fit.py` | Text that never leaves its box: `wrap(font, text, max_w)` (word wrap, newlines, over-long word cut), `fit(font, text, max_w)` (one line ended with "…"), `render_wrapped(..., max_lines=)` (last kept line ends with "…"). Use it for every label inside a panel/button/plate |
 | `ui/rich_text.py` | Colour-coded rule text: `spans(text, base)`, `render_lines(text, font, max_w, base)` (wrapped, cached), `render_line` — "N de daño"/"N de vida" red, escudo/bloqueo blue, maná light blue, Veneno green, glossary terms gold. Used by tooltips, card faces and banners |
 | `ui/action_banner.py` | `ActionBanners` (one per acting enemy, stacked at y 372, fade in / hold 2.1 s / fade out) and `describe_action(name, intent, action)` → (icon, "Caballero Hueco usa Danza de Espadas", "2 golpes · pierdes 3 de vida · …") |
 | `ui/dungeon_backdrop.py` | `DungeonBackdrop(seed, budget)` — combat background: one blit of the baked room, flickering torches (flame animation + additive glow), particles for embers, window rain + sill splashes, ceiling drips, moonbeam dust. `update(dt)`, `draw(surface)`, `particle_count`; `budget` scales particles (0 = off) |
@@ -574,6 +575,7 @@ One test file per source module. All test files follow the same structure:
 | `presentation/fx/test_sprite_animation.py` | `fx/sprite_animation.py` | frame timing, looping, hold, offsets, invalid input |
 | `infrastructure/test_dungeon_assets.py` | `infrastructure/dungeon_assets.py` | files exist, metadata anchors/palettes, pre-scaling, single load |
 | `presentation/ui/test_dungeon_backdrop.py` | `ui/dungeon_backdrop.py` | room drawn, torches animate, budget 0, fallback, cost bound, combat integration |
+| `infrastructure/test_fonts.py` | `infrastructure/fonts.py`, `assets/fonts`, `scripts/build_game_font.py` | files + licences, Spanish letters and every UI symbol in the fonts (fontTools), snapping (whole grid, monotonic, boundaries, huge), hard edges at every size, cap heights, shared objects, fallback without files, Tiny5, every card name fits its plate, rebuild = shipped; original cache tests |
 | `infrastructure/test_card_assets.py` | `infrastructure/card_assets.py` | layout rarities/zones/packs, files exist, frame size & cache, pack aspect, placeholders |
 | `presentation/ui/test_card_play.py` | `ui/card_play.py` | pick, drag threshold, play line boundary, aim/target, release/click, sticky, keyboard cycle/confirm, cancel, 10 000-move stress |
 | `presentation/ui/test_targeting.py` | `ui/targeting.py` | curve ends, bend, spacing, growth, flow period, head, colours, blit count, sprite cache bound, reticle |
@@ -590,6 +592,7 @@ One test file per source module. All test files follow the same structure:
 | `test_boss_sprite_generators.py` | `scripts/generate_boss_*.py`, `scripts/pixel_kit.py` | Espectro art contract per boss, strike events, move → animation, sword strip, kit (gapless strokes, dissolve, PNG) |
 | `presentation/scenes/test_combat_bosses.py` | boss sheets, `EnemyAnimator` styles/swords, `CombatScene` boss slot | loader extras, styles, strike times, sword count/throw/re-form/death, big slot, move clip, cards added, one number per hit, hero waits for the first sword, unplayable card, 60-turn stress |
 | `application/test_gacha.py` | `domain/gacha.py`, `application/gacha.py` | prices (growth, rounding, shared counter, Máscara, 10^3 pulls), odds (sum 1, stellar never Común and better, luck, subsets), roll distribution, paying, refusing, determinism, no duplicates until the pool is empty, max HP, stellar golden boost |
+| `presentation/ui/test_text_fit.py` | `ui/text_fit`, character select, boss reward, shop, relic viewer, `action_banner`, hero sheet | wrap within width / word order / long word / newlines / empty / 10 000 words, fit unchanged or "…" never wider, line cap; every character description ≤ 2 lines in its panel; every relic (normal + golden) drawn in boss reward, shop and viewer; banner never wider than its panel; every hero sheet |
 | `presentation/ui/test_readability.py` | `ui_icons`, `scripts/generate_ui_icons.py`, `rich_text`, `glossary`, tooltips, `entity_widget` intents/badges, `action_banner`, `CombatScene` hover | every icon exists (one per status), generator = assets, colours (damage/block/keyword/poison/mana/HP), terms found in order without repeats, intent sentences (multi-hit totals, modifiers, block absorbed, lethal, extras), panels not repeated, timed debuff duration, card keyword/flag panels, renderer on screen / 2 columns / beside a card, intent number/extras/hitboxes, banner texts and lifecycle, hover intent / hero status / enemy status, banner after end turn |
 | `presentation/ui/test_hud_kit.py` | `ui_kit`, `scripts/generate_ui_kit.py`, `pixel_ui`, HUD widgets, `hero_stats`, `hero_sheet`, SceneManager/CombatScene wiring | pieces + generator = assets, exact 9/3-slice sizes, tiling keeps corners, buttons in every style/state, mana orb (sync, splash, easing, flash, shake, max 0, 10^9 dt stress), End Turn variants, piles, stat bases/relic sources/golden relic/inactive/Pruebas/live combat/odds/huge luck/deck by type, sheet fill order/closing/phases/stress, C key + button + Escape order + overlay guard, End Turn locked while enemies act, orb shakes on unaffordable card |
 | `presentation/ui/test_card_ready_and_preview.py` | `card_preview`, reward/pack/pile screens, `fx/card_fx`, card widgets, `MainMenuScene` | hero/relic/Pruebas bonuses = combat hand, per-card rule, no run, 10^100, screens wired; ready keywords only for layers the card has, colour cycling, comets on the edge/moving/tilted, badge position, golden + ready drawn together, combat hand; menu buttons, no overlap, click/keys, fade-in, 1000-frame stress |
@@ -1162,4 +1165,35 @@ User: a shop to remove cards — only one, but you choose which card, and it cos
   (`shop_price`); the deck never drops below `MIN_DECK` = 1 (user: at least one card).
 - Screen (`scenes/purge_scene.py`): pick a card in the deck grid → confirmation → it burns on
   the altar (`fx/card_burn`) → the room closes. "Salir" leaves without removing.
+
+## Pixel font (2026-10-08)
+
+User: a font for the game, free with no conditions; download and install it.
+
+- **Pixel Operator** (Jayvee Enaguas, CC0 1.0 — public domain, no credit) downloaded from DaFont
+  into `assets/fonts/source/`. `scripts/build_game_font.py` (dev only: `uv run scripts/build_game_font.py`; `fonttools` is in the dev group, so the font tests never skip)
+  adds the UI symbols it lacked (→ ← ↑ ↓ ↔ − ▲ ✓ ≤ ≥ ≈ ⚙ ⛑) as pixel glyphs on its own grid →
+  `assets/fonts/LastWish.ttf` (16 px grid) and `LastWish8.ttf` (8 px grid). New on-screen
+  symbol → add it to `GLYPHS` and rebuild (a test checks every non-ASCII char in `src/` exists).
+- **Tiny5** (SIL OFL 1.1, `Tiny5-OFL.txt` must ship with it) only for card names that do not fit
+  the 79 px name plate even at 8 px (`card_widget`: shrink, then `fonts.tiny`).
+- `infrastructure/fonts.py`: sizes snap to the grid, text is never antialiased. Text on the base
+  card uses the 8 px font; tooltips/menus 16 px; titles 2–4 px grain like the sprites.
+- User found the card text too thin → the **Bold** versions (Pixel Operator Bold, also CC0) are
+  built too (`LastWish-Bold.ttf`, `LastWish8-Bold.ttf`, symbols thickened by `embolden`) and
+  `card_widget._card_font` uses `fonts.bold` for the card name and rule text.
+- Tests: `tests/infrastructure/test_fonts.py`.
+
+## Text fitting (2026-10-08)
+
+User: character-select descriptions spilled out of their panel. Every dynamic text now goes
+through `ui/text_fit` (wrap / fit with "…"):
+
+- Character select: description wrapped to 2 lines inside the panel (`_PANEL_W - 28`), centred.
+- Boss reward: relic name `fit`, description wrapped (was a single line) down to the chroma note.
+- Shop and relic viewer: description lines capped to the box; the last kept line ends with "…".
+- Enemy-turn banners (`action_banner`): title `fit`, details wrapped (≤ 3 lines) inside `WIDTH`.
+- Hero sheet: an effect sentence too wide is shortened with "…" instead of losing its end.
+- Checked and fine: treasure, event, death, settings, pack, combat, map, menu, gacha, Brujo,
+  Pruebas. New panels must use `text_fit` too. Tests: `tests/presentation/ui/test_text_fit.py`.
 
