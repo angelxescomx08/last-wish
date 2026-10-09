@@ -13,7 +13,7 @@ from src.domain.run import Run
 
 PURGE_BASE = 75
 PURGE_STEP = 25
-MIN_DECK = 5
+MIN_DECK = 1                  # you always keep at least one card
 
 
 def purge_price(run: Run) -> int:
@@ -24,7 +24,7 @@ def purge_price(run: Run) -> int:
 def purge_block_reason(run: Run) -> str:
     """Spanish reason why no card can be removed now, or "" when it is possible."""
     if len(run.deck) <= MIN_DECK:
-        return f"Tu mazo no puede bajar de {MIN_DECK} cartas"
+        return "Es tu última carta: tu mazo no puede quedarse vacío"
     if run.gold < purge_price(run):
         return "No tienes suficiente oro"
     return ""

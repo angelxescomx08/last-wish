@@ -363,7 +363,7 @@ siempre pagando oro; después la sala se cierra (una carta por altar).
 
 - Precio: 75 de oro, +25 por cada carta que ya eliminaste en la partida (75, 100, 125…).
   La Máscara del Ladrón lo abarata como cualquier precio de tienda.
-- Tu mazo no puede bajar de 5 cartas.
+- Siempre te queda al menos 1 carta en el mazo.
 - La carta elegida arde en el altar, de abajo hacia arriba, con brasas.
 
 ## Mejoras de cartas — El Brujo ✅

@@ -80,7 +80,7 @@ class TestRemove:
         run = _run(10 ** 9)
         run.deck = run.deck[:MIN_DECK]
         assert not can_purge(run) and purge_card(run, 0) is None
-        assert str(MIN_DECK) in purge_block_reason(run)
+        assert MIN_DECK == 1 and "última carta" in purge_block_reason(run)
 
     def test_min_plus_one(self):
         run = _run()

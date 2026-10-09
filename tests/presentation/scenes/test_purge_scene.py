@@ -121,7 +121,7 @@ class TestFlow:
         scene, run = _scene()
         run.deck = run.deck[:MIN_DECK]
         scene.select(0)
-        assert scene.selected_index is None and str(MIN_DECK) in scene._message
+        assert scene.selected_index is None and "última carta" in scene._message
 
     def test_price_rises_on_next_altar(self):
         scene, run = _scene()

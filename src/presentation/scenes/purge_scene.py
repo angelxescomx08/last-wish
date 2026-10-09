@@ -18,7 +18,7 @@ import random
 import pygame
 
 from src.application.card_preview import run_card_bonus
-from src.application.purge import MIN_DECK, can_purge, purge_block_reason, purge_card, purge_price
+from src.application.purge import can_purge, purge_block_reason, purge_card, purge_price
 from src.domain.card import Card
 from src.domain.run import Run
 from src.infrastructure import colors
@@ -55,7 +55,7 @@ class _PurgeGrid(CollectionViewer):
     @property
     def footer_text(self) -> str:  # type: ignore[override]
         return (f'Solo puedes eliminar una carta en este altar  ·  Precio: {purge_price(self._run)} de oro'
-                f'  ·  Tu mazo no baja de {MIN_DECK} cartas')
+                '  ·  Siempre te queda al menos 1 carta')
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
