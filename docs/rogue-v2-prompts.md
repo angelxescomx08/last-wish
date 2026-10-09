@@ -1,0 +1,19 @@
+# Rogue v2 artwork prompts
+
+Built-in image generation, transparent output. Initial generation:
+
+Use case: stylized-concept. Production pixel art game animation sprite sheet for Last Wish, dungeon fantasy roguelike. TRANSPARENT BACKGROUND. EXACT uniform 8 columns x 6 rows, 48 equally sized square cells, no gutters, no labels, no text. Wide 4:3 canvas. One consistent beautiful ADULT female rogue in every cell: cute refined anime face, large turquoise eyes, dark plum hair in a flowing high ponytail, fitted practical charcoal leather outfit fully covering torso and legs, violet short split cape/scarf, silver clasps, leather boots and gloves, TWO short silver daggers. Elegant readable silhouette, confident charming expression. Crisp deliberate pixel clusters, limited palette, colored dark outlines, upper left light, authentic detailed 96x96 pixel sprite aesthetic, no blur, no gradient rendering. Each cell contains full body with ample safe margins, same character scale, facing RIGHT three-quarter view, planted feet baseline consistent. Real anatomical pose changes, arms and knees articulate, daggers firmly attached to hands, hair follows motion. Each row is a chronological sequence of EIGHT animation poses from left to right:
+ROW 1 idle: relaxed combat stance gentle breath and delayed scarf and ponytail sway, seamless cycle.
+ROW 2 attack: neutral, crouch anticipation daggers drawn back, lunge windup, forceful right-facing double dagger slash with a small crisp silver arc, follow-through, retract blades, settle, exact initial neutral stance.
+ROW 3 dodge/guard: neutral, knees bend, lean back out of danger, low sidestep daggers crossed protectively, hold low, rise, settle, exact initial neutral.
+ROW 4 hurt: neutral, struck chest recoil backwards toward left, strongest recoil eyes briefly closed, brace weight on rear foot, recover shoulders, lower daggers, settle, exact initial neutral.
+ROW 5 skill: neutral, lift near dagger, focus small teal poison spark around dagger, raise both daggers with subtle violet magic, sparks subside, lower arms, settle, exact initial neutral.
+ROW 6 defeat: neutral, stagger, knees buckle, kneel one knee, kneel both knees head bowed, fall sideways, resting collapsed on ground, hold collapsed. Do not return to standing.
+NO other characters, no checkerboard, no scenery, no floor shadow, no labels, no grid lines. Every figure fully contained within own cell. Same outfit, face, proportions in ALL frames. Prioritize professional charming pixel art and coherent frame-by-frame movement.
+
+Correction: preserve identity and all 48 poses; remove overlapping slash arcs and magical particles; keep figures and daggers inside square cells with transparent margins. Built-in edit of the initial atlas. Final source saved as assets/characters/rogue-source-v2.png.
+
+
+Exact corrective edit prompt:
+
+> Edit this animation atlas. Preserve EXACT character identity, all outfits, all 48 poses and their 8-column 6-row arrangement. Fix a critical sprite-sheet problem: the white slash effects in row 2 overlap adjacent cells, and some skill glows cross cells. REMOVE EVERY white slash arc and every magical particle/glow throughout the entire sheet. Keep ONLY the physical woman, hair, scarf, daggers. Maintain consistent full body scale and placement within uniform square cells; ensure a generous transparent gap separating each figure and keep every dagger tip inside its cell. Each square cell must have at least 12% empty margin on left and right. No part of adjacent poses may touch or overlap. Keep final defeated poses fully inside cells. Refine the pixel art to distinct crisp hand-placed colored pixels and clear turquoise anime eyes, no blurred tiny highlights. Preserve truly transparent background; no grid, labels, text or checkerboard. Same 8 by 6 atlas; no changing animation pose sequence.

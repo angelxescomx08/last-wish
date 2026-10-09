@@ -122,3 +122,31 @@ class TestDeath:
         scene = self._dying()
         scene._play_hero_action("hurt")
         assert scene.hero_action == "death"
+
+class TestRogueAnimationIntegration:
+    def test_skill_uses_cast_and_returns_to_idle(self):
+        scene = _scene("La Pícara")
+        _play_first(scene, _skill())
+        assert scene.hero_action == "cast"
+        _steps(scene, hero_animation_seconds("cast", "rogue") + 0.05)
+        assert scene.hero_action is None
+
+    def test_rogue_enemy_reacts_at_dagger_contact(self):
+        scene = _scene("La Pícara")
+        _play_first(scene, _strike_card())
+        assert scene.enemy_animators[0].action is None
+        _steps(scene, hero_strike_seconds("rogue") + 0.03)
+        assert scene.enemy_animators[0].action == "hurt"
+
+    def test_lethal_damage_waits_for_rogue_collapse(self):
+        scene = _scene("La Pícara", enemy="Cultista")
+        scene.state.player.current_hp = 1
+        scene.state.player.block = 0
+        scene.state.enemies[0].intent = Intent(IntentType.ATTACK, 50)
+        scene._do_end_turn()
+        assert scene.hero_action == "death"
+        _steps(scene, 0.4)
+        assert scene.death_occurred is False
+        _steps(scene, hero_animation_seconds("death", "rogue") + 0.5)
+        assert scene.death_occurred is True
+        assert scene.hero_action == "death"

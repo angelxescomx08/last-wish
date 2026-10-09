@@ -1232,3 +1232,17 @@ through `ui/text_fit` (wrap / fit with "…"):
 - Checked and fine: treasure, event, death, settings, pack, combat, map, menu, gacha, Brujo,
   Pruebas. New panels must use `text_fit` too. Tests: `tests/presentation/ui/test_text_fit.py`.
 
+
+### Rogue v2 artwork
+
+The rogue's runtime metadata `assets/characters/rogue_sheet.json` selects the
+versioned 96/192 px sheets baked by `scripts/generate_rogue_v2_sprites.py` from
+`rogue-source-v2.png`. Six states: idle, attack, guard, hurt, cast, death. Attack
+contact metadata triggers the existing delayed hit presentation; death holds
+until the existing defeat transition. Previous art remains in `rogue_legacy/`.
+See `docs/visual-design.md` for reproduction, preview and rollback.
+
+The rogue v2 baker now uses `scripts/rogue_rig.py` and the fixed approved drawing
+`rogue-rig-base.png` instead of alternating generated poses. It exports 192 frames
+across six states (48 idle/death, 24 each action); runtime uses the existing hero
+sheet contract and strike event. See the motion-correction section of visual-design.

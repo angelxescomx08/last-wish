@@ -393,3 +393,72 @@ travelling the edge with trails in the keyword colour, corner flares, a badge wi
 keyword icon above the card). Several ready keywords share the badge and cycle the aura
 colour. The main menu uses the same room, kit buttons and title glow as the game.
 
+
+## Rogue v2 — female animation atlas (2026-10-09)
+
+The current rogue is an adult female anime rogue with plum ponytail, turquoise
+ eyes, charcoal leather armour, violet scarf/cape and paired silver daggers.
+Built-in image generation created `assets/characters/rogue-source-v2.png` as an
+8-column, 6-row pose atlas. This is frame-by-frame generated artwork, not a
+skeletal rig or AI video. Art approval and perceived fluidity still need review.
+
+`scripts/generate_rogue_v2_sprites.py` uses pygame to extract the 48 connected silhouettes and bake
+96 px native sheets, enlarged exactly twice with nearest neighbour for combat.
+The immutable source is never overwritten by the baker. Idle reuses eight
+breathing poses forwards/backwards over 1.6 seconds, with a fixed boot strip;
+attack, guard, hurt and cast each have eight timed poses ending at idle zero.
+Death has eight poses and holds its collapsed endpoint. The attack metadata
+places dagger contact at frame 3 (210 ms), activating existing timed combat
+reactions. No domain or combat-rule changes were needed.
+
+Outputs: `rogue_v2_sheet.png`, `rogue_v2_sheet_96.png`, `rogue_v2_sheet.json`,
+individual `rogue_v2_frames/*.png`, `output/rogue-v2-contact.png` and
+`output/rogue-v2-preview.html` (play/pause, stepping, speed, 96/192/384 px).
+Runtime selection is `assets/characters/rogue_sheet.json`.
+
+All previous source/base/sheets and the old generator are copied under
+`assets/characters/rogue_legacy/`. Previous root PNGs and generator are unchanged.
+To restore the old look, close the game and run:
+
+```powershell
+Copy-Item assets/characters/rogue_legacy/rogue_sheet.json assets/characters/rogue_sheet.json
+```
+
+To return to v2, copy `rogue_v2_sheet.json` to `rogue_sheet.json`, or rebuild:
+
+```powershell
+.venv/Scripts/python.exe scripts/generate_rogue_v2_sprites.py
+```
+
+Exact generation prompts are in `docs/rogue-v2-prompts.md`. Generation used the
+built-in image tool, not the API/CLI fallback. No warrior artwork was changed.
+
+
+## Rogue motion correction — articulated rig (2026-10-09)
+
+User approved the v2 design but reported jerky animation. The generated atlas
+changed anatomy/registration between frames and its action endpoints snapped to
+idle. It remains preserved as artwork but is no longer played as discrete poses.
+
+`rogue-rig-base.png` preserves the approved first idle drawing. `scripts/rogue_rig.py`
+separates its original pixels into hair, cape, head, torso, arms and legs, with
+small source-pixel overlaps at the shoulders/elbows/waist. Shoulder transforms
+inherit the torso; each forearm and its dagger stay rigidly attached to its elbow.
+No new artwork generation, cross-fading, optical flow or global image deformation.
+
+Authored continuous joint curves drive 48 idle frames over 1.6 s and 24 frames
+per action (attack, guard, hurt, cast). Death has 48 frames and holds the fall.
+The curves return to the exact same rest pose, with continuous velocity at keys.
+The rig deliberately uses restrained action poses to preserve the source anatomy.
+Native pixel-grid stepping is still visible at large zoom; perceived fluidity
+and taste require user review. Source artwork and the legacy rogue are unchanged.
+
+Rebuild with `scripts/generate_rogue_v2_sprites.py`; it exports layers under
+`assets/characters/rogue_rig/`, individual frames, both sheets and the HTML preview.
+`scripts/export_rogue_preview.py` exports the GIF with optional Pillow.
+`output/rogue-v2-before-rig.gif` and `assets/characters/rogue_v2_before_rig/` preserve
+the previous animation for comparison. To restore that revision, copy all three
+sheet PNG/JSON files from that folder to `assets/characters/`, then copy the
+restored `rogue_v2_sheet.json` to `rogue_sheet.json` and restart the game.
+Tests check continuous transforms, rigid dagger attachment, the loop, fixed idle
+soles, action endpoints, safe margins and combat integration.

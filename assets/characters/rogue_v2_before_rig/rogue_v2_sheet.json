@@ -1,0 +1,115 @@
+{
+  "cell": 192,
+  "columns": 16,
+  "sheets": {
+    "192": "rogue_v2_sheet.png",
+    "96": "rogue_v2_sheet_96.png"
+  },
+  "events": {
+    "attack": {
+      "strike_frame": 3
+    }
+  },
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 16,
+      "durations_ms": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ],
+      "loop": true
+    },
+    "attack": {
+      "row": 1,
+      "frames": 8,
+      "durations_ms": [
+        65,
+        85,
+        60,
+        55,
+        65,
+        75,
+        85,
+        90
+      ],
+      "loop": false
+    },
+    "guard": {
+      "row": 2,
+      "frames": 8,
+      "durations_ms": [
+        60,
+        70,
+        75,
+        85,
+        85,
+        70,
+        65,
+        70
+      ],
+      "loop": false
+    },
+    "hurt": {
+      "row": 3,
+      "frames": 8,
+      "durations_ms": [
+        35,
+        55,
+        90,
+        80,
+        70,
+        65,
+        65,
+        70
+      ],
+      "loop": false
+    },
+    "cast": {
+      "row": 4,
+      "frames": 8,
+      "durations_ms": [
+        65,
+        75,
+        85,
+        100,
+        90,
+        80,
+        75,
+        80
+      ],
+      "loop": false
+    },
+    "death": {
+      "row": 5,
+      "frames": 8,
+      "durations_ms": [
+        70,
+        100,
+        110,
+        120,
+        140,
+        140,
+        180,
+        300
+      ],
+      "loop": false
+    }
+  },
+  "source": "rogue-source-v2.png",
+  "generator": "scripts/generate_rogue_v2_sprites.py"
+}

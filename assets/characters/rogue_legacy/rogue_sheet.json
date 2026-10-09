@@ -1,0 +1,74 @@
+{
+  "cell": 192,
+  "columns": 16,
+  "sheets": {
+    "192": "rogue_sheet.png",
+    "96": "rogue_sheet_96.png"
+  },
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 16,
+      "durations_ms": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ],
+      "loop": true
+    },
+    "attack": {
+      "row": 1,
+      "frames": 8,
+      "durations_ms": [
+        70,
+        45,
+        50,
+        60,
+        90,
+        70,
+        70,
+        80
+      ],
+      "loop": false
+    },
+    "guard": {
+      "row": 2,
+      "frames": 7,
+      "durations_ms": [
+        60,
+        70,
+        90,
+        90,
+        90,
+        80,
+        80
+      ],
+      "loop": false
+    },
+    "hurt": {
+      "row": 3,
+      "frames": 5,
+      "durations_ms": [
+        70,
+        110,
+        110,
+        100,
+        90
+      ],
+      "loop": false
+    }
+  }
+}
