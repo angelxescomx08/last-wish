@@ -48,13 +48,35 @@ def separate_layers(base):
 
 
 def curve(phase, keys):
-    """C1-continuous timing between authored poses, with held action endpoints."""
-    for (start,a),(end,b) in zip(keys,keys[1:]):
-        if phase <= end:
-            t = max(0,min(1,(phase-start)/(end-start)))
-            t = t*t*(3-2*t)
-            return a+(b-a)*t
-    return keys[-1][1]
+    """Monotone cubic (Fritsch-Carlson) through authored keys.
+
+    Velocity is continuous across every key: the motion only comes to rest at
+    true extremes (wind-up, peak, endpoints), never at intermediate keys. The
+    previous per-segment smoothstep stopped at every key, which read as
+    stop-and-go jerks. Endpoints stay exact so actions return to rest.
+    """
+    xs = [k[0] for k in keys]
+    ys = [k[1] for k in keys]
+    if phase <= xs[0]:
+        return ys[0]
+    if phase >= xs[-1]:
+        return ys[-1]
+    n = len(keys)
+    d = [(ys[i+1]-ys[i])/(xs[i+1]-xs[i]) for i in range(n-1)]
+    m = [0.0]*n
+    for i in range(1, n-1):
+        if d[i-1]*d[i] > 0:
+            h0, h1 = xs[i]-xs[i-1], xs[i+1]-xs[i]
+            w0, w1 = 2*h1+h0, h1+2*h0
+            m[i] = (w0+w1)/(w0/d[i-1]+w1/d[i])
+    for i in range(n-1):
+        if xs[i] <= phase <= xs[i+1]:
+            h = xs[i+1]-xs[i]
+            t = (phase-xs[i])/h
+            t2, t3 = t*t, t*t*t
+            return ((2*t3-3*t2+1)*ys[i] + (t3-2*t2+t)*h*m[i]
+                    + (-2*t3+3*t2)*ys[i+1] + (t3-t2)*h*m[i+1])
+    return ys[-1]
 
 
 def envelope(phase, peak=.4):
@@ -133,27 +155,50 @@ def pose_at(action, phase):
     return pose
 
 
-def render_pose(layers, pose):
-    canvas = pygame.Surface((96,96), pygame.SRCALPHA)
+def _layer_pixels(layer):
+    w, h = layer.get_size()
+    return [[tuple(layer.get_at((x, y))) for x in range(w)] for y in range(h)]
+
+
+_PIXEL_CACHE = {}
+
+
+def render_pose(layers, pose, scale=1):
+    """Draw the pose at ``scale`` x the 96 px art.
+
+    Rendering the 192 px sheet directly (instead of enlarging the 96 px frame)
+    lets each joint move in half-pixel steps of the art, so slow motions such
+    as breathing glide instead of popping by whole 2 px blocks. Sampling is
+    still nearest-neighbour from the original pixels: no blur, no repaint.
+    """
+    size = 96*scale
+    canvas = pygame.Surface((size, size), pygame.SRCALPHA)
     for name in ORDER:
         layer, transform = layers[name], pose[name]
         bounds = layer.get_bounding_rect()
         if not bounds.width:
             continue
-        c,s = math.cos(transform.angle), math.sin(transform.angle)
-        corners = [transform.point(point) for point in (bounds.topleft,bounds.topright,bounds.bottomleft,bounds.bottomright)]
-        left,right = max(0,math.floor(min(p[0] for p in corners))-1), min(96,math.ceil(max(p[0] for p in corners))+1)
-        top,bottom = max(0,math.floor(min(p[1] for p in corners))-1), min(96,math.ceil(max(p[1] for p in corners))+1)
-        for y in range(top,bottom):
-            for x in range(left,right):
-                px,py = x-transform.tx,y-transform.ty
-                sx,sy = round(c*px+s*py),round(-s*px+c*py)
-                if 0<=sx<96 and 0<=sy<96:
-                    color = layer.get_at((sx,sy))
-                    if color.a:
-                        canvas.set_at((x,y),color)
+        key = id(layer)
+        if key not in _PIXEL_CACHE:
+            _PIXEL_CACHE[key] = (layer, _layer_pixels(layer))
+        pixels = _PIXEL_CACHE[key][1]
+        c, s = math.cos(transform.angle), math.sin(transform.angle)
+        corners = [transform.point(point) for point in (bounds.topleft, bounds.topright,
+                                                        bounds.bottomleft, bounds.bottomright)]
+        left = max(0, math.floor(min(p[0] for p in corners)*scale)-scale)
+        right = min(size, math.ceil(max(p[0] for p in corners)*scale)+scale)
+        top = max(0, math.floor(min(p[1] for p in corners)*scale)-scale)
+        bottom = min(size, math.ceil(max(p[1] for p in corners)*scale)+scale)
+        # Sample at destination pixel centres (identical to the old 1x result
+        # when scale == 1 because round(i) == floor(i + .5)).
+        offset = .5 - .5/scale
+        for y in range(top, bottom):
+            py = y/scale - offset - transform.ty
+            for x in range(left, right):
+                px = x/scale - offset - transform.tx
+                sx, sy = round(c*px+s*py), round(-s*px+c*py)
+                if 0 <= sx < 96 and 0 <= sy < 96:
+                    color = pixels[sy][sx]
+                    if color[3]:
+                        canvas.set_at((x, y), color)
     return canvas
-
-
-
-

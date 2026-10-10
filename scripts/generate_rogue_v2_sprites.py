@@ -38,21 +38,30 @@ def load_poses():
     layer_dir.mkdir(exist_ok=True)
     for name, layer in layers.items():
         pygame.image.save(layer, str(layer_dir / f"{name}.png"))
-    return {name: [render_pose(layers, pose_at(name, i/(count if name == "idle" else count-1)))
-                   for i in range(count)] for name,count in COUNTS.items()}
+    def phase(name, i, count):
+        return i/(count if name == "idle" else count-1)
+    small = {name: [render_pose(layers, pose_at(name, phase(name, i, count)))
+                    for i in range(count)] for name, count in COUNTS.items()}
+    # The combat sheet is rendered natively at 192 px (half-pixel joint steps)
+    # instead of enlarging the 96 px frames, which made motion step in 2 px blocks.
+    large = {name: [render_pose(layers, pose_at(name, phase(name, i, count)), scale=2)
+                    for i in range(count)] for name, count in COUNTS.items()}
+    return small, large
 
 
 def bake():
-    rows = load_poses()
+    rows, large_rows = load_poses()
     atlas = pygame.Surface((96 * max(COUNTS.values()), 96 * 6), pygame.SRCALPHA)
+    atlas_192 = pygame.Surface((192 * max(COUNTS.values()), 192 * 6), pygame.SRCALPHA)
     frames_dir = ASSETS / "rogue_v2_frames"
     frames_dir.mkdir(exist_ok=True)
     for row, name in enumerate(NAMES):
         for index, frame in enumerate(rows[name]):
             atlas.blit(frame, (index * 96, row * 96))
+            atlas_192.blit(large_rows[name][index], (index * 192, row * 192))
             pygame.image.save(frame, str(frames_dir / f"{name}_{index:02}.png"))
     pygame.image.save(atlas, str(ASSETS / "rogue_v2_sheet_96.png"))
-    pygame.image.save(pygame.transform.scale(atlas, (atlas.get_width()*2, atlas.get_height()*2)), str(ASSETS / "rogue_v2_sheet.png"))
+    pygame.image.save(atlas_192, str(ASSETS / "rogue_v2_sheet.png"))
     meta = {
         "cell": 192, "columns": max(COUNTS.values()),
         "sheets": {"192": "rogue_v2_sheet.png", "96": "rogue_v2_sheet_96.png"},
@@ -69,8 +78,8 @@ def bake():
     review = pygame.Surface((8 * 192, 6 * 224))
     review.fill((18, 20, 34))
     for row, name in enumerate(NAMES):
-        for column, frame in enumerate([rows[name][round(i*(len(rows[name])-1)/7)] for i in range(8)]):
-            review.blit(pygame.transform.scale(frame, (192, 192)), (column * 192, row * 224 + 16))
+        for column, frame in enumerate([large_rows[name][round(i*(len(rows[name])-1)/7)] for i in range(8)]):
+            review.blit(frame, (column * 192, row * 224 + 16))
     pygame.image.save(review, str(OUTPUT / "rogue-v2-contact.png"))
     write_preview(meta)
     print("Baked articulated rogue: 192 frames, six states, 96/192 px, HTML review")
@@ -86,11 +95,11 @@ def write_preview(meta):
 <p><a style="color:#cab5ef" href="rogue-v2-contact.png">Ver todas las poses</a></p>
 <script>
 const meta=META, names={idle:'Reposo',attack:'Ataque',guard:'Esquiva / defensa',hurt:'Recibir daño',cast:'Habilidad',death:'Derrota'};
-const image=new Image();image.src='../assets/characters/rogue_v2_sheet_96.png';
+const image=new Image();image.src='../assets/characters/rogue_v2_sheet.png';
 const state=document.querySelector('#state');Object.entries(names).forEach(([id,label])=>state.add(new Option(label,id)));
 let elapsed=0, playing=true, previous=0;
 function frameAt(a){let time=elapsed*1000,total=a.durations_ms.reduce((x,y)=>x+y,0);if(a.loop)time%=total;for(let i=0;i<a.frames;i++){if(time<a.durations_ms[i])return i;time-=a.durations_ms[i]}return a.frames-1}
-function draw(){if(!image.complete)return;const a=meta.animations[state.value],f=frameAt(a);for(const id of ['small','large','zoom']){const c=document.getElementById(id),ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(image,f*96,a.row*96,96,96,0,0,c.width,c.height)}document.querySelector('#info').textContent=`${names[state.value]} · fotograma ${f+1}/${a.frames}`}
+function draw(){if(!image.complete)return;const a=meta.animations[state.value],f=frameAt(a);for(const id of ['small','large','zoom']){const c=document.getElementById(id),ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(image,f*192,a.row*192,192,192,0,0,c.width,c.height)}document.querySelector('#info').textContent=`${names[state.value]} · fotograma ${f+1}/${a.frames}`}
 document.querySelector('#play').onclick=()=>{playing=!playing;document.querySelector('#play').textContent=playing?'Pausar':'Reproducir'};
 document.querySelector('#step').onclick=()=>{playing=false;document.querySelector('#play').textContent='Reproducir';const a=meta.animations[state.value],next=(frameAt(a)+1)%a.frames;elapsed=a.durations_ms.slice(0,next).reduce((x,y)=>x+y,0)/1000+0.00001;draw()};
 state.onchange=()=>{elapsed=0;draw()};document.querySelector('#restart').onclick=()=>{elapsed=0;draw()};

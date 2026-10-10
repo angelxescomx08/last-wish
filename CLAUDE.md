@@ -1246,3 +1246,5 @@ The rogue v2 baker now uses `scripts/rogue_rig.py` and the fixed approved drawin
 `rogue-rig-base.png` instead of alternating generated poses. It exports 192 frames
 across six states (48 idle/death, 24 each action); runtime uses the existing hero
 sheet contract and strike event. See the motion-correction section of visual-design.
+Fluidity pass: keys use monotone cubic timing (no stops at intermediate keys) and the
+192 px sheet is rendered natively (`render_pose(scale=2)`), not the 96 px sheet ×2.

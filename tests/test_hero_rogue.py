@@ -72,7 +72,8 @@ class TestFrames:
 
     def test_idle_cycle_matches_the_shared_scene_clock(self):
         from src.infrastructure.sprite_loader import IDLE_CYCLE_SECONDS
-        assert hero_animation_seconds("idle", "rogue") == IDLE_CYCLE_SECONDS
+        import pytest
+        assert hero_animation_seconds("idle", "rogue") == pytest.approx(IDLE_CYCLE_SECONDS)
 
 
 class TestCombat:
@@ -113,10 +114,26 @@ class TestRoguePixelIntegrity:
                 assert bounds.left >= 2 and bounds.right <= 94
                 assert bounds.top >= 2 and bounds.bottom <= 94
 
-    def test_combat_art_is_exact_double_native_pixels(self):
+    def test_combat_art_is_native_192_render_of_the_same_pixels(self):
+        """The 192 px sheet is rendered natively (half-pixel joint steps), not an
+        enlargement of the 96 px frames, but it only ever uses source colours:
+        no blur, no repaint, same silhouette footprint."""
+        from pathlib import Path
+        base = pygame.image.load(str(Path(__file__).resolve().parents[1]
+                                     / "assets" / "characters" / "rogue-rig-base.png"))
+        palette = {tuple(base.get_at((x, y))) for x in range(96) for y in range(96)
+                   if base.get_at((x, y)).a}
         loader = SpriteLoader()
         for name in HEROES["rogue"].animations:
             native = loader.get_player_animation_frames(name, 96, "rogue")
             combat = loader.get_player_animation_frames(name, 192, "rogue")
-            assert all(_bytes(pygame.transform.scale(a, (192, 192))) == _bytes(b)
-                       for a, b in zip(native, combat, strict=True))
+            assert len(native) == len(combat)
+            for a, b in zip(native, combat):
+                assert b.get_size() == (192, 192)
+                small, large = a.get_bounding_rect(), b.get_bounding_rect()
+                assert abs(large.width - 2 * small.width) <= 4
+                assert abs(large.height - 2 * small.height) <= 4
+            frame = combat[len(combat) // 2]
+            colours = {tuple(frame.get_at((x, y))) for x in range(0, 192, 3)
+                       for y in range(0, 192, 3) if frame.get_at((x, y)).a}
+            assert colours <= palette

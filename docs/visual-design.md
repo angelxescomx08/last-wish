@@ -462,3 +462,17 @@ sheet PNG/JSON files from that folder to `assets/characters/`, then copy the
 restored `rogue_v2_sheet.json` to `rogue_sheet.json` and restart the game.
 Tests check continuous transforms, rigid dagger attachment, the loop, fixed idle
 soles, action endpoints, safe margins and combat integration.
+
+### Fluidity pass (2026-10-09, later)
+
+User liked the design but motion still felt not fully fluid. Two causes fixed:
+- `curve()` used a separate smoothstep per segment, so every joint *stopped* at
+  every intermediate key (stop-and-go). It is now a monotone cubic
+  (Fritsch-Carlson): velocity carries through keys and only rests at real
+  extremes; endpoints stay exact.
+- The 192 px combat sheet was the 96 px frames enlarged ×2, so every movement
+  stepped in 2 px blocks (idle alternated bursts of change with dead frames).
+  `render_pose(..., scale=2)` now renders the 192 sheet natively from the same
+  source pixels (nearest-neighbour, source palette only), giving half-pixel
+  joint steps. The 96 px sheet is unchanged in method.
+Pre-pass sheets for comparison: `tmp/rogue_fluid/before_192.png`, `before_96.png`.
