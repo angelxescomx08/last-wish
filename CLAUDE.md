@@ -1248,3 +1248,10 @@ across six states (48 idle/death, 24 each action); runtime uses the existing her
 sheet contract and strike event. See the motion-correction section of visual-design.
 Fluidity pass: keys use monotone cubic timing (no stops at intermediate keys) and the
 192 px sheet is rendered natively (`render_pose(scale=2)`), not the 96 px sheet ×2.
+
+Rogue full-body motion: `rogue_rig.py` now owns two-bone leg IK and complete
+attack/recovery curves; the baker exports 264 frames with a 720 ms attack.
+`HeroSheets.strike_point` reads optional `events.attack.strike_point` (native 96).
+`hero_strike_point(hero)` returns the 192 px offset from sprite centre (None keeps
+the default). `HeroFx` accepts that contact offset; golden attacks delay enemy
+reactions to contact and use `max(0.65, attack_duration + 0.04)` between casts.

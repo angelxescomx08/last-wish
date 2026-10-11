@@ -7,12 +7,12 @@ import math
 import pygame
 from warrior_rig import Transform
 
-ORDER = ("hair", "cape", "far_leg", "near_leg", "torso", "far_arm", "far_forearm", "head", "near_arm", "near_forearm", "near_weapon", "far_weapon")
+ORDER = ("hair", "cape", "far_leg", "far_shin", "far_foot", "near_leg", "near_shin", "near_foot", "torso", "far_arm", "far_forearm", "head", "near_arm", "near_forearm", "near_weapon", "far_weapon")
 REGIONS = {
-    "head": [(43,18),(69,18),(70,44),(62,45),(55,42),(47,41),(42,34)],
-    "near_forearm": [(36,54),(45,54),(46,62),(41,67),(34,75),(26,82),(27,72),(32,64)],
+    "head": [(43,14),(71,14),(70,44),(62,45),(55,42),(47,41),(42,34)],
+    "near_forearm": [(36,54),(46,54),(47,63),(42,68),(37,76),(31,83),(25,83),(26,73),(31,66)],
     "near_arm": [(43,42),(50,44),(48,51),(45,58),(36,57),(40,48)],
-    "far_forearm": [(65,55),(71,55),(75,63),(88,73),(84,79),(70,68),(65,64)],
+    "far_forearm": [(65,55),(71,55),(75,62),(88,73),(87,82),(72,75),(65,65)],
     "far_arm": [(61,44),(66,45),(68,52),(71,57),(65,61),(61,54)],
     "hair": [(15,12),(49,12),(48,19),(44,25),(43,34),(38,41),(30,47),(16,46)],
     "cape": [(17,40),(42,36),(49,41),(45,48),(42,59),(33,70),(21,69),(16,58)],
@@ -34,6 +34,12 @@ def separate_layers(base):
             if not color.a:
                 continue
             name = next((name for name,mask in masks.items() if mask.get_at((x,y)).a), ("near_leg" if x < 55 else "far_leg") if y >= 64 else "torso")
+            # Keep cape fringes and blade tips out of the leg masks.
+            if name in ("near_leg","far_leg") and y < 84:
+                if x >= 70 and y < 80:
+                    name = "far_forearm"
+                elif x <= 35:
+                    name = "cape" if y < 73 else "near_forearm"
             layers[name].set_at((x,y), color)
     # Small duplicated joint caps stay under the moving pieces. All pixels come
     # from the approved source; face and costume are never repainted.
@@ -44,6 +50,21 @@ def separate_layers(base):
             for x in range(center[0]-radius,center[0]+radius+1):
                 if math.dist((x,y),center) <= radius:
                     layers[name].set_at((x,y),base.get_at((x,y)))
+    # Separate thighs, shins and boots; the boots keep their own planted transform.
+    for side, knee_y, ankle_y in (("near",78,85),("far",79,85)):
+        leg = layers[f"{side}_leg"].copy()
+        layers[f"{side}_leg"].fill((0,0,0,0))
+        for y in range(96):
+            for x in range(96):
+                color = leg.get_at((x,y))
+                if not color.a:
+                    continue
+                if y <= knee_y+1:
+                    layers[f"{side}_leg"].set_at((x,y),color)
+                if knee_y-1 <= y <= ankle_y+1:
+                    layers[f"{side}_shin"].set_at((x,y),color)
+                if y >= ankle_y-1:
+                    layers[f"{side}_foot"].set_at((x,y),color)
     return layers
 
 
@@ -83,75 +104,134 @@ def envelope(phase, peak=.4):
     return curve(phase, ((0,0),(peak,1),(1,0)))
 
 
+# Source landmarks stay in the same coordinate space as the approved drawing.
+LEG_JOINTS = {
+    "near": ((51,64),(42,78),(38,89)),
+    "far": ((58,64),(64,79),(65,88)),
+}
+
+
+def bone_transform(start, end, target_start, target_end):
+    angle = math.atan2(target_end[1]-target_start[1],target_end[0]-target_start[0]) - math.atan2(end[1]-start[1],end[0]-start[0])
+    c,s = math.cos(angle),math.sin(angle)
+    return Transform(angle, target_start[0]-c*start[0]+s*start[1],
+                     target_start[1]-s*start[0]-c*start[1])
+
+
+def leg_pose(side, hip_shift, foot_shift):
+    hip,knee,ankle = LEG_JOINTS[side]
+    if hip_shift == (0,0) and foot_shift == (0,0):
+        return Transform(),Transform(),Transform()
+    target_hip = (hip[0]+hip_shift[0],hip[1]+hip_shift[1])
+    target_ankle = (ankle[0]+foot_shift[0],ankle[1]+foot_shift[1])
+    l1,l2 = math.dist(hip,knee),math.dist(knee,ankle)
+    vx,vy = target_ankle[0]-target_hip[0],target_ankle[1]-target_hip[1]
+    distance = math.hypot(vx,vy)
+    if distance > l1+l2+1e-7:
+        raise ValueError(f"Unreachable {side} leg: {distance:.3f} > {l1+l2:.3f}")
+    along = (l1*l1-l2*l2+distance*distance)/(2*distance)
+    height = math.sqrt(max(0,l1*l1-along*along))
+    cross = (ankle[0]-hip[0])*(knee[1]-hip[1])-(ankle[1]-hip[1])*(knee[0]-hip[0])
+    sign = 1 if cross >= 0 else -1
+    target_knee = (target_hip[0]+vx/distance*along-vy/distance*height*sign,
+                   target_hip[1]+vy/distance*along+vx/distance*height*sign)
+    return (bone_transform(hip,knee,target_hip,target_knee),
+            bone_transform(knee,ankle,target_knee,target_ankle),
+            Transform(tx=foot_shift[0],ty=foot_shift[1]))
+
+
+def compose(parent, child):
+    tx,ty = parent.point((child.tx,child.ty))
+    return Transform(parent.angle+child.angle,tx,ty)
+
+
 def pose_at(action, phase):
     p = max(0,min(1,phase))
-    # Exact endpoints avoid numerical seam differences.
-    breath = (1-math.cos(math.tau*p))/2 if 0 < p < 1 else 0
-    torso_angle = head_angle = near_arm = near_elbow = far_arm = far_elbow = 0.
-    dx = dy = fall = 0.
-    hair_angle = 3.0*math.sin(math.tau*p) if action == "idle" and 0<p<1 else 0.
-    cape_angle = -2.4*math.sin(math.tau*p) if action == "idle" and 0<p<1 else 0.
     if action == "idle":
-        torso_angle = -.9*breath
-        head_angle = .7*breath
-        near_arm, near_elbow = -1.8*breath, 2.8*breath
-        far_arm = 1.6*breath
+        p %= 1
+    if p == 0 or (p == 1 and action != "death"):
+        return {name:Transform() for name in ORDER}
+    torso_angle = head_angle = near_arm = near_elbow = far_arm = far_elbow = 0.
+    dx = dy = front_step = front_lift = rear_step = roll = 0.
+    hair_angle = cape_angle = 0.
+    if action == "idle":
+        breath = (1-math.cos(math.tau*p))/2
+        torso_angle,head_angle = -.9*breath,.7*breath
+        near_arm,near_elbow,far_arm = -1.8*breath,2.8*breath,1.6*breath
+        hair_angle,cape_angle = 3*math.sin(math.tau*p),-2.4*math.sin(math.tau*p)
     elif action == "attack":
-        wind = curve(p, ((0,0),(.22,-1),(.43,1),(.58,.8),(1,0)))
-        torso_angle = 5*wind
-        dx = 1.5*wind
-        near_arm = -43*wind
-        near_elbow = -20*wind
-        far_arm, far_elbow = -7*wind, -12*wind
-        hair_angle, cape_angle = -10*wind, -8*wind
+        # Compress -> push off -> extend -> cut through -> fold elbow -> recover.
+        dx = curve(p,((0,0),(.2,-6),(.42,0),(.57,0),(.78,-1),(1,0)))
+        dy = curve(p,((0,0),(.2,4),(.42,7),(.57,6),(.78,3),(1,0)))
+        torso_angle = curve(p,((0,0),(.2,-10),(.42,15),(.57,18),(.78,7),(1,0)))
+        head_angle = -torso_angle*.55
+        near_arm = curve(p,((0,0),(.2,30),(.42,-125),(.57,-165),(.78,-65),(1,0)))
+        near_elbow = curve(p,((0,0),(.2,-65),(.42,0),(.57,30),(.78,-65),(1,0)))
+        far_arm = curve(p,((0,0),(.2,12),(.42,4),(.57,-5),(.78,8),(1,0)))
+        far_elbow = curve(p,((0,0),(.2,-20),(.42,-40),(.57,-20),(.78,-10),(1,0)))
+        front_step = curve(p,((0,0),(.2,0),(.38,6),(.65,6),(1,0)))
+        front_lift = curve(p,((0,0),(.2,0),(.29,-2),(.38,0),(.65,0),(.8,-2),(1,0)))
+        hair_angle = curve(p,((0,0),(.24,6),(.48,-12),(.64,-6),(.84,4),(1,0)))
+        cape_angle = curve(p,((0,0),(.24,5),(.5,-16),(.68,-6),(.85,3),(1,0)))
     elif action == "guard":
-        e = envelope(p,.35)
-        dx = -6*e
-        torso_angle = -12*e
-        near_arm, near_elbow = -22*e,-38*e
-        far_arm, far_elbow = -32*e,-25*e
-        head_angle, hair_angle, cape_angle = 6*e,10*e,7*e
+        e = envelope(p,.38)
+        dx,dy = -5*e,9*e
+        torso_angle,head_angle = -15*e,10*e
+        near_arm,near_elbow = -105*e,-10*e
+        far_arm,far_elbow = -10*e,-90*e
+        hair_angle,cape_angle = 10*envelope(p,.48),8*envelope(p,.5)
     elif action == "hurt":
         e = envelope(p,.2)
-        dx = -4*e
-        torso_angle, head_angle = -11*e,-5*e
-        near_arm, near_elbow = 12*e,12*e
-        far_arm = 15*e
-        hair_angle, cape_angle = 9*e,7*e
+        dx,dy = -3*e,4*e
+        torso_angle,head_angle = -19*e,-6*e
+        near_arm,near_elbow = 22*e,-20*e
+        far_arm,far_elbow = 15*e,-25*e
+        hair_angle,cape_angle = 12*envelope(p,.31),10*envelope(p,.34)
     elif action == "cast":
         e = envelope(p,.48)
-        near_arm, near_elbow = -25*e,-45*e
-        far_arm, far_elbow = -8*e,-18*e
-        torso_angle, head_angle = -2*e,2*e
-        hair_angle, cape_angle = -4*e,4*e
+        dy = 2*e
+        near_arm,near_elbow = 15*e,95*e
+        far_arm,far_elbow = 5*e,-80*e
+        torso_angle,head_angle = -3*e,3*e
+        hair_angle,cape_angle = -6*envelope(p,.6),6*envelope(p,.62)
     elif action == "death":
-        fall = curve(p,((0,0),(.2,.08),(.42,.3),(.8,1),(1,1)))
-        near_arm, near_elbow = 15*fall,20*fall
-        far_arm = -12*fall
-        head_angle = -8*fall
-        hair_angle, cape_angle = 8*fall,5*fall
+        collapse = curve(p,((0,0),(.2,.2),(.48,1),(1,1)))
+        dy = 12*collapse
+        torso_angle,head_angle = 16*collapse,14*collapse
+        near_arm,near_elbow = -25*collapse,-25*collapse
+        far_arm,far_elbow = 10*collapse,-15*collapse
+        roll = curve(p,((0,0),(.4,0),(.82,1),(1,1)))
+        hair_angle,cape_angle = 8*roll,6*roll
     root = Transform(tx=dx,ty=dy)
-    if action == "death":
-        root = root.joint((53,63),-78*fall, (0*fall,-18*fall))
     torso = root.joint((53,64),torso_angle)
     head = torso.joint((55,42),head_angle)
     near = torso.joint((47,45),near_arm)
     far = torso.joint((63,46),far_arm)
     near_forearm = near.joint((41,56),near_elbow)
     far_forearm = far.joint((67,57),far_elbow)
+    near_leg,near_shin,near_foot = leg_pose("near",(dx,dy),(rear_step,0))
+    far_leg,far_shin,far_foot = leg_pose("far",(dx,dy),(front_step,front_lift))
     pose = {"torso":torso,"head":head,
             "near_arm":near,"near_forearm":near_forearm,"near_weapon":near_forearm,
             "far_arm":far,"far_forearm":far_forearm,"far_weapon":far_forearm,
             "hair":head.joint((45,21),hair_angle),"cape":torso.joint((44,43),cape_angle),
-            "near_leg":root,"far_leg":root}
-    if action == "death" and p > 0:
-        supports = {"near_leg": ((31,93),(47,93)), "far_leg": ((60,93),(76,93)),
-                    "hair": ((18,44),(18,30),(40,14)), "cape": ((18,58),(22,68)),
-                    "near_forearm": ((27,80),(40,65)), "far_forearm": ((85,77),)}
-        bottom = max(pose[name].point(point)[1] for name,points in supports.items() for point in points)
-        settle = min(1, p/.06)
-        offset = (92-bottom)*settle*settle*(3-2*settle)
-        pose = {name: Transform(t.angle,t.tx,t.ty+offset) for name,t in pose.items()}
+            "near_leg":near_leg,"far_leg":far_leg,"near_shin":near_shin,"far_shin":far_shin,
+            "near_foot":near_foot,"far_foot":far_foot}
+    if roll:
+        fall = Transform().joint((53,76),-88*roll,(-3*roll,3*roll))
+        pose = {name:compose(fall,t) for name,t in pose.items()}
+    if action == "death":
+        # Feet, dagger tips and the ends of the hair/cape keep the fall in-frame.
+        supports = {"near_foot":((31,84),(31,93),(47,93)),"far_foot":((60,84),(76,93)),
+                    "near_shin":((29,80),(34,77),(34,86),(49,86)),"far_shin":((59,78),(70,86)),
+                    "hair":((18,30),(18,44),(40,14)),"cape":((18,58),(22,68)),
+                    "near_forearm":((27,80),(41,56)),"far_forearm":((85,77),(67,57)),
+                    "head":((43,20),(68,42)),"near_leg":((41,64),(54,80)),
+                    "far_leg":((55,64),(69,80))}
+        points = [pose[name].point(point) for name,anchors in supports.items() for point in anchors]
+        shift_x = max(0,3-min(point[0] for point in points))
+        shift_y = min(0,92-max(point[1] for point in points))
+        pose = {name:Transform(t.angle,t.tx+shift_x,t.ty+shift_y) for name,t in pose.items()}
     return pose
 
 

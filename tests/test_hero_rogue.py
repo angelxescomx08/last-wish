@@ -130,9 +130,13 @@ class TestRoguePixelIntegrity:
             assert len(native) == len(combat)
             for a, b in zip(native, combat):
                 assert b.get_size() == (192, 192)
-                small, large = a.get_bounding_rect(), b.get_bounding_rect()
-                assert abs(large.width - 2 * small.width) <= 4
-                assert abs(large.height - 2 * small.height) <= 4
+                # A thin rotated dagger can lose its last pixel at 96 px.
+                # Compare the whole silhouette instead of a single extreme pixel.
+                small = pygame.mask.from_surface(pygame.transform.scale(a, (192, 192)), 1)
+                large = pygame.mask.from_surface(b, 1)
+                overlap = small.overlap_area(large, (0, 0))
+                union = small.count() + large.count() - overlap
+                assert overlap / union > .90
             frame = combat[len(combat) // 2]
             colours = {tuple(frame.get_at((x, y))) for x in range(0, 192, 3)
                        for y in range(0, 192, 3) if frame.get_at((x, y)).a}

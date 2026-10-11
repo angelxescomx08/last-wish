@@ -23,7 +23,7 @@ from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import (
     IDLE_CYCLE_SECONDS, SpriteLoader, has_hero_sprites, hero_animation_seconds, hero_id_for,
-    hero_strike_seconds,
+    hero_strike_point, hero_strike_seconds,
 )
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.fx.bursts import GLOW, SPARK, BurstParticles
@@ -271,7 +271,10 @@ class CombatScene:
         self._pending_hero_name = "hurt"                # ... or falls ("death")
         # Code-drawn heroes (sheet with a strike event) get timed particles and a floor shadow.
         strike = hero_strike_seconds(self._hero_id) if has_hero_sprites(state.player.name) else 0.0
-        self._hero_fx: HeroFx | None = HeroFx(strike=strike, seed=5) if strike > 0 else None
+        self._hero_fx: HeroFx | None = (
+            HeroFx(strike=strike, seed=5, strike_point=hero_strike_point(self._hero_id))
+            if strike > 0 else None
+        )
 
         # Hit-test rects (rebuilt each draw call)
         self._card_rects:     list[pygame.Rect]  = []
@@ -1209,7 +1212,7 @@ class CombatScene:
         self._sound.play_card()
         self._motion.pop(played_key, None)        # if the same card is drawn again, it flies in
         self._deals.pop(played_key, None)
-        self._plan_draws(result)
+        self._plan_draws(result, attack=is_attack)
         if result.combo and self._player_rect:
             self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10, "¡COMBO!",
                               (90, 235, 180), lifetime=1.1)
@@ -1260,18 +1263,24 @@ class CombatScene:
     # Multi-cast replay (golden cards cast twice)
     # ------------------------------------------------------------------
 
-    def _plan_draws(self, result) -> None:
+    def _plan_draws(self, result, *, attack: bool = False) -> None:
         """Cards a play put in the hand arrive after its cast — each golden cast's draws
         right after that cast fires — one after another."""
         plan: list[float] = []
         drawn = list(result.cast_drawn) or [0]
         for k, n in enumerate(drawn):
-            at = (self._cast_time(k) + _DRAW_AFTER_GOLDEN_CAST) if result.casts > 1 else _DRAW_AFTER_CAST
+            at = (self._cast_time(k, attack=attack) + _DRAW_AFTER_GOLDEN_CAST
+                  if result.casts > 1 else _DRAW_AFTER_CAST)
             plan += [at + j * DEAL_STAGGER for j in range(n)]
         self._deal_plan = plan
 
-    def _cast_time(self, k: int) -> float:
-        return _CAST_INTRO + k * _CAST_GAP
+    def _cast_time(self, k: int, *, attack: bool | None = None) -> float:
+        if attack is None:
+            attack = self._sequence is not None and self._sequence["attack"]
+        gap = _CAST_GAP
+        if attack:
+            gap = max(gap, hero_animation_seconds("attack", self._hero_id) + 0.04)
+        return _CAST_INTRO + k * gap
 
     def _advance_sequence(self, dt: float) -> None:
         seq = self._sequence
@@ -1324,13 +1333,14 @@ class CombatScene:
             self._fx.add_block_flash(self._player_rect, gained)
             self._sound.play_block()
 
+        delay = hero_strike_seconds(self._hero_id) if seq["attack"] and self._hero_fx else 0.0
         hp_after = result.cast_enemy_hp[k] if k < len(result.cast_enemy_hp) else []
         blk_after = result.cast_enemy_block[k] if k < len(result.cast_enemy_block) else []
         self._shown_enemies = list(zip(hp_after, blk_after)) or self._shown_enemies
         for i, hit in enumerate(result.cast_hits[k] if k < len(result.cast_hits) else []):
             if hit > 0 and i < len(self._enemy_rects):
                 killed = i < len(hp_after) and hp_after[i] <= 0 < seq["prev_hp"][i]
-                self._enemy_hit(i, hit, killed=killed, hold=False)
+                self._enemy_hit(i, hit, killed=killed, hold=False, delay=delay)
         seq["prev_hp"] = list(hp_after) or seq["prev_hp"]
 
     def _draw_cast_stage(self, surface: pygame.Surface) -> None:

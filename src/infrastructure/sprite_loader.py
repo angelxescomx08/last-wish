@@ -63,6 +63,7 @@ class HeroSheets:
     sheets: dict[int, str]                      # cell size -> file name
     animations: dict[str, HeroAnimation]
     strike_frame: int | None = None             # attack frame where the weapon connects
+    strike_point: tuple[float, float] | None = None  # weapon contact on the native 96 px canvas
 
 
 def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
@@ -72,11 +73,14 @@ def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
         meta = json.loads(path.read_text(encoding="utf-8"))
         cell = int(meta["cell"])
         sheets = {int(k): str(v) for k, v in meta.get("sheets", {str(cell): f"{hero}_sheet.png"}).items()}
-        strike = meta.get("events", {}).get("attack", {}).get("strike_frame")
+        event = meta.get("events", {}).get("attack", {})
+        strike = event.get("strike_frame")
+        point = event.get("strike_point")
+        strike_point = (float(point[0]), float(point[1])) if point is not None and len(point) == 2 else None
         return HeroSheets(cell, sheets, {
             name: HeroAnimation(int(a["row"]), tuple(ms / 1000 for ms in a["durations_ms"]), bool(a["loop"]))
             for name, a in meta["animations"].items()
-        }, int(strike) if strike is not None else None)
+        }, int(strike) if strike is not None else None, strike_point)
     except (OSError, ValueError, KeyError, TypeError):
         return HeroSheets(192, {192: f"{hero}_sheet.png"}, {"idle": HeroAnimation(0, (0.1,) * 16, True)})
 
@@ -113,6 +117,19 @@ def hero_strike_seconds(hero: str = "warrior") -> float:
     if anim is None or sheets.strike_frame is None:
         return 0.0
     return sum(anim.durations[:max(0, min(sheets.strike_frame, len(anim.durations)))])
+
+
+def hero_strike_point(hero: str = "warrior") -> tuple[float, float] | None:
+    """Weapon contact offset from the centre of the 192 px combat sprite.
+
+    Metadata points use the native 96 px canvas. Missing points leave the
+    presentation's default effect position unchanged.
+    """
+    sheets = HEROES.get(hero)
+    if sheets is None or sheets.strike_point is None:
+        return None
+    x, y = sheets.strike_point
+    return 2 * x - 96, 2 * y - 96
 
 
 _CARD_ASSETS = (

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.infrastructure.sprite_loader import (
     CARD_COMPONENT_PATHS,
     CARD_FRAME_PATHS,
@@ -37,6 +39,24 @@ def _expected_relics() -> set[str]:
 
 
 _EXPECTED_RELICS = _expected_relics()
+
+
+class TestHeroStrikePoint:
+    @pytest.mark.parametrize("point, expected", [([0, 0], (-96, -96)),
+                                               ([48, 48], (0, 0)),
+                                               ([91.5, 28], (87, -40))])
+    def test_metadata_point_maps_to_combat_offset(self, monkeypatch, point, expected):
+        import json
+        from src.infrastructure import sprite_loader
+        meta = {"cell": 192, "animations": {}, "events": {"attack": {"strike_point": point}}}
+        monkeypatch.setattr(Path, "read_text", lambda path, **kwargs: json.dumps(meta))
+        monkeypatch.setitem(sprite_loader.HEROES, "test", sprite_loader._load_hero_meta("test"))
+        assert sprite_loader.hero_strike_point("test") == expected
+
+    def test_missing_point_preserves_default_effect_position(self):
+        from src.infrastructure.sprite_loader import hero_strike_point
+        assert hero_strike_point("warrior") is None
+        assert hero_strike_point("unknown") is None
 
 
 class TestMappingCompleteness:

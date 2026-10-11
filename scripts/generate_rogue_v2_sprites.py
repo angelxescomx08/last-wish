@@ -14,20 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets" / "characters"
 OUTPUT = ROOT / "output"
 NAMES = ("idle", "attack", "guard", "hurt", "cast", "death")
-TIMINGS = {
-    "idle": [100] * 16,
-    "attack": [65, 85, 60, 55, 65, 75, 85, 90],
-    "guard": [60, 70, 75, 85, 85, 70, 65, 70],
-    "hurt": [35, 55, 90, 80, 70, 65, 65, 70],
-    "cast": [65, 75, 85, 100, 90, 80, 75, 80],
-    "death": [70, 100, 110, 120, 140, 140, 180, 300],
-}
-
-
-COUNTS = {"idle": 48, "attack": 24, "guard": 24, "hurt": 24, "cast": 24, "death": 48}
-for name, count in COUNTS.items():
-    total = sum(TIMINGS[name])
-    TIMINGS[name] = [round((i+1)*total/count)-round(i*total/count) for i in range(count)]
+TOTAL_MS = {"idle":1600,"attack":720,"guard":650,"hurt":560,"cast":800,"death":1200}
+COUNTS = {"idle":48,"attack":40,"guard":36,"hurt":32,"cast":44,"death":64}
+TIMINGS = {name:[round((i+1)*TOTAL_MS[name]/count)-round(i*TOTAL_MS[name]/count)
+                 for i in range(count)] for name,count in COUNTS.items()}
+STRIKE_FRAME = round(.42*(COUNTS["attack"]-1))
 
 
 def load_poses():
@@ -62,10 +53,12 @@ def bake():
             pygame.image.save(frame, str(frames_dir / f"{name}_{index:02}.png"))
     pygame.image.save(atlas, str(ASSETS / "rogue_v2_sheet_96.png"))
     pygame.image.save(atlas_192, str(ASSETS / "rogue_v2_sheet.png"))
+    from rogue_rig import pose_at
+    strike_point = pose_at("attack",STRIKE_FRAME/(COUNTS["attack"]-1))["near_forearm"].point((28,79))
     meta = {
         "cell": 192, "columns": max(COUNTS.values()),
         "sheets": {"192": "rogue_v2_sheet.png", "96": "rogue_v2_sheet_96.png"},
-        "events": {"attack": {"strike_frame": 10}},
+        "events": {"attack": {"strike_frame": STRIKE_FRAME, "strike_point": [round(v,3) for v in strike_point]}},
         "animations": {name: {"row": row, "frames": len(rows[name]),
             "durations_ms": TIMINGS[name], "loop": name == "idle"}
             for row, name in enumerate(NAMES)},
@@ -82,7 +75,7 @@ def bake():
             review.blit(frame, (column * 192, row * 224 + 16))
     pygame.image.save(review, str(OUTPUT / "rogue-v2-contact.png"))
     write_preview(meta)
-    print("Baked articulated rogue: 192 frames, six states, 96/192 px, HTML review")
+    print("Baked full-body rogue: 264 frames, six states, 96/192 px, HTML review")
 
 
 def write_preview(meta):
@@ -95,11 +88,11 @@ def write_preview(meta):
 <p><a style="color:#cab5ef" href="rogue-v2-contact.png">Ver todas las poses</a></p>
 <script>
 const meta=META, names={idle:'Reposo',attack:'Ataque',guard:'Esquiva / defensa',hurt:'Recibir daño',cast:'Habilidad',death:'Derrota'};
-const image=new Image();image.src='../assets/characters/rogue_v2_sheet.png';
+const image=new Image();image.src='../assets/characters/rogue_v2_sheet.png';const nativeImage=new Image();nativeImage.src='../assets/characters/rogue_v2_sheet_96.png';
 const state=document.querySelector('#state');Object.entries(names).forEach(([id,label])=>state.add(new Option(label,id)));
 let elapsed=0, playing=true, previous=0;
 function frameAt(a){let time=elapsed*1000,total=a.durations_ms.reduce((x,y)=>x+y,0);if(a.loop)time%=total;for(let i=0;i<a.frames;i++){if(time<a.durations_ms[i])return i;time-=a.durations_ms[i]}return a.frames-1}
-function draw(){if(!image.complete)return;const a=meta.animations[state.value],f=frameAt(a);for(const id of ['small','large','zoom']){const c=document.getElementById(id),ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(image,f*192,a.row*192,192,192,0,0,c.width,c.height)}document.querySelector('#info').textContent=`${names[state.value]} · fotograma ${f+1}/${a.frames}`}
+function draw(){if(!image.complete||!nativeImage.complete||!image.naturalWidth||!nativeImage.naturalWidth)return;const a=meta.animations[state.value],f=frameAt(a);for(const id of ['small','large','zoom']){const c=document.getElementById(id),ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,c.width,c.height);const cell=id==='small'?96:192;ctx.drawImage(id==='small'?nativeImage:image,f*cell,a.row*cell,cell,cell,0,0,c.width,c.height)}document.querySelector('#info').textContent=`${names[state.value]} · fotograma ${f+1}/${a.frames}`}
 document.querySelector('#play').onclick=()=>{playing=!playing;document.querySelector('#play').textContent=playing?'Pausar':'Reproducir'};
 document.querySelector('#step').onclick=()=>{playing=false;document.querySelector('#play').textContent='Reproducir';const a=meta.animations[state.value],next=(frameAt(a)+1)%a.frames;elapsed=a.durations_ms.slice(0,next).reduce((x,y)=>x+y,0)/1000+0.00001;draw()};
 state.onchange=()=>{elapsed=0;draw()};document.querySelector('#restart').onclick=()=>{elapsed=0;draw()};

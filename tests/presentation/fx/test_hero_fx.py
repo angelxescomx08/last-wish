@@ -5,6 +5,7 @@ draw gives them a position; dt is clamped; a 10 000-step stress keeps the
 pool bounded.
 """
 import pygame
+import pytest
 
 from src.presentation.fx.hero_fx import DEATH_KNEEL, HeroFx
 
@@ -26,6 +27,17 @@ def _run(fx, seconds, step=1 / 60):
 
 
 class TestCues:
+    @pytest.mark.parametrize("point", [(32, -18), None])
+    def test_attack_sparks_originate_at_the_hero_strike_point(self, point):
+        from src.presentation.fx.hero_fx import BLADE_HIT
+        fx = HeroFx(strike=0, strike_point=point, seed=1)
+        fx.draw_shadow(pygame.Surface((1280, 720)), CENTER)
+        fx.play("attack")
+        fx.update(0)
+        offset = point if point is not None else BLADE_HIT
+        expected = (CENTER[0] + offset[0], CENTER[1] + offset[1])
+        assert fx.particles.positions()[:26] == [expected] * 26
+
     def test_attack_sparks_wait_for_the_strike(self):
         fx = _fx()
         fx.play("attack")

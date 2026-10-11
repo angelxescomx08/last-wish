@@ -2,6 +2,7 @@
 blade connects, she falls before the defeat screen, particles only for her.
 """
 import pygame
+import pytest
 
 from src.application.combat_factory import create_combat_from_run
 from src.application.run_manager import create_run
@@ -74,6 +75,39 @@ class TestCast:
 
 
 class TestBladeTiming:
+    @pytest.mark.parametrize("hero", ["La Guerrera", "La Pícara"])
+    def test_golden_cast_waits_for_blade_contact(self, hero):
+        from src.domain.chroma import Chroma
+        scene = _scene(hero, hp=100)
+        card = _strike_card()
+        card.chroma = Chroma.GOLDEN
+        _play_first(scene, card)
+        scene._advance_sequence(scene._cast_time(0))
+        assert scene.hero_action == "attack"
+        assert scene.enemy_animators[0].action is None
+        _steps(scene, hero_strike_seconds(scene._hero_id) + 0.03)
+        assert scene.enemy_animators[0].action == "hurt"
+
+    def test_golden_cast_gap_allows_the_attack_to_finish(self, monkeypatch):
+        from dataclasses import replace
+        from src.domain.chroma import Chroma
+        from src.infrastructure.sprite_loader import HEROES
+        sheets = HEROES["rogue"]
+        animations = dict(sheets.animations)
+        animations["attack"] = replace(animations["attack"], durations=(0.72,))
+        monkeypatch.setitem(HEROES, "rogue", replace(sheets, animations=animations))
+        scene = _scene("La Pícara", hp=100)
+        card = _strike_card()
+        card.chroma = Chroma.GOLDEN
+        _play_first(scene, card)
+        assert scene._cast_time(1) - scene._cast_time(0) == pytest.approx(0.76)
+        # Draw plans are built before the replay exists and must use the same gap.
+        from types import SimpleNamespace
+        scene._sequence = None
+        scene._plan_draws(SimpleNamespace(cast_drawn=[1, 1], casts=2), attack=True)
+        assert scene._deal_plan[1] - scene._deal_plan[0] == pytest.approx(0.76)
+        assert scene._cast_time(1, attack=False) - scene._cast_time(0, attack=False) == pytest.approx(0.65)
+
     def test_enemy_waits_for_the_blade(self):
         scene = _scene()
         _play_first(scene, _strike_card())
@@ -124,6 +158,12 @@ class TestDeath:
         assert scene.hero_action == "death"
 
 class TestRogueAnimationIntegration:
+    def test_rogue_effects_use_the_metadata_strike_point(self, monkeypatch):
+        from dataclasses import replace
+        from src.infrastructure.sprite_loader import HEROES
+        monkeypatch.setitem(HEROES, "rogue", replace(HEROES["rogue"], strike_point=(84, 34)))
+        assert _scene("La Pícara")._hero_fx.strike_point == (72, -28)
+
     def test_skill_uses_cast_and_returns_to_idle(self):
         scene = _scene("La Pícara")
         _play_first(scene, _skill())

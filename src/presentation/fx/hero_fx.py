@@ -54,8 +54,10 @@ def _shadow(w: int, h: int) -> pygame.Surface:
 class HeroFx:
     """Timed particle cues for the hero's actions (one per combat)."""
 
-    def __init__(self, *, strike: float, seed: int = 0, particles: int = 260) -> None:
+    def __init__(self, *, strike: float, seed: int = 0, particles: int = 260,
+                 strike_point: tuple[float, float] | None = None) -> None:
         self.strike = max(0.0, strike)
+        self.strike_point = BLADE_HIT if strike_point is None else strike_point
         self._rng = random.Random(seed)
         self.particles = BurstParticles(particles, seed=seed + 13)
         self._action: str | None = None
@@ -111,7 +113,7 @@ class HeroFx:
                 p.burst(x, y, 10, palette=DUST, speed=(30, 110), angle=(math.pi * 1.05, math.pi * 1.6),
                         life=(0.3, 0.6), size=(2, 4), drag=3.0, gravity=200)
             if self._once("hit", max(0.0, self.strike - 0.02)):
-                x, y = self._at(BLADE_HIT)
+                x, y = self._at(self.strike_point)
                 p.burst(x, y, 26, palette=WARM, speed=(180, 460), angle=(-math.pi * 0.45, math.pi * 0.35),
                         life=(0.16, 0.38), size=(1.5, 2.5), style=SPARK, drag=4.0)
                 p.burst(x, y, 12, palette=WARM, speed=(40, 160), life=(0.3, 0.7), size=(2, 3),

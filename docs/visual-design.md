@@ -476,3 +476,31 @@ User liked the design but motion still felt not fully fluid. Two causes fixed:
   source pixels (nearest-neighbour, source palette only), giving half-pixel
   joint steps. The 96 px sheet is unchanged in method.
 Pre-pass sheets for comparison: `tmp/rogue_fluid/before_192.png`, `before_96.png`.
+
+### Full-body rogue action revision (2026-10-09)
+
+The user continued to approve the design but rejected the restrained cutout acting.
+The rig now separates thighs, shins and boots and solves two-bone leg IK with
+fixed segment lengths. Idle soles remain stationary. Attack pushes out of a
+backward wind-up, steps the front boot six native pixels, opens the shoulder to
+-125 degrees, continues to -165 degrees and folds the elbow before recovery.
+The torso turns from -10 to +18 degrees; hair/cape settle later. Guard lowers
+into a crossed-dagger crouch, hurt transfers weight, cast raises both blades,
+and death bends the knees before falling. Source pixels and face are preserved.
+Mask cleanup keeps stray dagger tips and cape fringes out of the leg layers.
+
+The bake has 264 frames: idle 48/1600 ms, attack 40/720 ms, guard 36/650 ms,
+hurt 32/560 ms, cast 44/800 ms, death 64/1200 ms. Native192 rendering is retained,
+with nearest source sampling and no blended frames. Attack contact is frame 16
+(288ms); `events.attack.strike_point` records the transformed dagger tip in
+native 96 coordinates. HeroFx uses that position. Golden attack repetitions
+wait at least the full clip duration +40 ms, and enemy reactions wait for contact.
+
+Both previews now use the actual native 96 and combat 192 sheets; the GIF no
+longer substitutes a doubled 96 px image for combat. Previous animation and baker
+are retained in `assets/characters/rogue_before_full_motion/`, with an animated
+baseline at `output/rogue-before-full-motion.gif`. Original source and legacy
+rogue backups remain intact. The same bake/export commands above reproduce this
+revision. Automated tests cover the full dagger arc, front step, continuous
+transforms, IK attachment/length, retained palette, margins and combat timing.
+Perceived acting and fluidity remain subject to visual review.
