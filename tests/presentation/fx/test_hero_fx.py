@@ -1,4 +1,4 @@
-"""fx/hero_fx.py — timed particles and floor shadow of the code-drawn hero.
+"""fx/hero_fx.py — timed particles and floor shadows of animated heroes.
 
 Cues fire at their time (blade sparks at ``strike``), never before the first
 draw gives them a position; dt is clamped; a 10 000-step stress keeps the
@@ -125,3 +125,47 @@ class TestDrawing:
         surface = pygame.Surface((1280, 720))
         fx.draw(surface, CENTER)
         assert surface.get_size() == (1280, 720)
+
+
+class TestArcaneStyle:
+    @pytest.mark.parametrize("arcane", [False, True])
+    def test_attack_and_cast_use_their_style_palette(self, arcane):
+        from src.presentation.fx.hero_fx import ARCANE, VIOLET, WARM, GOLD
+        fx = HeroFx(strike=0, arcane=arcane, seed=1)
+        fx.draw_shadow(pygame.Surface((1280, 720)), CENTER)
+        fx.play("attack")
+        fx.update(0)
+        assert fx.particles.count > 0
+        assert all(palette == (ARCANE if arcane else WARM)
+                   for palette in fx.particles._pal[:fx.particles.count])
+        fx.particles.clear()
+        fx.play("cast")
+        _run(fx, 0.31 if arcane else 0.06)
+        assert fx.particles.count > 0
+        assert all(palette == (VIOLET if arcane else GOLD)
+                   for palette in fx.particles._pal[:fx.particles.count])
+
+
+    @pytest.mark.parametrize("action, cue, before, after", [
+        ("cast", "flare", 0.49, 0.02), ("guard", "ward", 0.27, 0.02),
+        ("death", "kneel", 0.83, 0.02),
+    ])
+    def test_arcane_cues_wait_for_the_matching_body_pose(self, action, cue, before, after):
+        fx = HeroFx(strike=0.345, arcane=True, seed=1)
+        fx.draw_shadow(pygame.Surface((1280, 720)), CENTER)
+        fx.play(action)
+        _run(fx, before)
+        assert cue not in fx._fired
+        _run(fx, after)
+        assert cue in fx._fired
+
+    def test_cast_flare_uses_its_hand_point_and_metadata_time(self, monkeypatch):
+        fx = HeroFx(strike=0.345, arcane=True, cast_point=(24, -20), cast_seconds=0.52)
+        fx.draw_shadow(pygame.Surface((1280, 720)), CENTER)
+        bursts = []
+        monkeypatch.setattr(fx.particles, "burst", lambda x, y, count, **kwargs: bursts.append((x, y)))
+        fx.play("cast")
+        _run(fx, 0.51)
+        assert not bursts
+        _run(fx, 0.02)
+        assert bursts == [(CENTER[0] + 24, CENTER[1] - 20)]

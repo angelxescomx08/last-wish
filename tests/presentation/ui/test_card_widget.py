@@ -210,3 +210,89 @@ class TestEffectTextAndDiscount:
         fonts = _fonts()
         card = _attack()
         assert _bytes(render_card_surface(card, fonts)) != _bytes(render_card_surface(card, fonts, cost=0))
+
+
+class TestStatNumbersAreBold:
+    """The attack / block numbers in the corner circles use the bold pixel face."""
+
+    @staticmethod
+    def _is_bold(fonts: FontRegistry, font: pygame.font.Font) -> bool:
+        if not fonts.pixel:          # no pixel font files: bold() falls back to get()
+            return True
+        return any(name.endswith("-Bold.ttf") and f is font for (name, _), f in fonts._by_file.items())
+
+    @staticmethod
+    def _rendered_fonts(monkeypatch, card, fonts, **kwargs) -> dict[str, pygame.font.Font]:
+        from src.presentation.ui import card_widget
+        seen: dict[str, pygame.font.Font] = {}
+        real = card_widget._outlined
+
+        def spy(font, text, color, *args, **kw):
+            seen[text] = font
+            return real(font, text, color, *args, **kw)
+
+        monkeypatch.setattr(card_widget, "_outlined", spy)
+        card_widget._cache.clear()
+        render_card_surface(card, fonts, **kwargs)
+        return seen
+
+    @pytest.mark.parametrize("value", [1, 37, 999, 10**12])
+    def test_attack_number_uses_bold_font(self, monkeypatch, value):
+        fonts = _fonts()
+        txt = BigValue.format_int(value)
+        seen = self._rendered_fonts(monkeypatch, _attack(value), fonts)
+        assert self._is_bold(fonts, seen[txt])
+
+    @pytest.mark.parametrize("value", [1, 42, 999, 10**12])
+    def test_block_number_uses_bold_font(self, monkeypatch, value):
+        fonts = _fonts()
+        txt = BigValue.format_int(value)
+        seen = self._rendered_fonts(monkeypatch, _skill(value), fonts)
+        assert self._is_bold(fonts, seen[txt])
+
+    def test_boosted_number_still_bold(self, monkeypatch):
+        fonts = _fonts()
+        seen = self._rendered_fonts(monkeypatch, _attack(6), fonts, bonus_damage=3)
+        assert self._is_bold(fonts, seen["9"])
+
+
+class TestFaceScaleDuringTween:
+    """While a card grows / shrinks its face keeps one layout and is only resized."""
+
+    def test_face_scale_keeps_the_requested_size(self):
+        from src.presentation.ui.card_widget import card_size, draw_card_at
+        surf = pygame.Surface((600, 600), pygame.SRCALPHA)
+        rect = draw_card_at(surf, _attack(), (300, 300), _fonts(), scale=1.1, face_scale=1.3)
+        assert rect.size == card_size(1.1)
+
+    def test_same_face_scale_is_a_plain_render(self):
+        from src.presentation.ui.card_widget import card_size, draw_card_at
+        fonts = _fonts()
+        a = pygame.Surface((400, 400), pygame.SRCALPHA)
+        b = pygame.Surface((400, 400), pygame.SRCALPHA)
+        draw_card_at(a, _attack(), (200, 200), fonts, scale=1.3)
+        draw_card_at(b, _attack(), (200, 200), fonts, scale=1.3, face_scale=1.3)
+        assert _bytes(a) == _bytes(b)
+
+    @pytest.mark.parametrize("scale", [0.25, 1.05, 1.15, 1.25])
+    def test_tween_frame_is_the_target_face_resized(self, scale):
+        from src.presentation.ui import card_widget
+        from src.presentation.ui.card_widget import card_size, draw_card_at
+        fonts = _fonts()
+        w, h = card_size(scale)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        draw_card_at(surf, _attack(), (w / 2, h / 2), fonts, scale=scale, face_scale=1.3)
+        tw, th = card_size(1.3)
+        target_face = render_card_surface(_attack(), fonts, w=tw, h=th)
+        resized = card_widget._resize_cache.get((target_face, (w, h)))
+        assert resized is not None and resized.get_size() == (w, h)
+        assert _bytes(resized) == _bytes(pygame.transform.smoothscale(target_face, (w, h)))
+
+    def test_resize_cache_is_bounded(self):
+        from src.presentation.ui import card_widget
+        from src.presentation.ui.card_widget import draw_card_at
+        fonts = _fonts()
+        surf = pygame.Surface((400, 400), pygame.SRCALPHA)
+        for bonus in range(card_widget._RESIZE_MAX * 2):
+            draw_card_at(surf, _attack(), (200, 200), fonts, scale=1.1, face_scale=1.3, bonus_damage=bonus)
+        assert len(card_widget._resize_cache) <= card_widget._RESIZE_MAX

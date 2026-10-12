@@ -1,5 +1,6 @@
-"""CombatScene + the code-drawn warrior: cast for skills, enemies react when the
-blade connects, she falls before the defeat screen, particles only for her.
+"""Combat hero clips: authored contact events, complete casts and held defeats.
+
+Warrior, rogue and mage share playback; the mage adds timed arcane effects.
 """
 import pygame
 import pytest
@@ -54,11 +55,14 @@ class TestSetup:
     def test_warrior_gets_hero_fx(self):
         assert _scene()._hero_fx is not None
 
-    def test_other_heroes_have_no_hero_fx(self):
-        assert _scene("El Mago")._hero_fx is None
+    def test_mage_gets_timed_arcane_effects(self):
+        from src.presentation.fx.hero_fx import ARCANE
+        effects = _scene("El Mago")._hero_fx
+        assert effects is not None
+        assert effects.attack_palette == ARCANE
 
-    def test_other_heroes_strike_is_zero(self):
-        assert hero_strike_seconds("mage") == 0.0
+    def test_mage_has_a_spell_contact_event(self):
+        assert hero_strike_seconds("mage") == pytest.approx(0.345)
 
 
 class TestCast:
@@ -75,7 +79,7 @@ class TestCast:
 
 
 class TestBladeTiming:
-    @pytest.mark.parametrize("hero", ["La Guerrera", "La Pícara"])
+    @pytest.mark.parametrize("hero", ["La Guerrera", "La Pícara", "El Mago"])
     def test_golden_cast_waits_for_blade_contact(self, hero):
         from src.domain.chroma import Chroma
         scene = _scene(hero, hp=100)
@@ -104,9 +108,9 @@ class TestBladeTiming:
         # Draw plans are built before the replay exists and must use the same gap.
         from types import SimpleNamespace
         scene._sequence = None
-        scene._plan_draws(SimpleNamespace(cast_drawn=[1, 1], casts=2), attack=True)
+        scene._plan_draws(SimpleNamespace(cast_drawn=[1, 1], casts=2), action="attack")
         assert scene._deal_plan[1] - scene._deal_plan[0] == pytest.approx(0.76)
-        assert scene._cast_time(1, attack=False) - scene._cast_time(0, attack=False) == pytest.approx(0.65)
+        assert scene._cast_time(1) - scene._cast_time(0) == pytest.approx(0.65)
 
     def test_enemy_waits_for_the_blade(self):
         scene = _scene()
@@ -188,5 +192,72 @@ class TestRogueAnimationIntegration:
         _steps(scene, 0.4)
         assert scene.death_occurred is False
         _steps(scene, hero_animation_seconds("death", "rogue") + 0.5)
+        assert scene.death_occurred is True
+        assert scene.hero_action == "death"
+
+
+class TestMageAnimationIntegration:
+    def test_damage_rules_resolve_at_once_but_enemy_waits_for_spell_contact(self):
+        scene = _scene("El Mago")
+        _play_first(scene, _strike_card())
+        assert scene.state.enemies[0].current_hp < 40
+        assert scene.enemy_animators[0].action is None
+        _steps(scene, hero_strike_seconds("mage") - 0.05)
+        assert scene.enemy_animators[0].action is None
+        _steps(scene, 0.08)
+        assert scene.enemy_animators[0].action == "hurt"
+
+    def test_skill_uses_cast_and_recovers_to_idle(self):
+        scene = _scene("El Mago")
+        _play_first(scene, _skill())
+        assert scene.hero_action == "cast"
+        _steps(scene, hero_animation_seconds("cast", "mage") + 0.05)
+        assert scene.hero_action is None
+
+    def test_golden_skill_plays_cast(self):
+        from src.domain.chroma import Chroma
+        scene = _scene("El Mago")
+        card = _skill()
+        card.chroma = Chroma.GOLDEN
+        _play_first(scene, card)
+        scene._advance_sequence(scene._cast_time(0))
+        assert scene.hero_action == "cast"
+        assert scene._cast_time(1) - scene._cast_time(0) == pytest.approx(1.04)
+        _steps(scene, 0.72)
+        assert scene._sequence["fired"] == 1
+        _steps(scene, 0.36)
+        assert scene._sequence["fired"] == 2
+        _steps(scene, 0.85)
+        assert scene.presentation_busy
+        _steps(scene, 0.3)
+        assert not scene.presentation_busy
+
+    def test_mage_effects_use_the_cast_metadata(self):
+        from src.infrastructure.sprite_loader import hero_cast_point, hero_cast_seconds
+        scene = _scene("El Mago")
+        assert scene._hero_fx.cast_point == hero_cast_point("mage")
+        assert scene._hero_fx.cast_seconds == pytest.approx(hero_cast_seconds("mage"))
+
+    def test_block_plays_guard(self):
+        from src.domain.numbers import BigValue
+        scene = _scene("El Mago")
+        card = Card(id="test_ward", name="Barrera", card_type=CardType.SKILL, cost=0,
+                    base_effect=CardEffect(name="Barrera", block=BigValue(6)))
+        _play_first(scene, card)
+        assert scene.hero_action == "guard"
+
+    def test_hurt_recovers_and_death_stays_down(self):
+        scene = _scene("El Mago", enemy="Cultista")
+        scene._play_hero_action("hurt")
+        _steps(scene, hero_animation_seconds("hurt", "mage") + 0.05)
+        assert scene.hero_action is None
+        scene.state.player.current_hp = 1
+        scene.state.player.block = 0
+        scene.state.enemies[0].intent = Intent(IntentType.ATTACK, 50)
+        scene._do_end_turn()
+        assert scene.hero_action == "death"
+        _steps(scene, 0.5)
+        assert scene.death_occurred is False
+        _steps(scene, hero_animation_seconds("death", "mage") + 0.5)
         assert scene.death_occurred is True
         assert scene.hero_action == "death"

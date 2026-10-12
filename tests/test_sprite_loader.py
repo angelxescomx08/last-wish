@@ -218,3 +218,22 @@ class TestCacheBehaviour:
     def test_all_relic_paths_end_with_png(self):
         for path in RELIC_SPRITE_PATHS.values():
             assert path.endswith(".png")
+
+
+class TestHeroCastEvent:
+    def test_cast_point_and_release_frame_load_from_metadata(self, monkeypatch):
+        import json
+        from src.infrastructure import sprite_loader
+        meta = {"cell": 192, "animations": {
+            "cast": {"row": 4, "durations_ms": [100, 150, 250, 100], "loop": False}},
+            "events": {"cast": {"cast_point": [60, 38], "cast_frame": 3}}}
+        monkeypatch.setattr(Path, "read_text", lambda path, **kwargs: json.dumps(meta))
+        monkeypatch.setitem(sprite_loader.HEROES, "test", sprite_loader._load_hero_meta("test"))
+        assert sprite_loader.hero_cast_point("test") == (24, -20)
+        assert sprite_loader.hero_cast_seconds("test") == pytest.approx(0.5)
+
+    def test_absent_cast_event_preserves_default_cues(self):
+        from src.infrastructure.sprite_loader import hero_cast_point, hero_cast_seconds
+        for hero in ("warrior", "rogue", "unknown"):
+            assert hero_cast_point(hero) is None
+            assert hero_cast_seconds(hero) == 0.0

@@ -1,9 +1,10 @@
 """Mage hero sheets: same contract as the warrior — slicing, sizes, timing, hand-off.
 
-The mage art (assets/characters/mage_base.png) is animated by
-scripts/generate_mage_sprites.py; runtime never resamples it.
+The mage v2 rig is baked into complete action sheets; runtime only slices and
+scales frames. The original mage is preserved under mage_legacy.
 """
 import pygame
+import pytest
 
 from src.infrastructure.sprite_loader import (
     HEROES, SpriteLoader, has_hero_sprites, hero_animation_seconds, hero_id_for,
@@ -21,8 +22,24 @@ class TestRegistry:
     def test_unknown_name_has_no_hero_sheets(self):
         assert has_hero_sprites("Nadie") is False
 
-    def test_mage_has_the_four_animations(self):
-        assert set(HEROES["mage"].animations) == {"idle", "attack", "guard", "hurt"}
+    def test_mage_has_complete_combat_animations(self):
+        assert set(HEROES["mage"].animations) == {"idle", "attack", "guard", "hurt", "cast", "death"}
+
+    @pytest.mark.parametrize("name, frames, seconds", [
+        ("idle", 48, 1.6), ("attack", 44, 0.8), ("guard", 40, 0.72),
+        ("hurt", 36, 0.6), ("cast", 56, 1.0), ("death", 72, 1.4),
+    ])
+    def test_complete_motion_is_available_at_both_display_sizes(self, name, frames, seconds):
+        loader = SpriteLoader()
+        assert hero_animation_seconds(name, "mage") == pytest.approx(seconds)
+        for size in (96, 192):
+            assert len(loader.get_player_animation_frames(name, size, "mage")) == frames
+
+    def test_attack_contact_matches_its_event_frame(self):
+        from src.infrastructure.sprite_loader import hero_strike_seconds, hero_strike_point
+        assert HEROES["mage"].strike_frame == 19
+        assert hero_strike_seconds("mage") == pytest.approx(0.345)
+        assert hero_strike_point("mage") is not None
 
     def test_mage_has_combat_and_selection_sheets(self):
         assert set(HEROES["mage"].sheets) == {96, 192}
@@ -54,14 +71,18 @@ class TestFrames:
         loader = SpriteLoader()
         idle0 = _bytes(loader.get_player_idle_frames(192, "mage")[0])
         assert all(_bytes(loader.get_player_animation_frames(a, 192, "mage")[-1]) == idle0
-                   for a in ("attack", "guard", "hurt"))
+                   for a in ("attack", "guard", "hurt", "cast"))
 
-    def test_actions_are_short(self):
-        assert all(0.3 <= hero_animation_seconds(a, "mage") <= 0.8 for a in ("attack", "guard", "hurt"))
+    def test_death_holds_its_collapsed_pose(self):
+        loader = SpriteLoader()
+        frames = loader.get_player_animation_frames("death", 192, "mage")
+        assert frames
+        assert _bytes(frames[-1]) != _bytes(loader.get_player_idle_frames(192, "mage")[0])
+        assert _bytes(loader.get_player_sprite("El Mago", 192, elapsed=100, animation="death")) == _bytes(frames[-1])
 
     def test_idle_cycle_matches_the_shared_scene_clock(self):
         from src.infrastructure.sprite_loader import IDLE_CYCLE_SECONDS
-        assert hero_animation_seconds("idle", "mage") == IDLE_CYCLE_SECONDS
+        assert hero_animation_seconds("idle", "mage") == pytest.approx(IDLE_CYCLE_SECONDS)
 
 
 class TestCombat:
@@ -80,3 +101,28 @@ class TestCombat:
         scene.state.mana.current = max(scene.state.mana.current, attack.cost)
         scene._do_play_card(0, 0)
         assert (scene._hero_id, scene.hero_action) == ("mage", "attack")
+
+
+class TestMageBackup:
+    def test_previous_mage_remains_restorable(self):
+        import json
+        from pathlib import Path
+        backup = Path(__file__).resolve().parents[1] / "assets" / "characters" / "mage_legacy"
+        meta = json.loads((backup / "mage_sheet.json").read_text(encoding="utf-8"))
+        assert set(meta["animations"]) == {"idle", "attack", "guard", "hurt"}
+        for size, filename in meta["sheets"].items():
+            sheet = pygame.image.load(str(backup / filename))
+            assert sheet.get_width() >= int(size) * meta["columns"]
+
+
+class TestMagePixelIntegrity:
+    @pytest.mark.parametrize("size", [96, 192])
+    def test_frames_have_solid_pixels_and_no_clipped_edges(self, size):
+        loader = SpriteLoader()
+        margin = size // 48
+        for name in HEROES["mage"].animations:
+            for index, frame in enumerate(loader.get_player_animation_frames(name, size, "mage")):
+                bounds = frame.get_bounding_rect()
+                assert bounds.left >= margin and bounds.right <= size - margin, (name, index, bounds)
+                assert bounds.top >= margin and bounds.bottom <= size - margin, (name, index, bounds)
+                assert set(memoryview(_bytes(frame))[3::4]) <= {0, 255}, (name, index)

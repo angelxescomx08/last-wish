@@ -23,7 +23,7 @@ from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.sprite_loader import (
     IDLE_CYCLE_SECONDS, SpriteLoader, has_hero_sprites, hero_animation_seconds, hero_id_for,
-    hero_strike_point, hero_strike_seconds,
+    hero_strike_point, hero_strike_seconds, hero_cast_point, hero_cast_seconds,
 )
 from src.presentation.ui.dungeon_backdrop import DungeonBackdrop
 from src.presentation.fx.bursts import GLOW, SPARK, BurstParticles
@@ -37,7 +37,7 @@ from src.presentation.ui.pixel_ui import (
 )
 from src.infrastructure.ui_icons import ui_icon
 from src.presentation.ui.card_widget import (CARD_H, CARD_W, _RARITY_COLOR, card_size, draw_card,
-                                            draw_card_at, render_card_surface)
+                                            draw_card_at, quantize_scale, render_card_surface)
 from src.presentation.ui.targeting import RETICLE_ENEMY, RETICLE_SELF, draw_arrow, draw_reticle
 from src.presentation.ui.entity_widget import (
     ENEMY_H,
@@ -156,6 +156,20 @@ class CardPose:
     y: float
     scale: float = 1.0
     angle: float = 0.0
+    face: float | None = None       # scale the face is laid out at while tweening (None: at rest)
+
+
+def _shrink_face(pose: CardPose) -> float:
+    """Face scale for a card about to shrink away (to the discard pile)."""
+    return max(pose.scale, pose.face or 0.0)
+
+
+def _tween_face(pose: CardPose, goal_scale: float) -> None:
+    """Lay the face out once at the larger end of a size tween (see ``draw_card_at``)."""
+    if quantize_scale(pose.scale) == quantize_scale(goal_scale):
+        pose.face = None                                  # settled: crisp at its own size
+    else:
+        pose.face = max(goal_scale, pose.face if pose.face is not None else pose.scale)
 
 
 def _card_positions(count: int) -> list[tuple[int, int]]:
@@ -269,10 +283,13 @@ class CombatScene:
         self._sync_enemy_anims()
         self._pending_hero_hurt: float | None = None     # hero flinches when the enemy claws land
         self._pending_hero_name = "hurt"                # ... or falls ("death")
-        # Code-drawn heroes (sheet with a strike event) get timed particles and a floor shadow.
+        # Heroes with authored strike events get timed particles and a floor shadow.
         strike = hero_strike_seconds(self._hero_id) if has_hero_sprites(state.player.name) else 0.0
         self._hero_fx: HeroFx | None = (
-            HeroFx(strike=strike, seed=5, strike_point=hero_strike_point(self._hero_id))
+            HeroFx(strike=strike, seed=5, strike_point=hero_strike_point(self._hero_id),
+                   cast_point=hero_cast_point(self._hero_id),
+                   cast_seconds=hero_cast_seconds(self._hero_id) or None,
+                   arcane=self._hero_id == "mage")
             if strike > 0 else None
         )
 
@@ -656,6 +673,7 @@ class CombatScene:
             draw_card_at(
                 surface, card, (pose.x, pose.y), self._fonts,
                 scale        = pose.scale,
+                face_scale   = pose.face,
                 angle        = pose.angle,
                 affordable   = self._state.mana.can_afford(self._state.card_cost(card)),
                 cost         = self._state.card_cost(card),
@@ -703,7 +721,7 @@ class CombatScene:
                 draw_dealt_card(surface, face, (pose.x, pose.y, pose.scale, pose.angle), u)
             else:
                 draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
-                             angle=pose.angle, bonus_damage=dmg, bonus_block=blk,
+                             face_scale=pose.face, angle=pose.angle, bonus_damage=dmg, bonus_block=blk,
                              cost=self._state.card_cost(card),
                              affordable=self._state.mana.can_afford(self._state.card_cost(card)))
 
@@ -807,10 +825,12 @@ class CombatScene:
         if deal.waiting:
             pose.x, pose.y = deal.start
             pose.scale, pose.angle = START_SCALE, START_ANGLE
+            pose.face = goal.scale
             return True
         if deal.done:
             del self._deals[key]
             pose.x, pose.y, pose.scale, pose.angle = goal.x, goal.y, goal.scale, goal.angle
+            pose.face = None
             self._bursts.burst(goal.x, goal.y - 40, 8, palette=self._trail(card), speed=(40, 140),
                                life=(0.2, 0.45), size=(1.5, 2.5), style=SPARK, drag=3.0, spread=30)
             return False
@@ -823,6 +843,7 @@ class CombatScene:
                                   life=random.uniform(0.25, 0.5), palette=self._trail(card),
                                   size=random.uniform(1.5, 3.0), drag=2.5)
         pose.x, pose.y, pose.scale, pose.angle = x, y, scale, angle
+        pose.face = goal.scale
         return True
 
     @staticmethod
@@ -850,8 +871,9 @@ class CombatScene:
             f = k_held if i == held else k
             pose.x += (goal.x - pose.x) * f
             pose.y += (goal.y - pose.y) * f
-            pose.scale += (goal.scale - pose.scale) * f
+            pose.scale = goal.scale         # size snaps (hover zoom has no grow tween: text never jumps)
             pose.angle += (goal.angle - pose.angle) * f
+            _tween_face(pose, goal.scale)
         live = set(keys)
         for key in [key for key in self._motion if key not in live]:
             del self._motion[key]
@@ -873,7 +895,7 @@ class CombatScene:
     def _draw_leaving(self, surface: pygame.Surface) -> None:
         for card, pose, _age, dmg, blk in self._leaving:
             draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
-                         angle=pose.angle, bonus_damage=dmg, bonus_block=blk)
+                         face_scale=pose.face, angle=pose.angle, bonus_damage=dmg, bonus_block=blk)
 
     def _held_pose(self) -> CardPose | None:
         held = self._held_index()
@@ -890,7 +912,7 @@ class CombatScene:
         ready = self._play.armed or (self._play.aiming and self._play.target is not None)
         dmg, blk = self._bonuses(card)
         rect = draw_card_at(surface, card, (pose.x, pose.y), self._fonts, scale=pose.scale,
-                            bonus_damage=dmg, bonus_block=blk,
+                            face_scale=pose.face, bonus_damage=dmg, bonus_block=blk,
                             outline=_PLAYABLE if ready else _HELD, combo=self._combo_ready(card),
                             singular=self._state.singular_ready(card),
                             void=self._state.void_ready(card), spoil=self._state.spoil_ready(card),
@@ -1212,7 +1234,9 @@ class CombatScene:
         self._sound.play_card()
         self._motion.pop(played_key, None)        # if the same card is drawn again, it flies in
         self._deals.pop(played_key, None)
-        self._plan_draws(result, attack=is_attack)
+        block_gained = state.player.block - old_block
+        action = "attack" if is_attack else "guard" if block_gained > 0 else "cast"
+        self._plan_draws(result, action=action)
         if result.combo and self._player_rect:
             self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10, "¡COMBO!",
                               (90, 235, 180), lifetime=1.1)
@@ -1231,6 +1255,7 @@ class CombatScene:
                      if played_pose is not None else CardPose(640.0, 600.0, 1.0, 0.0))
             self._sequence = {
                 "card": played, "bonuses": bonuses, "result": result, "attack": is_attack,
+                "action": action,
                 "start": start, "t": 0.0, "fired": 0, "pulse": 0.0,
                 "prev_block": old_block, "prev_hp": list(old_enemy_hps),
             }
@@ -1240,19 +1265,14 @@ class CombatScene:
 
         if played is not None and played_pose is not None:
             self._leaving.append([played, CardPose(played_pose.x, played_pose.y, played_pose.scale,
-                                                   played_pose.angle), 0.0, *bonuses])
-        block_gained = state.player.block - old_block
-        if is_attack:
-            self._play_hero_action("attack")
-        elif block_gained > 0:
-            self._play_hero_action("guard")
-        else:
-            self._play_hero_action("cast")        # skills and powers (heroes whose sheet has it)
+                                                   played_pose.angle, _shrink_face(played_pose)),
+                                  0.0, *bonuses])
+        self._play_hero_action(action)
         if block_gained > 0 and self._player_rect:
             self._fx.add_block_flash(self._player_rect, block_gained, flash=self._hero_fx is None)
             self._sound.play_block()
 
-        # Enemies react when the blade connects (code-drawn hero), not when the card is played.
+        # Enemy reactions wait for the hero sheet's authored contact event.
         delay = hero_strike_seconds(self._hero_id) if self._hero_action == "attack" and self._hero_fx else 0.0
         for i, (old_hp, enemy) in enumerate(zip(old_enemy_hps, state.enemies)):
             dmg = old_hp - enemy.current_hp
@@ -1263,24 +1283,22 @@ class CombatScene:
     # Multi-cast replay (golden cards cast twice)
     # ------------------------------------------------------------------
 
-    def _plan_draws(self, result, *, attack: bool = False) -> None:
+    def _plan_draws(self, result, *, action: str | None = None) -> None:
         """Cards a play put in the hand arrive after its cast — each golden cast's draws
         right after that cast fires — one after another."""
         plan: list[float] = []
         drawn = list(result.cast_drawn) or [0]
         for k, n in enumerate(drawn):
-            at = (self._cast_time(k, attack=attack) + _DRAW_AFTER_GOLDEN_CAST
+            at = (self._cast_time(k, action=action) + _DRAW_AFTER_GOLDEN_CAST
                   if result.casts > 1 else _DRAW_AFTER_CAST)
             plan += [at + j * DEAL_STAGGER for j in range(n)]
         self._deal_plan = plan
 
-    def _cast_time(self, k: int, *, attack: bool | None = None) -> float:
-        if attack is None:
-            attack = self._sequence is not None and self._sequence["attack"]
-        gap = _CAST_GAP
-        if attack:
-            gap = max(gap, hero_animation_seconds("attack", self._hero_id) + 0.04)
-        return _CAST_INTRO + k * gap
+    def _cast_time(self, k: int, *, action: str | None = None) -> float:
+        if action is None and self._sequence is not None:
+            action = self._sequence["action"]
+        duration = hero_animation_seconds(action, self._hero_id) if action else 0.0
+        return _CAST_INTRO + k * max(_CAST_GAP, duration + 0.04)
 
     def _advance_sequence(self, dt: float) -> None:
         seq = self._sequence
@@ -1292,10 +1310,11 @@ class CombatScene:
         while seq["fired"] < result.casts and seq["t"] >= self._cast_time(seq["fired"]):
             self._fire_cast(seq["fired"])
             seq["fired"] += 1
-        if seq["t"] >= self._cast_time(result.casts - 1) + _CAST_OUTRO:
+        outro = max(_CAST_OUTRO, hero_animation_seconds(seq["action"], self._hero_id) + 0.04)
+        if seq["t"] >= self._cast_time(result.casts - 1) + outro:
             card, (dmg, blk) = seq["card"], seq["bonuses"]
             x, y = _CAST_STAGE
-            self._leaving.append([card, CardPose(x, y, 0.95, 0.0), 0.0, dmg, blk])
+            self._leaving.append([card, CardPose(x, y, 0.95, 0.0, 0.95 + 0.14), 0.0, dmg, blk])
             self._sequence = None
             self._shown_enemies = None
             self._shown_player_block = None
@@ -1325,10 +1344,7 @@ class CombatScene:
         gained = block - seq["prev_block"]
         seq["prev_block"] = block
         self._shown_player_block = block
-        if seq["attack"]:
-            self._play_hero_action("attack")
-        elif gained > 0:
-            self._play_hero_action("guard")
+        self._play_hero_action(seq["action"])
         if gained > 0 and self._player_rect:
             self._fx.add_block_flash(self._player_rect, gained)
             self._sound.play_block()
@@ -1356,7 +1372,8 @@ class CombatScene:
         scale = start.scale + (0.95 - start.scale) * u + 0.14 * seq["pulse"]
         dmg, blk = seq["bonuses"]
         draw_card_at(surface, seq["card"], (x, y), self._fonts, scale=scale,
-                     angle=start.angle * (1.0 - u), bonus_damage=dmg, bonus_block=blk)
+                     face_scale=max(start.scale, 0.95 + 0.14), angle=start.angle * (1.0 - u),
+                     bonus_damage=dmg, bonus_block=blk)
 
     @property
     def hero_action(self) -> str | None:
@@ -1480,7 +1497,7 @@ class CombatScene:
         for card, key in zip(state.hand.cards, self._card_keys()):   # the hand flies to the discard
             pose = self._motion.get(key)
             if pose is not None and key not in self._deals:
-                self._leaving.append([card, CardPose(pose.x, pose.y, pose.scale, pose.angle), 0.0,
+                self._leaving.append([card, CardPose(pose.x, pose.y, pose.scale, pose.angle, _shrink_face(pose)), 0.0,
                                       *self._bonuses(card)])
         end_player_turn(state)
         self._motion.clear()                  # every card of the new hand is dealt in

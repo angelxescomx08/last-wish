@@ -64,6 +64,8 @@ class HeroSheets:
     animations: dict[str, HeroAnimation]
     strike_frame: int | None = None             # attack frame where the weapon connects
     strike_point: tuple[float, float] | None = None  # weapon contact on the native 96 px canvas
+    cast_frame: int | None = None               # spell release within the cast clip
+    cast_point: tuple[float, float] | None = None    # spell release on the native 96 px canvas
 
 
 def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
@@ -77,10 +79,15 @@ def _load_hero_meta(hero: str = "warrior") -> HeroSheets:
         strike = event.get("strike_frame")
         point = event.get("strike_point")
         strike_point = (float(point[0]), float(point[1])) if point is not None and len(point) == 2 else None
+        cast_event = meta.get("events", {}).get("cast", {})
+        cast_frame = cast_event.get("cast_frame")
+        point = cast_event.get("cast_point")
+        cast_point = (float(point[0]), float(point[1])) if point is not None and len(point) == 2 else None
         return HeroSheets(cell, sheets, {
             name: HeroAnimation(int(a["row"]), tuple(ms / 1000 for ms in a["durations_ms"]), bool(a["loop"]))
             for name, a in meta["animations"].items()
-        }, int(strike) if strike is not None else None, strike_point)
+        }, int(strike) if strike is not None else None, strike_point,
+            int(cast_frame) if cast_frame is not None else None, cast_point)
     except (OSError, ValueError, KeyError, TypeError):
         return HeroSheets(192, {192: f"{hero}_sheet.png"}, {"idle": HeroAnimation(0, (0.1,) * 16, True)})
 
@@ -129,6 +136,27 @@ def hero_strike_point(hero: str = "warrior") -> tuple[float, float] | None:
     if sheets is None or sheets.strike_point is None:
         return None
     x, y = sheets.strike_point
+    return 2 * x - 96, 2 * y - 96
+
+
+def hero_cast_seconds(hero: str = "warrior") -> float:
+    """Seconds until spell release in ``cast`` (0.0 without an authored event)."""
+    sheets = HEROES.get(hero)
+    anim = sheets.animations.get("cast") if sheets else None
+    if anim is None or sheets.cast_frame is None:
+        return 0.0
+    return sum(anim.durations[:max(0, min(sheets.cast_frame, len(anim.durations)))])
+
+
+def hero_cast_point(hero: str = "warrior") -> tuple[float, float] | None:
+    """Spell release offset from the centre of the 192 px combat sprite.
+
+    Metadata uses native 96 px coordinates. None preserves default effects.
+    """
+    sheets = HEROES.get(hero)
+    if sheets is None or sheets.cast_point is None:
+        return None
+    x, y = sheets.cast_point
     return 2 * x - 96, 2 * y - 96
 
 

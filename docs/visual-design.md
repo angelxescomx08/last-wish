@@ -155,7 +155,39 @@ User found card play "raro" and asked for the Slay the Spire arrow. Behaviour
   with dithered purple after-images, crossed double slash, sparks; guard = smoky
   side-step with after-image and glinting daggers; hurt = shared flash/recoil.
 
-## Mage — approved art, same pipeline as the warrior
+## Mage v2 — pixel art and full-body animation (2026-10-11)
+
+The user requested a new mage and explicitly rejected the first new image as
+being too illustrated. The active design now matches the rogue's coarse pixel
+clusters: silver hair, cyan eyes, navy/indigo split coat, gold trim and a crystal
+staff. `mage-source-v2.png` is the immutable generated source; `mage-rig-base.png`
+is the imported 96 px drawing. Generation mode, exact prompt and reproduction
+notes are in [mage-v2-art.md](mage-v2-art.md). The previous mage remains in
+`assets/characters/mage_legacy/`; its original source and root PNGs also remain.
+
+`scripts/mage_rig.py` separates the original pixel drawing into rigid layers.
+Shoulder/elbow chains keep the staff attached to its hand. Two-bone legs bend
+while planted soles stay fixed; attack includes a four-pixel forward step.
+Monotone cubic motion curves keep velocity continuous between intermediate
+poses. Casting extends the free arm through an overhead arc, damage recoils
+through torso and knees, and defeat ends in a held kneel. Cape and coat tails
+follow with delayed motion. The face is never redrawn or globally warped.
+
+`scripts/generate_mage_v2_sprites.py` writes six clips: idle 48 / 1600 ms,
+attack 44 / 800 ms, guard 40 / 720 ms, hurt 36 / 600 ms, cast 56 / 1000 ms,
+death 72 / 1400 ms (296 frames total). Native 96 and 192 px rasterization uses
+nearest sampling without smoothing. The active `mage_sheet.json` points to
+versioned sheets; attack release at frame 19 (345 ms) synchronizes enemy hits.
+Metadata carries the casting-hand origins for attack and cast particles.
+
+Review at actual selection/combat sizes in `output/mage-v2-preview.html`;
+`output/mage-v2-preview.gif` uses both native sheets. Regenerate layers, sheets,
+metadata and HTML with the baker, then GIF with `scripts/export_mage_preview.py`.
+Tests check source reconstruction, planted soles, connected rigid joints,
+continuous curves, complete arm range, sheet timing and combat integration.
+Visual animation quality remains subject to user review.
+
+## Mage v1 — archived illustrated design
 
 - Source: `assets/characters/mage-source.png` (user-supplied, dark vignette with
   a soft glow instead of transparency).

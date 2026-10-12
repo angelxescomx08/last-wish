@@ -301,7 +301,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
             c, r = _circle(z[zone], w, h)
             txt = BigValue.format_int(value)
             size = max(8, round(r * (2.0 if len(txt) <= 2 else 1.5 if len(txt) == 3 else 1.2)))
-            s = _outlined(fonts.get(size), txt, _BONUS_INK if boosted else ink)
+            s = _outlined(_card_font(fonts, size), txt, _BONUS_INK if boosted else ink)   # bold, like the card text
             surf.blit(s, s.get_rect(center=c))
 
     if not affordable:
@@ -374,6 +374,8 @@ def draw_card(
 _SCALE_STEP = 0.05
 _ROT_MAX = 96
 _rot_cache: OrderedDict = OrderedDict()
+_RESIZE_MAX = 64
+_resize_cache: OrderedDict = OrderedDict()
 
 
 def quantize_scale(scale: float) -> float:
@@ -384,6 +386,21 @@ def quantize_scale(scale: float) -> float:
 def card_size(scale: float) -> tuple[int, int]:
     q = quantize_scale(scale)
     return round(CARD_W * q), round(CARD_H * q)
+
+
+def _resized(body: pygame.Surface, size: tuple[int, int]) -> pygame.Surface:
+    """``body`` smoothly resized to ``size`` (cached: a tween revisits the same few sizes)."""
+    if body.get_size() == size:
+        return body
+    key = (body, size)
+    out = _resize_cache.get(key)
+    if out is None:
+        out = _resize_cache[key] = pygame.transform.smoothscale(body, size)
+        if len(_resize_cache) > _RESIZE_MAX:
+            _resize_cache.popitem(last=False)
+    else:
+        _resize_cache.move_to_end(key)
+    return out
 
 
 def draw_card_at(
@@ -403,8 +420,14 @@ def draw_card_at(
     void: bool = False,
     spoil: bool = False,
     cost: int | None = None,
+    face_scale: float | None = None,
 ) -> pygame.Rect:
     """Draw a card centred on ``center``; returns its (unrotated) rect.
+
+    ``face_scale``: while the card is growing / shrinking, the face is laid out
+    once at that scale (the tween's larger end) and smoothly resized to the
+    current size. Re-rendering at every 5 % step would make the pixel text,
+    the numbers and the art jump between font sizes and line wraps.
 
     The face is re-rendered at the quantised size (crisp text, never an
     upscaled bitmap). A tilt of a whole degree or more is rotated once and
@@ -412,9 +435,11 @@ def draw_card_at(
     A broken card's slash is part of the cached face.
     """
     w, h = card_size(scale)
-    body = render_card_surface(card, fonts, w=w, h=h, affordable=affordable, bonus_damage=bonus_damage,
+    fw, fh = card_size(face_scale) if face_scale is not None else (w, h)
+    body = render_card_surface(card, fonts, w=fw, h=fh, affordable=affordable, bonus_damage=bonus_damage,
                                bonus_block=bonus_block, combo=combo, singular=singular, void=void,
                                spoil=spoil, cost=cost)
+    body = _resized(body, (w, h))
     tilt = int(round(angle))
     ready = card_fx.ready_keywords(card, combo, singular, void, spoil)
     if ready:              # keyword condition met: aura behind (comets + badge drawn on top below)

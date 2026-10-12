@@ -437,3 +437,69 @@ class TestMultiCastReplay:
         assert enemy.current_hp == 0 and not scene.combat_won
         self._step(scene, 0.8)
         assert scene.combat_won
+
+
+class TestHoverTweenFace:
+    """A growing / shrinking card keeps one face layout (the tween's larger end)."""
+
+    def test_growing_uses_the_target_face(self):
+        from src.presentation.scenes.combat_scene import CardPose, _tween_face
+        pose = CardPose(0, 0, 1.08)
+        _tween_face(pose, 1.3)
+        assert pose.face == 1.3
+
+    def test_shrinking_keeps_the_larger_start_face(self):
+        from src.presentation.scenes.combat_scene import CardPose, _tween_face
+        pose = CardPose(0, 0, 1.25)
+        _tween_face(pose, 1.0)
+        assert pose.face == 1.25
+        pose.scale = 1.1
+        _tween_face(pose, 1.0)
+        assert pose.face == 1.25            # never re-laid out on the way down
+
+    def test_settled_card_is_crisp(self):
+        from src.presentation.scenes.combat_scene import CardPose, _tween_face
+        pose = CardPose(0, 0, 1.299, face=1.3)
+        _tween_face(pose, 1.3)
+        assert pose.face is None
+        pose = CardPose(0, 0, 1.0)
+        _tween_face(pose, 1.0)
+        assert pose.face is None
+
+    def test_reversed_mid_tween_keeps_the_face(self):
+        from src.presentation.scenes.combat_scene import CardPose, _tween_face
+        pose = CardPose(0, 0, 1.15, face=1.3)       # was growing to 1.3, now unhovered
+        _tween_face(pose, 1.0)
+        assert pose.face == 1.3
+
+    def test_leaving_card_shrinks_from_its_face(self):
+        from src.presentation.scenes.combat_scene import CardPose, _shrink_face
+        assert _shrink_face(CardPose(0, 0, 1.3)) == 1.3
+        assert _shrink_face(CardPose(0, 0, 1.1, face=1.3)) == 1.3
+
+    def _settled_scene(self):
+        scene = CombatScene(create_sample_combat(), FontRegistry())
+        scene.draw(pygame.Surface((1280, 720)))
+        scene._deals.clear()
+        for _ in range(240):
+            scene._advance_cards(1 / 60)
+        return scene
+
+    def test_hover_zoom_is_instant_and_crisp(self):
+        from src.presentation.scenes.combat_scene import _HOVER_SCALE
+        scene = self._settled_scene()
+        scene._hovered_card = 0
+        scene._advance_cards(1 / 60)
+        pose = scene._motion[scene._card_keys()[0]]
+        assert pose.scale == _HOVER_SCALE          # no in-between sizes
+        assert pose.face is None                   # rendered at its own size: hover font
+        scene.draw(pygame.Surface((1280, 720)))
+
+    def test_unhover_is_instant(self):
+        scene = self._settled_scene()
+        scene._hovered_card = 0
+        scene._advance_cards(1 / 60)
+        scene._hovered_card = None
+        scene._advance_cards(1 / 60)
+        pose = scene._motion[scene._card_keys()[0]]
+        assert pose.scale == 1.0 and pose.face is None
