@@ -2,7 +2,8 @@
 
 Attack contact and spell release use authored sheet events and origins. The
 mage uses cyan/violet particles and cues aligned with his casting, guarding and
-falling poses; the default sword effects retain their original timing.
+falling poses. Warrior v3 supplies its guard and kneeling times; older sword
+effects retain their original timing.
 
 Positions are offsets from the centre of the 192 px combat sprite, so a native
 96 px point ``(x, y)`` maps to ``(2x - 96, 2y - 96)``.
@@ -54,15 +55,19 @@ class HeroFx:
     def __init__(self, *, strike: float, seed: int = 0, particles: int = 260,
                  strike_point: tuple[float, float] | None = None,
                  cast_point: tuple[float, float] | None = None,
-                 cast_seconds: float | None = None, arcane: bool = False) -> None:
+                 cast_seconds: float | None = None, arcane: bool = False,
+                 guard_seconds: float | None = None,
+                 kneel_seconds: float | None = None) -> None:
         self.strike = max(0.0, strike)
         self.strike_point = BLADE_HIT if strike_point is None else strike_point
         self.cast_point = CAST_TIP if cast_point is None else cast_point
         self.cast_seconds = max(0.0, cast_seconds) if cast_seconds is not None else (0.5 if arcane else 0.25)
         self.attack_palette = ARCANE if arcane else WARM
         self.cast_palette = VIOLET if arcane else GOLD
-        self._guard_time = 0.28 if arcane else 0.06
-        self._death_kneel = 0.84 if arcane else DEATH_KNEEL
+        self._guard_time = (max(0.0, guard_seconds) if guard_seconds is not None
+                            else 0.28 if arcane else 0.06)
+        self._death_kneel = (max(0.0, kneel_seconds) if kneel_seconds is not None
+                            else 0.84 if arcane else DEATH_KNEEL)
         self._charge_time = max(0.0, self.cast_seconds - 0.2)
         self._arcane = arcane
         self._rng = random.Random(seed)

@@ -416,9 +416,10 @@ class TestMultiCastReplay:
         assert enemy.current_hp == 0                    # rules resolved at once
         assert scene.presentation_busy and not scene.combat_won
         assert scene._shown_enemies[0][0] == 12         # screen still shows full HP
-        self._step(scene, 0.45)                         # first cast
+        first_cast = scene._cast_time(0) + 0.1
+        self._step(scene, first_cast)
         assert scene._shown_enemies[0][0] == 6 and not scene.combat_won
-        self._step(scene, 0.7)                          # second cast
+        self._step(scene, scene._cast_time(1) - first_cast + 0.1)
         assert scene._shown_enemies[0][0] == 0 and not scene.combat_won
         self._step(scene, 1.0)                          # linger, then victory
         assert not scene.presentation_busy and scene.combat_won

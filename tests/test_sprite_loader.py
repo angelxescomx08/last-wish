@@ -53,9 +53,11 @@ class TestHeroStrikePoint:
         monkeypatch.setitem(sprite_loader.HEROES, "test", sprite_loader._load_hero_meta("test"))
         assert sprite_loader.hero_strike_point("test") == expected
 
-    def test_missing_point_preserves_default_effect_position(self):
-        from src.infrastructure.sprite_loader import hero_strike_point
-        assert hero_strike_point("warrior") is None
+    def test_missing_point_preserves_default_effect_position(self, monkeypatch):
+        from dataclasses import replace
+        from src.infrastructure.sprite_loader import HEROES, hero_strike_point
+        monkeypatch.setitem(HEROES, "legacy", replace(HEROES["warrior"], strike_point=None))
+        assert hero_strike_point("legacy") is None
         assert hero_strike_point("unknown") is None
 
 
@@ -232,8 +234,26 @@ class TestHeroCastEvent:
         assert sprite_loader.hero_cast_point("test") == (24, -20)
         assert sprite_loader.hero_cast_seconds("test") == pytest.approx(0.5)
 
-    def test_absent_cast_event_preserves_default_cues(self):
-        from src.infrastructure.sprite_loader import hero_cast_point, hero_cast_seconds
-        for hero in ("warrior", "rogue", "unknown"):
+    def test_absent_cast_event_preserves_default_cues(self, monkeypatch):
+        from dataclasses import replace
+        from src.infrastructure.sprite_loader import HEROES, hero_cast_point, hero_cast_seconds
+        monkeypatch.setitem(HEROES, "legacy", replace(HEROES["warrior"], cast_frame=None, cast_point=None))
+        for hero in ("legacy", "rogue", "unknown"):
             assert hero_cast_point(hero) is None
             assert hero_cast_seconds(hero) == 0.0
+
+
+class TestVersionedHeroSheets:
+    @pytest.mark.parametrize("cell", [96, 192])
+    def test_warrior_loads_the_file_selected_by_active_metadata(self, monkeypatch, cell):
+        from dataclasses import replace
+        import pygame
+        from src.infrastructure import sprite_loader
+        sheets = {96: "warrior_v3_sheet_96.png", 192: "warrior_v3_sheet.png"}
+        monkeypatch.setitem(sprite_loader.HEROES, "warrior",
+                            replace(sprite_loader.HEROES["warrior"], sheets=sheets))
+        opened = []
+        surface = pygame.Surface((cell, cell), pygame.SRCALPHA)
+        monkeypatch.setattr(pygame.image, "load", lambda path: opened.append(Path(path)) or surface)
+        assert SpriteLoader()._hero_sheet("warrior", cell) is surface
+        assert opened == [sprite_loader._HERO_DIR / sheets[cell]]

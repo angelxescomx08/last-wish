@@ -2,8 +2,8 @@
 
 ## Required direction for Codex and Claude
 
-**Pixel-art dungeon fantasy.** Characters follow the approved warrior design
-(`warrior-source-v2.png`, detailed pixel art). Faces and bodies drawn by code
+**Pixel-art dungeon fantasy.** Characters use the same coarse pixel clusters and clear anime design across
+the rogue, mage v2 and warrior v3. The earlier `warrior-source-v2.png` is preserved. Faces and bodies drawn by code
 were rejected; see v7 below. Target mood for scenes: strong warm/cold contrast
 (cold night and rain vs. firelight and glowing windows), crisp and looping.
 Environments use dark stone, blue/purple shadows and warm torchlight. Preserve
@@ -14,10 +14,40 @@ code identifiers and comments are English.
 Espectro method: one renderer + numeric poses, native pixels shown ×2, fixed
 hue-shifted ramps, Bayer-dithered shading, coloured outline, timed particles.
 Read [code-drawn-sprites.md](code-drawn-sprites.md) before making a new enemy.
-**La Guerrera is now code-drawn too** (user request: the illustrated warrior did not fit the
-pixel art); the other heroes still come from approved illustrations.
+The current heroes use illustrated pixel-art sources with rigid articulation.
+The earlier code-drawn warrior remains available as a backup.
 
-## La Guerrera — code-drawn (current runtime asset)
+## La Guerrera v3 — shared pixel-art style (2026-10-12)
+
+The user requested the same treatment as the rogue and mage. New source
+`warrior-source-v3.png` keeps copper/crimson ponytail, emerald eyes, silver/gold
+armour, dark teal cape and crimson tabard. Pixel density matches those heroes.
+The earlier `warrior-source-v2.png` and `scripts/warrior_rig.py` stay untouched.
+Built-in generation mode and exact prompt: [warrior-v3-art.md](warrior-v3-art.md).
+
+`scripts/warrior_pixel_layers.py` owns precise material masks and source-derived
+hidden patches. `scripts/warrior_pixel_rig.py` owns connected shoulder/elbow
+chains, a rigid hand/sword attachment and two-bone legs. Attack folds the elbow
+for the overhead wind-up, reaches forward, cuts through low and recovers. The
+front foot steps five native pixels. Soles stay planted during idle; hair and
+cape follow delayed motion; defeat ends in a held crouched kneel. No global
+image warp or replacement facial drawing is used.
+
+`scripts/generate_warrior_v3_sprites.py` writes 300 frames: idle 48 / 1600 ms,
+attack 48 / 800 ms, guard 40 / 720 ms, hurt 36 / 600 ms, cast 56 / 1000 ms, death 72 / 1400 ms.
+Both 96/192 px sheets are rasterized natively with hard edges. Active metadata
+selects `warrior_v3_sheet.png` / `_96.png`; attack frame 20 (333 ms) and cast
+frame 28 (500 ms) carry the actual blade-tip positions. Guard/death effects align
+with their completed poses. The previous metadata, PNGs and code generator
+remain in `assets/characters/warrior_before_v3/` and the root old PNGs remain.
+
+Regenerate layers, PNGs and HTML using the v3 baker; export GIF using
+`scripts/export_warrior_v3_preview.py`. Inspect `output/warrior-v3-preview.html`
+and `output/warrior-v3-preview.gif` at 96/192 px. Geometry, rest reconstruction,
+full sword range, clipping margins, metadata origins, playback and combat have
+regression coverage. Visual motion quality remains subject to user review.
+
+## La Guerrera — archived code-drawn runtime asset
 
 `scripts/generate_warrior_code_sprites.py` (stdlib): Espectro technique — the whole figure is
 one silhouette scanned row by row with every material painted as a zone inside it; only the

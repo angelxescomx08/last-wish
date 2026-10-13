@@ -1,16 +1,13 @@
-"""Hero sprite sheets: slicing, timing, planted feet and scene hand-off.
+"""Active warrior v3 sheets: crisp pixels, timing, complete poses and combat.
 
-The approved warrior art is animated by scripts/generate_warrior_sprites.py into
-a 192 px sheet (combat, x1) and a 96 px sheet (selection); runtime never
-resamples them. These tests pin the contract between
-that sheet and the game: every action starts and ends on the idle pose, feet
-never slide during idle, and time (not frame rate) selects the frame.
+The articulated pixel rig bakes 96/192 px sheets. These tests protect the active
+metadata contract while older generator tests continue checking archived art.
 """
 import pygame
 import pytest
 
 from src.infrastructure.sprite_loader import (
-    HERO_ANIMATIONS, HERO_CELL, IDLE_CYCLE_SECONDS, SpriteLoader, hero_animation_seconds,
+    HERO_ANIMATIONS, IDLE_CYCLE_SECONDS, SpriteLoader, hero_animation_seconds,
 )
 
 
@@ -35,10 +32,19 @@ class TestSheet:
     def test_only_idle_loops(self):
         assert [n for n, a in HERO_ANIMATIONS.items() if a.loop] == ["idle"]
 
-    @pytest.mark.parametrize("name", ["idle", "attack", "guard", "hurt"])
-    def test_every_animation_slices_into_its_frame_count(self, name):
-        frames = SpriteLoader().get_player_animation_frames(name, HERO_CELL)
-        assert len(frames) == len(HERO_ANIMATIONS[name].durations)
+    @pytest.mark.parametrize("name, count, seconds", [
+        ("idle", 48, 1.6), ("attack", 48, 0.8), ("guard", 40, 0.72),
+        ("hurt", 36, 0.6), ("cast", 56, 1.0), ("death", 72, 1.4),
+    ])
+    def test_every_animation_has_its_complete_motion_at_both_sizes(self, name, count, seconds):
+        loader = SpriteLoader()
+        assert hero_animation_seconds(name) == pytest.approx(seconds)
+        for size in (96, 192):
+            assert len(loader.get_player_animation_frames(name, size)) == count
+
+    def test_runtime_uses_the_versioned_warrior_files(self):
+        from src.infrastructure.sprite_loader import HERO_SHEETS
+        assert HERO_SHEETS == {96: "warrior_v3_sheet_96.png", 192: "warrior_v3_sheet.png"}
 
     @pytest.mark.parametrize("size", [96, 192])
     def test_frames_are_scaled_by_whole_numbers(self, size):
@@ -61,7 +67,8 @@ class TestIdle:
 
     def test_idle_soles_share_one_baseline(self):
         bottoms = {f.get_bounding_rect(min_alpha=32).bottom for f in SpriteLoader().get_player_idle_frames(192)}
-        assert bottoms == {192}          # native soles on row 95, shown ×2
+        assert len(bottoms) == 1
+        assert 160 <= next(iter(bottoms)) <= 188
 
     def test_selection_size_uses_its_own_sheet(self):
         from src.infrastructure.sprite_loader import HERO_SHEETS
@@ -86,13 +93,17 @@ class TestIdle:
 
 class TestActions:
     @pytest.mark.parametrize("name", ["attack", "guard", "hurt", "cast"])
-    def test_action_ends_exactly_on_idle_frame_zero(self, name):
+    @pytest.mark.parametrize("size", [96, 192])
+    def test_action_starts_and_ends_exactly_on_idle_frame_zero(self, name, size):
         loader = SpriteLoader()
-        assert _bytes(loader.get_player_animation_frames(name, 96)[-1]) == _bytes(loader.get_player_idle_frames(96)[0])
+        frames = loader.get_player_animation_frames(name, size)
+        rest = _bytes(loader.get_player_idle_frames(size)[0])
+        assert _bytes(frames[0]) == rest
+        assert _bytes(frames[-1]) == rest
 
     @pytest.mark.parametrize("name", ["attack", "guard", "hurt"])
     def test_action_is_short(self, name):
-        assert 0.3 <= hero_animation_seconds(name) <= 0.8
+        assert 0.3 <= hero_animation_seconds(name) <= 0.8 + 1e-9
 
     def test_attack_reaches_beyond_the_idle_silhouette(self):
         loader = SpriteLoader()
@@ -135,7 +146,9 @@ class TestTiming:
 
     def test_missing_sheet_uses_existing_character_fallback(self, monkeypatch):
         import src.infrastructure.sprite_loader as module
-        monkeypatch.setattr(module, "_HERO_SHEET_PATH", module._ASSETS / "missing-sheet.png")
+        from dataclasses import replace
+        monkeypatch.setitem(module.HEROES, "warrior",
+                            replace(module.HEROES["warrior"], sheets={192: "missing-sheet.png"}))
         loader = SpriteLoader()
         monkeypatch.setattr(loader, "_load", lambda path, size: "fallback")
         assert loader.get_player_sprite("La Guerrera") == "fallback"
@@ -202,3 +215,54 @@ class TestScenes:
         scene = _combat_scene()
         scene._play_hero_action("dance")
         assert scene.hero_action is None
+
+
+class TestWarriorPixelIntegrity:
+    @pytest.mark.parametrize("size", [96, 192])
+    def test_all_frames_have_crisp_pixels_and_safe_margins(self, size):
+        loader = SpriteLoader()
+        margin = size // 48
+        for name in HERO_ANIMATIONS:
+            for index, frame in enumerate(loader.get_player_animation_frames(name, size)):
+                bounds = frame.get_bounding_rect()
+                assert bounds.left >= margin and bounds.right <= size - margin, (name, index, bounds)
+                assert bounds.top >= margin and bounds.bottom <= size - margin, (name, index, bounds)
+                assert set(memoryview(_bytes(frame))[3::4]) <= {0, 255}, (name, index)
+
+    def test_contact_event_has_a_point_and_matches_the_selected_attack_frame(self):
+        from src.infrastructure.sprite_loader import HEROES, hero_strike_point, hero_strike_seconds
+        assert HEROES["warrior"].strike_frame == 20
+        assert hero_strike_seconds("warrior") == pytest.approx(0.333)
+        assert hero_strike_point("warrior") is not None
+        assert HERO_ANIMATIONS["attack"].frame_at(hero_strike_seconds("warrior")) == 20
+
+    @pytest.mark.parametrize("action, frame, point_name", [
+        ("attack", 20, "strike_point"), ("cast", 28, "cast_point"),
+    ])
+    def test_effect_origin_stays_on_the_sword_at_the_authored_event(self, monkeypatch, action, frame, point_name):
+        from pathlib import Path
+        from src.infrastructure.sprite_loader import HEROES
+        monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+        from warrior_pixel_rig import pose_at, weapon_tip
+        phase = frame / (len(HERO_ANIMATIONS[action].durations) - 1)
+        assert getattr(HEROES["warrior"], point_name) == pytest.approx(
+            weapon_tip(pose_at(action, phase)), abs=0.001)
+
+    def test_death_keeps_the_collapsed_endpoint(self):
+        loader = SpriteLoader()
+        frames = loader.get_player_animation_frames("death", 192)
+        assert _bytes(frames[-1]) != _bytes(loader.get_player_idle_frames(192)[0])
+        assert loader.get_player_sprite("La Guerrera", 192, animation="death", elapsed=100) is frames[-1]
+
+
+class TestWarriorBackup:
+    def test_previous_warrior_is_preserved_with_its_original_metadata(self):
+        import json
+        from pathlib import Path
+        assets = Path(__file__).resolve().parents[1] / "assets" / "characters"
+        backup = assets / "warrior_before_v3"
+        meta = json.loads((backup / "warrior_sheet.json").read_text(encoding="utf-8"))
+        assert meta["animations"]["idle"]["frames"] == 16
+        assert meta["events"]["attack"]["strike_frame"] == 3
+        for filename in meta["sheets"].values():
+            assert (backup / filename).read_bytes() == (assets / filename).read_bytes()

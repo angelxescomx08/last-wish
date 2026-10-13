@@ -285,11 +285,14 @@ class CombatScene:
         self._pending_hero_name = "hurt"                # ... or falls ("death")
         # Heroes with authored strike events get timed particles and a floor shadow.
         strike = hero_strike_seconds(self._hero_id) if has_hero_sprites(state.player.name) else 0.0
+        cast_release = hero_cast_seconds(self._hero_id)
+        authored_warrior = self._hero_id == "warrior" and cast_release > 0
         self._hero_fx: HeroFx | None = (
             HeroFx(strike=strike, seed=5, strike_point=hero_strike_point(self._hero_id),
-                   cast_point=hero_cast_point(self._hero_id),
-                   cast_seconds=hero_cast_seconds(self._hero_id) or None,
-                   arcane=self._hero_id == "mage")
+                   cast_point=hero_cast_point(self._hero_id), cast_seconds=cast_release or None,
+                   arcane=self._hero_id == "mage",
+                   guard_seconds=hero_animation_seconds("guard", self._hero_id) * 0.4 if authored_warrior else None,
+                   kneel_seconds=hero_animation_seconds("death", self._hero_id) * 0.6 if authored_warrior else None)
             if strike > 0 else None
         )
 

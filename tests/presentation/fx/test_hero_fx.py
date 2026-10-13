@@ -169,3 +169,17 @@ class TestArcaneStyle:
         assert not bursts
         _run(fx, 0.02)
         assert bursts == [(CENTER[0] + 24, CENTER[1] - 20)]
+
+
+class TestAuthoredWarriorCues:
+    @pytest.mark.parametrize("action, cue, before, after", [
+        ("guard", "ward", 0.287, 0.002), ("death", "kneel", 0.839, 0.002),
+    ])
+    def test_guard_and_kneeling_cues_wait_for_the_authored_pose(self, action, cue, before, after):
+        fx = HeroFx(strike=0.333, guard_seconds=0.288, kneel_seconds=0.84)
+        fx.draw_shadow(pygame.Surface((1280, 720)), CENTER)
+        fx.play(action)
+        _run(fx, before)
+        assert cue not in fx._fired
+        _run(fx, after)
+        assert cue in fx._fired

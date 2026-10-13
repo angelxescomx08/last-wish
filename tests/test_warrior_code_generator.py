@@ -154,7 +154,7 @@ class TestPoses:
 
 class TestSheetFiles:
     def test_meta_matches_generator(self):
-        meta = json.loads((ROOT / "assets" / "characters" / "warrior_sheet.json").read_text(encoding="utf-8"))
+        meta = json.loads((ROOT / "assets" / "characters" / "warrior_before_v3" / "warrior_sheet.json").read_text(encoding="utf-8"))
         assert (meta["cell"], meta["sheets"], meta["events"]["attack"]["strike_frame"], list(meta["animations"])) == (
             192, {"192": "warrior_sheet.png", "96": "warrior_sheet_96.png"}, gen.STRIKE_FRAME, list(gen.ANIMATIONS))
 

@@ -13,6 +13,7 @@ from src.domain.card_pool import starter_deck
 from src.domain.character import ALL_CHARACTERS
 from src.domain.entities import Enemy, Intent, IntentType
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.sprite_loader import hero_strike_seconds
 from src.presentation.scenes.combat_scene import CombatScene
 
 
@@ -67,7 +68,7 @@ class TestHits:
         _drawn(scene)
         _attack_first(scene)
         scene._do_play_card(0, 0)
-        _steps(scene, 0.3)                     # the blade connects after the wind-up
+        _steps(scene, hero_strike_seconds(scene._hero_id) + 0.05)
         assert scene.enemy_animators[0].action == "hurt"
 
     def test_kill_plays_death(self):
@@ -75,7 +76,7 @@ class TestHits:
         _drawn(scene)
         _attack_first(scene)
         scene._do_play_card(0, 0)
-        _steps(scene, 0.3)
+        _steps(scene, hero_strike_seconds(scene._hero_id) + 0.05)
         assert scene.enemy_animators[0].dead is True
 
     def test_victory_waits_for_the_death_animation(self):

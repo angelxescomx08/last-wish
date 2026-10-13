@@ -192,7 +192,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `fx/enemy_animator.py` | `EnemyAnimator(sheet, seed, phase)` — one animated enemy: `play(name, delay=, hits=)`, `strike_times(anim, hits)`, `style` (`EnemyFxStyle` from `STYLES[sheet_id]`: palettes and cue points per enemy), `blades`/`target` (floating swords of the Caballero Hueco, thrown one per hit during `command`) (attack/hurt/cast/death; death latches), `update(dt)`, `draw(surface, anchor)` (floor shadow, pulsing additive floor glow, frame, own pooled particles: ambient wisps, claw sparks at `strike_time()`, ectoplasm on hurt, implode + rune motes on cast, soul motes while dissolving), `action`, `busy`, `dead`, `death_done` |
 | `fx/card_fx.py` | "Ready" effect for cards whose keyword condition holds (Combo, Singular, Vacío, Despojo): `ready_keywords(card, combo, singular, void, spoil)`, `READY_STYLES` (label, colour, light, icon per keyword), `draw_ready_back` (breathing aura behind; colours cycle when several are ready), `draw_ready_front` (comets running round the edge with trails, corner flares, bobbing "¡COMBO!" badge with icon; follows tilt and scale), `perimeter_point`, `comet_positions`, `current_color`. Shapes no chroma uses, so it reads on top of the golden sheen/halo/motes |
 | `ui/luck_badge.py` | `draw_luck_badge(surface, anchor, pos, report, fonts)`, `luck_line(report)` — kit plate "Suerte N ▲ · Rara o mejor X % · dorada Y % · carta extra Z %" (green when relics raise luck); shop, pack opening, card reward |
-| `fx/hero_fx.py` | `HeroFx(strike, seed, strike_point=, cast_point=, cast_seconds=, arcane=)` — timed effects for heroes with release/contact metadata: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
+| `fx/hero_fx.py` | `HeroFx(strike, seed, strike_point=, cast_point=, cast_seconds=, arcane=, guard_seconds=, kneel_seconds=)` — timed effects for heroes with release/contact metadata: `play(action, delay=)`, `update(dt)`, `draw_shadow(surface, center)` (before the sprite), `draw(surface, center)` (pooled particles: blade sparks at `strike`, dust kick, ward shards, ember burst on hurt, rising gold on cast, dust when kneeling in death) |
 | `fx/card_deal.py` | Drawn cards fly in from the draw pile: `Deal(wait, start)` (`advance`, `waiting`, `progress`, `done`), `deal_pose(u, start, goal)` (arc above both ends, ease-out, scale with a small overshoot, tilt straightens), `flip_width(u)` (back narrows to an edge, face widens; done at `FLIP_END`), `draw_dealt_card(surface, face, pose, u)`, `DEAL_SECONDS`, `DEAL_STAGGER`, `TRAIL`/`TRAIL_GOLD` |
 | `fx/card_burn.py` | `CardBurn(face, seed)`: card cut into 6 px blocks that burn bottom-up with noise; `frame(progress)` (burnt blocks gone, edge blocks as embers), `edge_points`, `gone`, `BURN_SECONDS`, `EMBER` |
 | `fx/sprite_animation.py` | `SpriteAnimation` — time-based frames with per-frame durations, loop or hold, start offset |
@@ -1274,3 +1274,21 @@ other heroes retain their existing palettes and timings. Golden card repetitions
 use the selected attack/guard/cast duration so longer clips finish between casts.
 See `docs/visual-design.md` and `docs/mage-v2-art.md` for art provenance, exact
 prompt, reproduction commands, previews and backup details.
+
+
+### Warrior v3 pixel art (2026-10-12)
+
+The warrior now shares the rogue/mage coarse pixel style. Original v2 artwork
+and the older articulated rig stay immutable. New authoring modules are
+`scripts/warrior_pixel_layers.py` (source masks) and `warrior_pixel_rig.py`
+(rigid sword/arm chain, leg IK, continuous curves). The v3 baker produces 300
+frames across six actions and activates versioned 96/192 sheets. Previous
+runtime assets and generator remain under `warrior_before_v3/`.
+
+`SpriteLoader._hero_sheet` now honors metadata filenames for all heroes and
+sizes, including the warrior's 192 px sheet. Sword contact/cast origins use the
+existing event contract. `HeroFx` accepts optional `guard_seconds` and
+`kneel_seconds`; for the warrior with authored cast metadata, CombatScene
+aligns them with 40% of guard and 60% of death duration. Other heroes keep their
+previous cue timing. See `docs/warrior-v3-art.md` for exact prompt/reproduction
+and `docs/visual-design.md` for animation and backup details.

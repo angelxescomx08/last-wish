@@ -20,5 +20,14 @@ hard pixel edges while giving slow movement half-native-pixel precision.
 
 Run `scripts/generate_mage_v2_sprites.py` with the project's Python to regenerate
 layers, both sheets, active metadata, individual frames, contact sheet and HTML.
-Run `scripts/export_mage_preview.py` with a Python containing Pillow for the GIF.
+The preview composer uses the project's pygame environment. Pillow is only
+needed to encode the final GIF; if it lives in a separate environment, pass
+that executable with `--encoder-python`:
+
+```powershell
+.venv/Scripts/python.exe scripts/generate_mage_v2_sprites.py
+.venv/Scripts/python.exe scripts/export_mage_preview.py --encoder-python <python-with-Pillow>
+```
+
+Omit `--encoder-python` if the project's Python already includes Pillow.
 The old mage and generator are retained in `assets/characters/mage_legacy/`.

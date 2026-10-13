@@ -20,7 +20,6 @@ _ASSETS = (
 )
 
 _HERO_DIR = _ASSETS.parent / "characters"
-_HERO_SHEET_PATH = _HERO_DIR / "warrior_sheet.png"
 _HERO_META_PATH = _HERO_DIR / "warrior_sheet.json"
 
 # Player display name -> hero sprite set (files <id>_sheet*.png / <id>_sheet.json)
@@ -412,7 +411,7 @@ class SpriteLoader:
         if key not in self._hero_sheets:
             sheets = HEROES.get(hero)
             name = sheets.sheets.get(cell) if sheets else None
-            path = _HERO_SHEET_PATH if (hero == "warrior" and cell == HERO_CELL) else _HERO_DIR / (name or "")
+            path = _HERO_DIR / (name or "")
             try:
                 self._hero_sheets[key] = pygame.image.load(str(path)) if name else None
             except (pygame.error, OSError, FileNotFoundError):

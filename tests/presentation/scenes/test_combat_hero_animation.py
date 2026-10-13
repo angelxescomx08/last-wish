@@ -52,8 +52,25 @@ class TestSetup:
     def test_warrior_has_strike_event(self):
         assert 0.15 < hero_strike_seconds("warrior") < 0.4
 
-    def test_warrior_gets_hero_fx(self):
-        assert _scene()._hero_fx is not None
+    def test_warrior_gets_warm_effects_at_its_metadata_origins(self):
+        from src.infrastructure.sprite_loader import hero_strike_point, hero_cast_point, hero_cast_seconds
+        from src.presentation.fx.hero_fx import WARM, GOLD
+        effects = _scene()._hero_fx
+        assert effects is not None
+        assert effects.attack_palette == WARM and effects.cast_palette == GOLD
+        assert effects.strike_point == hero_strike_point("warrior")
+        assert effects.cast_point == hero_cast_point("warrior")
+        assert effects.cast_seconds == pytest.approx(hero_cast_seconds("warrior"))
+        assert effects._guard_time == pytest.approx(hero_animation_seconds("guard") * 0.4)
+        assert effects._death_kneel == pytest.approx(hero_animation_seconds("death") * 0.6)
+
+    def test_legacy_warrior_keeps_original_cue_timing(self, monkeypatch):
+        from dataclasses import replace
+        from src.infrastructure.sprite_loader import HEROES
+        monkeypatch.setitem(HEROES, "warrior", replace(HEROES["warrior"], cast_frame=None, cast_point=None))
+        effects = _scene()._hero_fx
+        assert effects._guard_time == pytest.approx(0.06)
+        assert effects._death_kneel == pytest.approx(0.18)
 
     def test_mage_gets_timed_arcane_effects(self):
         from src.presentation.fx.hero_fx import ARCANE
