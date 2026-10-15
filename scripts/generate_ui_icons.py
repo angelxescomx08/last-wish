@@ -12,7 +12,8 @@ player learns the picture once and then reads the board at a glance.
   entangled, strength, blades, marked, ritual, fuse, status_buff, status_debuff,
   block, junk_card, combo, singular, void, spoil, exhaust, ethereal, unplayable, damage,
   draw, mana, heal; HUD: gear, helmet, bag, hand_cards, clover, tower,
-  hourglass, deck, coin.
+  hourglass, deck, coin; Mage: fire, water, earth, air, frozen (elements / Congelado),
+  steam, magma, wildfire, mud, sandstorm (reactions), reaction (keyword Reacción).
 
 Each icon is a small shape drawn with ramps, upper-left light and the usual dark
 outline (``pixel_kit``). The JSON maps every name to its ``[x, y, w, h]`` in the
@@ -675,6 +676,200 @@ def fuse_bomb() -> Canvas:
     return cv
 
 
+# ---------------------------------------------------------------- Mage elements and reactions (12 → 14)
+
+SAND = [(110, 82, 42), (168, 128, 66), (214, 176, 104), (244, 222, 160)]
+ICE = [(30, 80, 120), (70, 150, 200), (150, 220, 250), (236, 252, 255)]
+
+
+def element_fire() -> Canvas:
+    """Fuego: a red three-tongued flame with a yellow heart (Exhaust's flame is plain orange)."""
+    cv = Canvas(12, 12)
+    paint(cv, ["....r.......",
+               "....rr...r..",
+               "...rRr..rr..",
+               "...rRRr.rRr.",
+               "..rRRRrrRRr.",
+               "..rRROORRRr.",
+               ".rRROOYORRr.",
+               ".rRROYYYORr.",
+               ".rRROYYYORr.",
+               ".rRRROYOORr.",
+               "..rRRROORr..",
+               "...rrrrrr..."],
+          {"r": RED[1], "R": RED[2], "O": ORANGE[3], "Y": (255, 244, 176)})
+    return cv
+
+
+def element_water() -> Canvas:
+    """Agua: a blue drop with a white wave across it (Veneno's drop is green and plain)."""
+    cv = droplet(BLUE)
+    for x, y in ((3, 8), (4, 7), (5, 8), (6, 8), (7, 7), (8, 8)):
+        cv.put(x, y, BLUE[4])
+    return cv
+
+
+def element_earth() -> Canvas:
+    """Tierra: a faceted brown boulder with a crack and a tuft of moss."""
+    cv = Canvas(12, 12)
+    poly = [(1.0, 7.0), (3.0, 3.0), (7.0, 2.0), (10.5, 4.5), (11.0, 9.0), (8.0, 11.2), (2.5, 10.8)]
+
+    def inside(x, y):
+        n, ok = len(poly), False
+        for i in range(n):
+            (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % n]
+            if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+                ok = not ok
+        return ok
+    fill(cv, inside, BROWN, 6, 6.5, 5.5, base=0.6)
+    for x, y in ((6, 4), (6, 5), (7, 6), (7, 7), (6, 8), (8, 7)):   # crack
+        cv.put(x, y, (40, 24, 14))
+    for x, y in ((3, 3), (4, 2), (5, 2), (4, 3)):                 # moss
+        cv.put(x, y, GREEN[2] if y == 2 else GREEN[1])
+    return cv
+
+
+def element_air() -> Canvas:
+    """Aire: two pale gusts ending in curls."""
+    cv = Canvas(12, 12)
+    paint(cv, ["............",
+               "......ccc...",
+               ".....c...c..",
+               "..........c.",
+               ".WWWWWWWWWc.",
+               "........cc..",
+               "............",
+               "..cccccc....",
+               "........c...",
+               ".WWWWWWW.c..",
+               "........c...",
+               "......cc...."],
+          {"c": CYAN[2], "W": CYAN[4]})
+    return cv
+
+
+def frozen() -> Canvas:
+    """Congelado / Congelar: a six-armed ice crystal."""
+    cv = Canvas(12, 12)
+    paint(cv, ["............",
+               ".....C......",
+               "..C..C..C...",
+               "...c.C.c....",
+               "....cWc.....",
+               ".CCCWWWCCC..",
+               "....cWc.....",
+               "...c.C.c....",
+               "..C..C..C...",
+               ".....C......",
+               "............",
+               "............"],
+          {"C": ICE[2], "c": ICE[1], "W": ICE[3]}, 0, 1)
+    return cv
+
+
+def steam() -> Canvas:
+    """Vapor: three wavy white plumes rising from a red-and-blue (fire + water) bowl."""
+    cv = Canvas(12, 12)
+    wave = (0, -1, -1, 0, 1, 1, 0, -1)
+    for cx in (2, 6, 10):
+        for y, dx in enumerate(wave):
+            cv.put(cx + dx, y, GREY[4] if y > 2 else GREY[3])
+    for x in range(1, 11):
+        cv.put(x, 9, RED[2] if x < 6 else BLUE[2])
+        if 1 < x < 10:
+            cv.put(x, 10, RED[1] if x < 6 else BLUE[1])
+    for x in (3, 4, 7, 8):
+        cv.put(x, 11, RED[0] if x < 6 else BLUE[0])
+    return cv
+
+
+def magma() -> Canvas:
+    """Magma: a dark rock split by glowing orange cracks."""
+    cv = Canvas(12, 12)
+
+    def inside(x, y):
+        return ((x - 6) / 5.4) ** 2 + ((y - 6.6) / 4.8) ** 2 <= 1
+    fill(cv, inside, [(34, 22, 22), (66, 40, 34), (98, 62, 48)], 6, 6.6, 5, base=0.55)
+    for x, y in ((3, 5), (4, 6), (5, 6), (6, 7), (7, 7), (8, 6), (9, 6), (6, 8), (5, 9), (7, 4), (7, 5)):
+        cv.put(x, y, ORANGE[3])
+    for x, y in ((5, 6), (6, 7), (7, 5)):
+        cv.put(x, y, (255, 240, 170))
+    return cv
+
+
+def wildfire() -> Canvas:
+    """Incendio: two flames side by side (the fire spreads)."""
+    cv = Canvas(12, 12)
+    small = ["..r..",
+             "..rr.",
+             ".rRr.",
+             ".rRRr",
+             "rROYr",
+             "rOYYr",
+             ".rrr."]
+    paint(cv, small, {"r": RED[1], "R": RED[2], "O": ORANGE[3], "Y": (255, 244, 176)}, 0, 4)
+    paint(cv, ["...r..",
+               "..rr..",
+               "..rRr.",
+               ".rRRr.",
+               ".rRRRr",
+               "rRROYr",
+               "rROYYr",
+               "rROYYr",
+               ".rrrr."], {"r": RED[1], "R": RED[2], "O": ORANGE[3], "Y": (255, 244, 176)}, 6, 2)
+    return cv
+
+
+def mud() -> Canvas:
+    """Barro: a brown puddle with blue glints and a bubble."""
+    cv = Canvas(12, 12)
+
+    def inside(x, y):
+        return ((x - 6) / 5.6) ** 2 + ((y - 8) / 3.0) ** 2 <= 1
+    fill(cv, inside, BROWN, 6, 8, 5, base=0.5)
+    for x, y in ((3, 7), (4, 7), (8, 9), (9, 9)):
+        cv.put(x, y, BLUE[3])
+    for x, y in ((6, 3), (5, 4), (7, 4), (6, 5)):              # bubble
+        cv.put(x, y, BROWN[3])
+    cv.put(6, 4, BLUE[4])
+    return cv
+
+
+def sandstorm() -> Canvas:
+    """Tormenta de Arena: a sandy whirl with flying grains."""
+    cv = Canvas(12, 12)
+    for y in range(12):
+        for x in range(12):
+            dx, dy = x + 0.5 - 6, y + 0.5 - 6
+            r = math.hypot(dx, dy)
+            if r > 5.6 or r < 1.2:
+                continue
+            ang = math.atan2(dy, dx) - r * 1.1
+            if math.cos(ang * 2) > 0.25:
+                cv.put(x, y, ramp(SAND, 0.35 + 0.6 * (1 - r / 5.6), x, y, 0.4))
+    for x, y in ((1, 2), (10, 1), (0, 9), (11, 10)):
+        cv.put(x, y, SAND[3])
+    return cv
+
+
+def reaction_orb() -> Canvas:
+    """Reacción: an orb split into the four element colours with a white spark."""
+    cv = Canvas(12, 12)
+    quads = {(0, 0): RED, (1, 0): BLUE, (0, 1): BROWN, (1, 1): CYAN}
+    for y in range(12):
+        for x in range(12):
+            dx, dy = x + 0.5 - 6, y + 0.5 - 6
+            r = math.hypot(dx, dy)
+            if r > 5.6:
+                continue
+            ramp_c = quads[(int(dx >= 0), int(dy >= 0))]
+            light = _lit(x + 0.5, y + 0.5, 6, 6, 6, 0.6)
+            cv.put(x, y, ramp(ramp_c, light, x, y, 0.4))
+    for x, y in ((5, 5), (6, 5), (5, 6), (6, 6), (4, 5), (7, 6), (5, 4), (6, 7)):
+        cv.put(x, y, (255, 255, 236) if (x, y) in ((5, 5), (6, 5), (5, 6), (6, 6)) else GOLD[3])
+    return cv
+
+
 ICONS_16 = {
     "attack_1": lambda: sword(6, 2),
     "attack_2": lambda: sword(9, 2),
@@ -723,6 +918,17 @@ ICONS_12 = {
     "hourglass": hourglass,
     "deck": deck,
     "coin": coin,
+    "fire": element_fire,
+    "water": element_water,
+    "earth": element_earth,
+    "air": element_air,
+    "frozen": frozen,
+    "steam": steam,
+    "magma": magma,
+    "wildfire": wildfire,
+    "mud": mud,
+    "sandstorm": sandstorm,
+    "reaction": reaction_orb,
 }
 
 

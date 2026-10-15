@@ -86,6 +86,14 @@ BLADES: str = "Espadas"
 # "Mecha" (Seta Explosiva): turns left before it explodes; burns down by 1 after each action.
 FUSE: str = "Mecha"
 
+# Mage elements on enemies (rules in ``domain/elements.py``; names = ``Element`` values).
+FIRE: str = "Fuego"
+WATER: str = "Agua"
+EARTH: str = "Tierra"
+AIR: str = "Aire"
+# "Congelado" (reaction Congelar): loses its next action; bosses/elites deal half damage.
+FROZEN: str = "Congelado"
+
 # Spanish rule text of every status, for tooltips.
 STATUS_TEXT: dict[str, str] = {
     POISON: "Pierde tantos PV como acumulaciones al inicio de su turno; luego baja 1.",
@@ -97,6 +105,11 @@ STATUS_TEXT: dict[str, str] = {
     STRENGTH: "Cada golpe inflige tantos puntos extra como acumulaciones.",
     BLADES: "Espadas flotantes: algunos ataques golpean una vez por espada.",
     FUSE: "Turnos que le quedan antes de explotar. Al llegar a 1, explota y muere.",
+    FIRE: "Pierde tantos PV como acumulaciones al final de su turno (ignora el escudo).",
+    WATER: "Cada golpe que da hace tantos puntos menos de daño como acumulaciones.",
+    EARTH: "Cada golpe que recibe hace tantos puntos más de daño como acumulaciones.",
+    AIR: "No hace nada solo, pero sus reacciones afectan a todos los enemigos.",
+    FROZEN: "Pierde su próxima acción. Jefes y élites: sus golpes hacen la mitad de daño.",
 }
 # Statuses that wear off by 1 at the end of the hero's turn.
 HERO_TIMED_DEBUFFS: tuple[str, ...] = (WEAK, VULNERABLE, FRAIL)
@@ -171,10 +184,10 @@ class Enemy:
 
 
 def deal_damage(enemy: "Enemy", amount: int) -> int:
-    """One hit on ``enemy``: Marcado adds its stacks, block absorbs first. Returns HP lost."""
+    """One hit on ``enemy``: Marcado and Tierra add their stacks, block absorbs first. Returns HP lost."""
     if amount <= 0 or not enemy.is_alive:
         return 0
-    amount += sum(se.stacks for se in enemy.status_effects if se.name == MARKED)
+    amount += sum(se.stacks for se in enemy.status_effects if se.name in (MARKED, EARTH))
     absorbed = min(enemy.block, amount)
     enemy.block -= absorbed
     lost = min(enemy.current_hp, amount - absorbed)
@@ -209,8 +222,13 @@ class Player:
 def enemy_hit_damage(enemy: Enemy, player: Player) -> int:
     """Damage of ONE hit of ``enemy``'s ATTACK intent on ``player``, before block.
 
-    Printed value + Fuerza, then Débil on the enemy (x0.75), then Vulnerable on
-    the hero (x1.5). Used by the turn pipeline and by the intent shown on screen.
+    Printed value + Fuerza − Agua, then Débil on the enemy (x0.75), then Congelado
+    (regular enemies 0, bosses/elites x0.5), then Vulnerable on the hero (x1.5).
+    Used by the turn pipeline and by the intent shown on screen.
     """
-    base = enemy.intent.value + status_stacks(enemy.status_effects, STRENGTH)
-    return vulnerable(weakened(max(0, base), enemy.status_effects), player.status_effects)
+    base = (enemy.intent.value + status_stacks(enemy.status_effects, STRENGTH)
+            - status_stacks(enemy.status_effects, WATER))
+    dmg = weakened(max(0, base), enemy.status_effects)
+    if status_stacks(enemy.status_effects, FROZEN) > 0:
+        dmg = dmg // 2 if (enemy.is_boss or enemy.is_elite) else 0
+    return vulnerable(dmg, player.status_effects)

@@ -61,6 +61,8 @@ class CombatState:
     pickpocket_gold: int = 0          # Carterista: gold paid if an enemy dies this turn
     last_random_target: int | None = None   # id() of the last enemy hit at random (Moneda)
     lucky_coin_used: bool = False     # Moneda de la Suerte paid this turn
+    reactions_this_turn: int = 0      # elemental reactions caused this turn
+    catalyst: int = 0                 # Catalizador: next reactions this turn resolve twice
 
     # --- whole-combat effects (powers, relics) --------------------------------------
     pending_draws: int = 0            # draws asked by an effect, done right after it resolves
@@ -75,6 +77,11 @@ class CombatState:
     gold_earned: int = 0              # gold won during the fight (added to the run on victory)
     enemy_log: list[EnemyAction] = field(default_factory=list)   # last enemy turn, per acting enemy
     exhausted: list[Card] = field(default_factory=list)          # cards removed for this combat
+    # Mage elements (``domain/elements.py``): powers, and the log the combat screen reads.
+    reaction_block: int = 0           # Piel de Granito: block per reaction
+    reaction_draw: int = 0            # Ojo del Huracán: cards drawn per reaction
+    archmage: bool = False            # Archimago: reactions hit every enemy
+    reaction_log: list = field(default_factory=list)   # ReactionEvent, last play / turn start
 
     @property
     def combo_active(self) -> bool:
@@ -117,6 +124,16 @@ class CombatState:
     def spoil_ready(self, card) -> bool:
         """Keyword SPOIL would resolve for ``card`` if played now."""
         return self.spoil_active and bool(card.spoil_effects())
+
+    def reaction_ready(self, card, target: int | None = None) -> bool:
+        """Keyword REACTION would resolve: an element of ``card`` meets another one.
+
+        Without ``target`` (card still in hand) any living enemy counts.
+        """
+        if not card.reaction_effects():
+            return False
+        from src.domain.elements import card_reacts      # local: elements imports entities only
+        return card_reacts(self, card, target)
 
     # ------------------------------------------------------------------
     # Shared effect helpers (used by card effects, relics and the turn pipeline)

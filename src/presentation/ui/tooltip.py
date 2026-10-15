@@ -27,11 +27,14 @@ import pygame
 from src.domain.card import Card, CardClass, CardType, ModifierTag
 from src.domain.card_pool import CARD_CLASS_LABEL
 from src.domain.chroma import chroma_def, chroma_title
+from src.domain.elements import element_line
 from src.domain.entities import (
-    HERO_TIMED_DEBUFFS, STRENGTH, VULNERABLE, WEAK, Enemy, Intent, IntentType, Player, StatusEffect,
-    status_stacks,
+    FROZEN, HERO_TIMED_DEBUFFS, STRENGTH, VULNERABLE, WATER, WEAK, Enemy, Intent, IntentType, Player,
+    StatusEffect, status_stacks,
 )
-from src.domain.keywords import Keyword, combo_text, singular_text, spoil_text, void_text
+from src.domain.keywords import (
+    Keyword, combo_text, reaction_text, singular_text, spoil_text, void_text,
+)
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
 from src.domain.rarity import rarity_label
@@ -84,7 +87,7 @@ def _strip_icon(line: str) -> str:
 
 
 def _term_panel(term: gl.Term, tag: str = "") -> TooltipPanel:
-    return TooltipPanel(term.name, [term.rule], term.icon, term.color, tag)
+    return TooltipPanel(term.name, [term.rule, *term.lines], term.icon, term.color, tag)
 
 
 def _glossary(content: TooltipContent, *, include_shield: bool = False) -> None:
@@ -126,6 +129,7 @@ _KEYWORD_SUMMARY = {
     Keyword.SINGULAR: singular_text,
     Keyword.VOID: void_text,
     Keyword.SPOIL: spoil_text,
+    Keyword.REACTION: reaction_text,
 }
 
 
@@ -147,14 +151,17 @@ def card_tooltip(
     singular_active: bool = False,
     void_active: bool = False,
     spoil_active: bool = False,
+    reaction_active: bool = False,
 ) -> TooltipContent:
     active = {
+        Keyword.REACTION: reaction_active and bool(card.reaction_effects()),
         Keyword.COMBO: combo_active and bool(card.combo_effects()),
         Keyword.SINGULAR: singular_active and bool(card.singular_effects()),
         Keyword.VOID: void_active and bool(card.void_effects()),
         Keyword.SPOIL: spoil_active and bool(card.spoil_effects()),
     }
-    combo, singular, void, spoil = (active[k] for k in (Keyword.COMBO, Keyword.SINGULAR, Keyword.VOID, Keyword.SPOIL))
+    combo, singular, void, spoil, reaction = (active[k] for k in (Keyword.COMBO, Keyword.SINGULAR, Keyword.VOID,
+                                                                   Keyword.SPOIL, Keyword.REACTION))
     title = chroma_title(card.name, card.chroma) + (" (Rota)" if card.is_broken else "")
     cost = "Injugable" if card.unplayable else f"Coste: {card.cost} maná"
     content = TooltipContent(
@@ -164,8 +171,8 @@ def card_tooltip(
     )
     lines = content.lines
 
-    dmg = card.total_damage(combo, singular, void, spoil)
-    blk = card.total_block(combo, singular, void, spoil)
+    dmg = card.total_damage(combo, singular, void, spoil, reaction)
+    blk = card.total_block(combo, singular, void, spoil, reaction)
     if dmg > 0:
         lines.append(f"Inflige {BigValue.format_int(dmg + bonus_damage)} de daño a un enemigo.")
         if bonus_damage > 0:
@@ -175,16 +182,20 @@ def card_tooltip(
         if bonus_block > 0:
             lines.append(f"  ({BigValue.format_int(blk)} base + {bonus_block} destreza)")
 
-    base_draw = card.total_draw(combo, singular, void, spoil)
+    base_draw = card.total_draw(combo, singular, void, spoil, reaction)
     if base_draw > 0:
         lines.append(f"Roba {base_draw} carta{'s' if base_draw > 1 else ''}.")
 
+    for fx in card.all_effects():          # Mage elements
+        if fx.element is not None and fx.element_stacks > 0 and f"de {fx.element.value}" not in fx.text:
+            lines.append(f"[[{gl.status_icon(fx.element.value)}]]"
+                         + element_line(fx, "Aplica").replace(" a todos", " a todos los enemigos") + ".")
     for fx in card.all_effects():
         if fx.text:
             lines.append(_sentence(fx.text))
     if card.play_on_draw:
         lines.append("Se juega sola al robarla y desaparece.")
-    if not (dmg or blk or base_draw or any(fx.text for fx in card.all_effects())):
+    if not (dmg or blk or base_draw or any(fx.text or fx.element_stacks for fx in card.all_effects())):
         lines.append("Poder permanente: efecto especial." if card.card_type == CardType.POWER
                      else "Efecto especial.")
 
@@ -273,6 +284,11 @@ def _damage_breakdown(enemy: Enemy, player: Player | None) -> str:
         parts.append(f"+{strength} Fuerza")
     if status_stacks(enemy.status_effects, WEAK) > 0:
         parts.append("Débil −25 %")
+    water = status_stacks(enemy.status_effects, WATER)
+    if water:
+        parts.append(f"−{water} Agua")
+    if status_stacks(enemy.status_effects, FROZEN) > 0:
+        parts.append("Congelado: mitad" if (enemy.is_boss or enemy.is_elite) else "Congelado: no actúa")
     if player is not None and status_stacks(player.status_effects, VULNERABLE) > 0:
         parts.append("tu Vulnerable +50 %")
     return f"  Base {enemy.intent.value} por golpe · " + " · ".join(parts) if parts else ""
@@ -374,6 +390,7 @@ def _intent_accent(intent: Intent) -> tuple[int, int, int]:
 def status_panel(fx: StatusEffect, *, on_player: bool = False) -> TooltipPanel:
     term = gl.status_term(fx.name, fx.is_buff)
     lines = [term.rule] if term.rule else []
+    lines += list(term.lines)
     if on_player and fx.name in HERO_TIMED_DEBUFFS:
         lines.append(f"  Dura {fx.stacks} turno{'s' if fx.stacks != 1 else ''} (baja 1 al final de tu turno).")
     return TooltipPanel(

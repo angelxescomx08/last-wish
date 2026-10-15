@@ -12,7 +12,8 @@ from src.application.drawing import draw_cards
 from src.domain.card import Card, CardEffect, CardType
 from src.domain.chroma import chroma_def
 from src.domain.combat import CombatState
-from src.domain.entities import deal_damage, frail, weakened
+from src.domain.elements import apply_element
+from src.domain.entities import deal_damage, frail, vulnerable, weakened
 
 
 @dataclass
@@ -23,6 +24,8 @@ class PlayResult:
     singular: bool = False  # a Singular layer resolved
     void: bool = False      # a Vacío layer resolved
     spoil: bool = False     # a Despojo layer resolved
+    reaction: bool = False  # a Reacción layer resolved
+    reactions: list[str] = field(default_factory=list)   # elemental reactions caused (Spanish names)
     casts: int = 1          # times the card resolved (golden: 2)
     cast_hits: list[list[int]] = field(default_factory=list)   # per cast, HP lost by each enemy
     # Snapshots after each cast, so the UI can replay the casts one by one:
@@ -41,14 +44,16 @@ class TargetKind(Enum):
 
 def requires_target(card: Card) -> bool:
     """True when the card must be played on one chosen enemy (combo layers included)."""
-    return (card.total_damage(combo=True, singular=True, void=True, spoil=True) > 0
-            or any(fx.needs_target for fx in card.active_effects(True, True, True, True)))
+    return (card.total_damage(combo=True, singular=True, void=True, spoil=True, reaction=True) > 0
+            or any(fx.needs_target or (fx.element is not None and fx.element_stacks > 0
+                                       and not fx.element_all)
+                   for fx in card.active_effects(True, True, True, True, True)))
 
 
 def target_kind(card: Card) -> TargetKind:
     if requires_target(card):
         return TargetKind.ENEMY
-    if any(fx.hits_all_enemies for fx in card.active_effects(True, True, True, True)):
+    if any(fx.hits_all_enemies or fx.element_all for fx in card.active_effects(True, True, True, True, True)):
         return TargetKind.ALL_ENEMIES
     return TargetKind.SELF
 
@@ -91,11 +96,15 @@ def play_card(
         if not state.enemies[target_enemy_index].is_alive:
             return PlayResult(False, "Ese enemigo ya está derrotado")
 
+    # Keyword REACTION: its layers resolve if an element of the card meets another one.
+    reaction = state.reaction_ready(card, target_enemy_index)
+    state.reaction_log.clear()
+
     # Pay once, then move the card out of hand (powers stay on field; the rest is discarded).
     state.mana.spend(cost)
     state.next_card_discount = 0          # "the next card costs less" is used up by this card
     damage_bonus = 0
-    if card.total_damage(combo, singular, void, spoil) > 0:
+    if card.total_damage(combo, singular, void, spoil, reaction) > 0:
         damage_bonus, state.next_damage_bonus = state.next_damage_bonus, 0
     played = state.hand.cards.pop(card_index)
     if played.card_type == CardType.POWER:
@@ -128,7 +137,7 @@ def play_card(
         hand_before = Counter(id(c) for c in state.hand.cards)
         target = _cast_target(state, card, target_enemy_index, needs_target)
         _resolve_cast(state, card, combo, target, singular, void, damage_bonus, spoil,
-                      extra_combo, extra_spoil)
+                      extra_combo, extra_spoil, reaction)
         if is_attack:
             relic_effects.poison_on_attack(state, target, first_attack=state.attacks_this_turn == 0)
             if state.execute_threshold:
@@ -157,8 +166,10 @@ def play_card(
     enemy_roster.react_to_deaths(state.enemies, state.player)   # a partner fell: Venganza
     message = (f"Jugaste {played.name}" + (f" x{casts}" if casts > 1 else "")
                + (" — ¡Combo!" if combo else "") + (" — ¡Singular!" if singular else "")
-               + (" — ¡Vacío!" if void else "") + (" — ¡Despojo!" if spoil else ""))
+               + (" — ¡Vacío!" if void else "") + (" — ¡Despojo!" if spoil else "")
+               + (" — ¡Reacción!" if reaction else ""))
     return PlayResult(True, message, combo=combo, singular=singular, void=void, spoil=spoil,
+                      reaction=reaction, reactions=[ev.reaction.value for ev in state.reaction_log],
                       casts=casts, cast_hits=cast_hits, cast_drawn=cast_drawn,
                       cast_enemy_hp=snap_hp, cast_enemy_block=snap_blk, cast_player_block=snap_player)
 
@@ -177,41 +188,58 @@ def _cast_target(state: CombatState, card: Card, target: int | None, needs_targe
 
 def _resolve_cast(state: CombatState, card: Card, combo: bool, target: int | None,
                   singular: bool = False, void: bool = False, damage_bonus: int = 0,
-                  spoil: bool = False, extra_combo: int = 0, extra_spoil: int = 0) -> None:
+                  spoil: bool = False, extra_combo: int = 0, extra_spoil: int = 0,
+                  reaction: bool = False) -> None:
     """One full cast: damage (+ bonuses), block (+ dexterity), mana, on_play effects, draws.
 
     Damage = printed + relics + hero's attack bonus + ``damage_bonus`` (e.g. Afilar)
     (+ Pañuelo del Duelista when a Combo resolves), reduced by Débil if the hero has it.
     ``extra_combo`` / ``extra_spoil``: the Combo / Despojo layers resolve that many more
     times (Sombra Gemela / Daga Partida), with their raw printed values.
+    Elements (Mage) are applied after damage/block/mana, layer by layer, before ``on_play``;
+    a Vulnerable enemy takes 50 % more from the card's damage.
     """
-    dmg = card.total_damage(combo, singular, void, spoil)
-    blk = card.total_block(combo, singular, void, spoil)
+    flags = (combo, singular, void, spoil, reaction)
+    dmg = card.total_damage(*flags)
+    blk = card.total_block(*flags)
     scarf = relic_effects.combo_scarf_bonus(state.relics) if combo else 0
     if dmg > 0 and target is not None and target < len(state.enemies) and state.enemies[target].is_alive:
         enemy = state.enemies[target]
         effective_dmg = weakened(dmg + relic_effects.extra_attack_damage(state.relics)
                                  + state.player.attack_bonus + damage_bonus + scarf,
                                  state.player.status_effects)
-        deal_damage(enemy, effective_dmg)
+        deal_damage(enemy, vulnerable(effective_dmg, enemy.status_effects))
     if blk > 0:                           # Frágil: 25 % less block from cards
         state.player.block += frail(blk + state.player.dexterity + scarf, state.player.status_effects)
-    mana_gain = card.total_mana_gain(combo, singular, void, spoil)
+    mana_gain = card.total_mana_gain(*flags)
     if mana_gain > 0:
         state.mana.gain(mana_gain)
+    _apply_elements(state, card.active_effects(*flags), target)
     # on_play runs with the card out of hand and this cast's damage/block applied;
     # targeted_enemy_index is set so callbacks can read it.
     state.targeted_enemy_index = target
-    for fx in card.active_effects(combo, singular, void, spoil):
+    for fx in card.active_effects(*flags):
         if fx.on_play is not None:
             fx.on_play(state)
-    draws = card.total_draw(combo, singular, void, spoil) + state.pending_draws
+    draws = card.total_draw(*flags) + state.pending_draws
     state.pending_draws = 0
     draw_cards(state, draws)
     for _ in range(extra_combo):
         _resolve_layers(state, card.combo_effects(), target)
     for _ in range(extra_spoil):
         _resolve_layers(state, card.spoil_effects(), target)
+
+
+def _apply_elements(state: CombatState, effects: list[CardEffect], target: int | None) -> None:
+    """Put each layer's element on the target (or every enemy), in chain order."""
+    for fx in effects:
+        if fx.element is None or fx.element_stacks <= 0:
+            continue
+        if fx.element_all:
+            for enemy in [e for e in state.enemies if e.is_alive]:
+                apply_element(state, enemy, fx.element, fx.element_stacks)
+        elif target is not None and target < len(state.enemies):
+            apply_element(state, state.enemies[target], fx.element, fx.element_stacks)
 
 
 def _resolve_layers(state: CombatState, layers: list[CardEffect], target: int | None) -> None:
@@ -227,6 +255,7 @@ def _resolve_layers(state: CombatState, layers: list[CardEffect], target: int | 
     mana = sum(fx.mana_gain for fx in layers)
     if mana > 0:
         state.mana.gain(mana)
+    _apply_elements(state, layers, target)
     state.targeted_enemy_index = target
     for fx in layers:
         if fx.on_play is not None:

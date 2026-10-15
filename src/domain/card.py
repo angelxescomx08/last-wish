@@ -11,6 +11,7 @@ from src.domain.rarity import Rarity
 
 if TYPE_CHECKING:
     from src.domain.combat import CombatState
+    from src.domain.elements import Element
 
 
 class CardType(Enum):
@@ -85,6 +86,13 @@ class CardEffect:
     spoil: optional extra layer (keyword SPOIL, "Despojo") that also resolves
     when a card was discarded by an effect earlier this turn.
 
+    reaction: optional extra layer (keyword REACTION, "Reacción") that also
+    resolves when playing the card causes an elemental reaction.
+
+    element / element_stacks / element_all: Mage elements (``domain/elements.py``).
+    The layer puts ``element_stacks`` of ``element`` on the target enemy (or on
+    every enemy with ``element_all``) right after its damage, before ``on_play``.
+
     on_turn_start: for POWER cards, runs at the start of each of your turns while
     the power is in play (golden: twice).
 
@@ -104,6 +112,11 @@ class CardEffect:
     singular: CardEffect | None = None
     void: CardEffect | None = None
     spoil: CardEffect | None = None
+    reaction: CardEffect | None = None
+    element: Element | None = None
+    element_stacks: int = 0
+    element_all: bool = False
+    element_hint: tuple = ()          # elements an on_play talks about (card-face badges only)
     on_turn_start: Callable[[CombatState], None] | None = None
     text: str = ""
 
@@ -200,14 +213,20 @@ class Card:
         """Despojo layers of the chain (keyword SPOIL)."""
         return [fx.spoil for fx in self.all_effects() if fx.spoil is not None]
 
+    def reaction_effects(self) -> list[CardEffect]:
+        """Reacción layers of the chain (keyword REACTION)."""
+        return [fx.reaction for fx in self.all_effects() if fx.reaction is not None]
+
     def active_effects(self, combo: bool = False, singular: bool = False,
-                       void: bool = False, spoil: bool = False) -> list[CardEffect]:
+                       void: bool = False, spoil: bool = False,
+                       reaction: bool = False) -> list[CardEffect]:
         """Effects that resolve: the chain, plus its keyword layers that are on."""
         return (self.all_effects()
                 + (self.combo_effects() if combo else [])
                 + (self.singular_effects() if singular else [])
                 + (self.void_effects() if void else [])
-                + (self.spoil_effects() if spoil else []))
+                + (self.spoil_effects() if spoil else [])
+                + (self.reaction_effects() if reaction else []))
 
     def keywords(self) -> frozenset[Keyword]:
         out = set()
@@ -219,6 +238,8 @@ class Card:
             out.add(Keyword.VOID)
         if self.spoil_effects():
             out.add(Keyword.SPOIL)
+        if self.reaction_effects():
+            out.add(Keyword.REACTION)
         return frozenset(out)
 
     def effect_multiplier(self) -> int:
@@ -233,26 +254,37 @@ class Card:
         return self.effect_multiplier()
 
     def total_damage(self, combo: bool = False, singular: bool = False, void: bool = False,
-                     spoil: bool = False) -> int:
+                     spoil: bool = False, reaction: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo, singular, void, spoil):
+        for fx in self.active_effects(combo, singular, void, spoil, reaction):
             total = total.add_flat(fx.damage.resolve())
         return total.resolve()
 
     def total_block(self, combo: bool = False, singular: bool = False, void: bool = False,
-                    spoil: bool = False) -> int:
+                     spoil: bool = False, reaction: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo, singular, void, spoil):
+        for fx in self.active_effects(combo, singular, void, spoil, reaction):
             total = total.add_flat(fx.block.resolve())
         return total.resolve()
 
     def total_draw(self, combo: bool = False, singular: bool = False, void: bool = False,
-                   spoil: bool = False) -> int:
-        return sum(fx.draw for fx in self.active_effects(combo, singular, void, spoil))
+                   spoil: bool = False, reaction: bool = False) -> int:
+        return sum(fx.draw for fx in self.active_effects(combo, singular, void, spoil, reaction))
 
     def total_mana_gain(self, combo: bool = False, singular: bool = False, void: bool = False,
-                        spoil: bool = False) -> int:
-        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void, spoil))
+                        spoil: bool = False, reaction: bool = False) -> int:
+        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void, spoil, reaction))
+
+    def element_badges(self) -> list:
+        """Elements this card applies or uses (chain + keyword layers), in order, no repeats."""
+        layers = (self.all_effects() + self.combo_effects() + self.singular_effects()
+                  + self.void_effects() + self.spoil_effects() + self.reaction_effects())
+        out: list = []
+        for fx in layers:
+            for el in ((fx.element,) if fx.element is not None and fx.element_stacks > 0 else ()) + tuple(fx.element_hint):
+                if el not in out:
+                    out.append(el)
+        return out
 
     def effect_count(self) -> int:
         return len(self.stacked_effects)

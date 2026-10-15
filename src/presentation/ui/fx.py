@@ -36,7 +36,9 @@ class _FloatingNumber:
         font: pygame.font.Font,
         lifetime: float = 0.8,
         delay: float = 0.0,
+        icon: pygame.Surface | None = None,
     ) -> None:
+        self._icon     = icon
         self._x        = x
         self._y        = y
         self._text     = text
@@ -56,6 +58,13 @@ class _FloatingNumber:
             return
         alpha = int(255 * max(0.0, 1 - self._age / self._lifetime))
         surf  = self._font.render(self._text, True, self._color)
+        if self._icon is not None:       # icon on the left of the label
+            gap = 4
+            both = pygame.Surface((self._icon.get_width() + gap + surf.get_width(),
+                                   max(self._icon.get_height(), surf.get_height())), pygame.SRCALPHA)
+            both.blit(self._icon, (0, (both.get_height() - self._icon.get_height()) // 2))
+            both.blit(surf, (self._icon.get_width() + gap, (both.get_height() - surf.get_height()) // 2))
+            surf = both
         surf.set_alpha(alpha)
         surface.blit(surf, surf.get_rect(centerx=int(self._x), centery=int(self._y)))
 
@@ -93,10 +102,11 @@ class FxLayer:
         ))
 
     def add_text(self, x: float, y: float, text: str, color: tuple[int, int, int],
-                 lifetime: float = 1.0, *, delay: float = 0.0) -> None:
-        """Floating label, e.g. "¡COMBO!" over the hero."""
+                 lifetime: float = 1.0, *, delay: float = 0.0,
+                 icon: pygame.Surface | None = None) -> None:
+        """Floating label, e.g. "¡COMBO!" over the hero (optionally with an icon on its left)."""
         self._effects.append(_FloatingNumber(x, y, text, color, self._font, lifetime=lifetime,
-                                             delay=delay))
+                                             delay=delay, icon=icon))
 
     def add_death_flash(self, rect: pygame.Rect, *, delay: float = 0.0) -> None:
         self._effects.append(_HitFlash(rect, (255, 255, 255), lifetime=0.40, delay=delay))

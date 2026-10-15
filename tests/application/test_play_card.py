@@ -611,7 +611,9 @@ class TestTargetKind:
         from src.domain.card_pool import PackTheme, card_factories_for_theme
         area = {"Golpe Total", "Visión del Caos", "Lluvia de Golpes", "Tormenta de Veneno",
                 "Abanico de Cuchillas", "Cuchillada Errante", "Lluvia de Dagas",
-                "Finta Doble", "Mil Cortes"}
+                "Finta Doble", "Mil Cortes",
+                # El Mago (elements on every enemy)
+                "Ola", "Diluvio", "Terremoto", "Ciclón", "Brisa"}
         found = {c.name for t in PackTheme for c in (f() for f in card_factories_for_theme(t))
                  if target_kind(c) is TargetKind.ALL_ENEMIES}
         assert found == area

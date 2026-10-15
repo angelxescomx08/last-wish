@@ -7,7 +7,9 @@ from src.application.drawing import draw_cards
 from src.domain.card_pool import hidden_dagger
 from src.application import enemy_ai, enemy_roster
 from src.domain.combat import CombatState, EnemyAction
-from src.domain.entities import (ENTANGLED, HERO_TIMED_DEBUFFS, MARKED, POISON, WEAK, Enemy, Intent,
+from src.domain.elements import burn, is_frozen, thaw
+from src.domain.entities import (ENTANGLED, HERO_TIMED_DEBUFFS, MARKED, POISON, VULNERABLE, WEAK,
+                                 Enemy, Intent,
                                  IntentType, add_status, deal_damage, enemy_hit_damage,
                                  status_stacks, tick_status)
 from src.domain.tuning import TUNING
@@ -87,9 +89,16 @@ def _run_enemy_turn(state: CombatState) -> None:
             if not enemy.is_alive:        # killed by status? skip action
                 relic_effects.spread_poison(state)   # Colmillo de Víbora
                 continue
+            if is_frozen(enemy) and not (enemy.is_boss or enemy.is_elite):
+                thaw(enemy)               # Congelado: this enemy loses its action
+                burn(enemy)
+                continue
             state.enemy_log.append(_execute_intent(state, enemy, index))
             enemy.status_effects = tick_status(enemy.status_effects, WEAK)   # lasts its turn
+            enemy.status_effects = tick_status(enemy.status_effects, VULNERABLE)
+            thaw(enemy)                   # bosses/elites: the half-damage turn is over
             enemy_roster.after_action(enemy)
+            burn(enemy)                   # Fuego: HP lost at the end of its turn
 
     # Remove defeated enemies before rolling new intents
     state.enemies = [e for e in state.enemies if e.is_alive]
@@ -239,6 +248,7 @@ def _begin_player_turn(state: CombatState) -> None:
     state.mana.refill()
     state.selected_card_index = None
     state.targeted_enemy_index = None
+    state.reaction_log.clear()       # reactions of this turn start (Corazón Ígneo…)
     _poison_hero(state)
     _trigger_powers(state)
     # Enredado: draw 1 card less per stack, this turn only.
@@ -272,6 +282,8 @@ def _reset_turn_counters(state: CombatState) -> None:
     state.pickpocket_gold = 0
     state.last_random_target = None
     state.lucky_coin_used = False
+    state.reactions_this_turn = 0
+    state.catalyst = 0                # Catalizador lasts this turn only
     state.turn_start_alive = len(state.living_enemies())
 
 

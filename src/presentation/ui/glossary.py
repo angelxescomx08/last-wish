@@ -14,8 +14,10 @@ import re
 from dataclasses import dataclass
 from functools import cached_property
 
+from src.domain.elements import REACTION_RULE, REACTION_TEXT, REACTIONS, Element, Reaction
 from src.domain.entities import (
-    BLADES, ENTANGLED, FRAIL, FUSE, MARKED, POISON, STATUS_TEXT, STRENGTH, VULNERABLE, WEAK,
+    AIR, BLADES, EARTH, ENTANGLED, FIRE, FRAIL, FROZEN, FUSE, MARKED, POISON, STATUS_TEXT,
+    STRENGTH, VULNERABLE, WATER, WEAK,
 )
 from src.domain.keywords import KEYWORD_DEFS, Keyword
 
@@ -27,6 +29,13 @@ POISON_INK = (138, 226, 96)    # Veneno
 MANA = (150, 226, 255)         # "N de maná"
 BUFF_TITLE = (130, 220, 150)   # status panel title: a buff
 DEBUFF_TITLE = (226, 140, 238)  # status panel title: a debuff
+# Mage elements (also the colour of "N de Fuego" etc. in rule text).
+FIRE_INK = (255, 128, 72)
+WATER_INK = (110, 176, 255)
+EARTH_INK = (214, 168, 100)
+AIR_INK = (170, 236, 240)
+ICE_INK = (170, 226, 255)
+REACTION_INK = (255, 150, 220)
 DIM = (176, 170, 160)          # secondary text (flavour, notes)
 BODY = (228, 223, 210)         # main text
 
@@ -43,6 +52,11 @@ _STATUS_ICON: dict[str, str] = {
     MARKED: "marked",
     RITUAL: "ritual",
     FUSE: "fuse",
+    FIRE: "fire",
+    WATER: "water",
+    EARTH: "earth",
+    AIR: "air",
+    FROZEN: "frozen",
 }
 
 _KEYWORD_ICON: dict[Keyword, str] = {
@@ -50,6 +64,27 @@ _KEYWORD_ICON: dict[Keyword, str] = {
     Keyword.SINGULAR: "singular",
     Keyword.VOID: "void",
     Keyword.SPOIL: "spoil",
+    Keyword.REACTION: "reaction",
+}
+
+REACTION_ICON: dict[Reaction, str] = {
+    Reaction.STEAM: "steam",
+    Reaction.MAGMA: "magma",
+    Reaction.WILDFIRE: "wildfire",
+    Reaction.MUD: "mud",
+    Reaction.FREEZE: "frozen",
+    Reaction.SANDSTORM: "sandstorm",
+}
+REACTION_COLOR: dict[Reaction, tuple[int, int, int]] = {
+    Reaction.STEAM: (236, 236, 246),
+    Reaction.MAGMA: (255, 150, 60),
+    Reaction.WILDFIRE: (255, 110, 70),
+    Reaction.MUD: (200, 150, 96),
+    Reaction.FREEZE: ICE_INK,
+    Reaction.SANDSTORM: (236, 206, 140),
+}
+ELEMENT_COLOR: dict[str, tuple[int, int, int]] = {
+    FIRE: FIRE_INK, WATER: WATER_INK, EARTH: EARTH_INK, AIR: AIR_INK,
 }
 
 
@@ -65,9 +100,13 @@ class Term:
     icon: str
     color: tuple[int, int, int] = KEYWORD
     words: tuple[str, ...] = ()  # spellings that mention it in a text (default: the name)
+    regex: str = ""            # raw pattern instead of ``words`` (elements: "3 de Fuego")
+    lines: tuple[str, ...] = ()  # extra panel lines (may start with "[[icon]]")
 
     @cached_property
     def pattern(self) -> re.Pattern:
+        if self.regex:
+            return re.compile(self.regex)
         words = self.words or (self.name,)
         return re.compile(r"(?<![\wÁÉÍÓÚáéíóúñÑ])(" + "|".join(re.escape(w) for w in words) + r")(?![\wáéíóúñ])")
 
@@ -82,16 +121,56 @@ def _keyword_rule(kw: Keyword) -> str:
 _STATUS_KIND: dict[str, bool] = {      # True = buff
     POISON: False, VULNERABLE: False, WEAK: False, FRAIL: False, ENTANGLED: False,
     MARKED: False, STRENGTH: True, BLADES: True, RITUAL: True, FUSE: True,
+    FIRE: False, WATER: False, EARTH: False, AIR: False, FROZEN: False,
 }
 
+# Names that contain an element word but are not the element (cards, relics, enemy moves).
+_NOT_ELEMENT = ("Orbe de ", "Bola de ", "Lengua de ", "Chroma ", "Muro de ", "Piel de ")
+
+
+def _element_regex(name: str) -> str:
+    """"3 de Fuego", "Fuego" — but not "Bola de Fuego" or "Orbe de Fuego"."""
+    behind = "".join(f"(?<!{re.escape(p)})" for p in _NOT_ELEMENT)
+    return behind + r"(?<![\wÁÉÍÓÚáéíóúñÑ])(?:\d+ de )?" + name + r"(?![\wáéíóúñ])"
+
+
+def _element_lines(name: str) -> tuple[str, ...]:
+    """What the element does with each other element: "[[steam]] + Agua: Vapor"."""
+    me = Element(name)
+    out = []
+    for pair, reaction in REACTIONS.items():
+        if me in pair:
+            other = next(e for e in pair if e is not me)
+            out.append(f"[[{REACTION_ICON[reaction]}]]+ {other.value}: {reaction.value}")
+    return tuple(out)
+
+
+def _status_term(name: str, is_buff: bool) -> Term:
+    if name in ELEMENT_COLOR:
+        return Term(name, STATUS_TEXT[name], status_icon(name), ELEMENT_COLOR[name],
+                    regex=_element_regex(name), lines=_element_lines(name))
+    color = POISON_INK if name == POISON else ICE_INK if name == FROZEN else KEYWORD
+    return Term(name, STATUS_TEXT.get(name, ""), status_icon(name, is_buff), color)
+
+
 STATUS_TERMS: dict[str, Term] = {
-    name: Term(name, STATUS_TEXT.get(name, ""), status_icon(name, is_buff),
-               POISON_INK if name == POISON else KEYWORD)
+    name: _status_term(name, is_buff)
     for name, is_buff in _STATUS_KIND.items() if STATUS_TEXT.get(name)
 }
 
+# The six reactions (Vapor, Magma…): a panel each when a text names one.
+REACTION_TERMS: dict[Reaction, Term] = {
+    r: Term(r.value, REACTION_TEXT[r], REACTION_ICON[r], REACTION_COLOR[r]) for r in Reaction
+}
+# "reacción elemental": the general rule, with the six reactions as icon lines.
+ELEMENTS_RULE = Term("Reacción elemental", REACTION_RULE, "reaction", REACTION_INK,
+                     words=("reacción elemental", "reacciones", "reacción"),
+                     lines=tuple(f"[[{REACTION_ICON[r]}]]{r.value}: {REACTION_TEXT[r]}" for r in Reaction))
+
 KEYWORD_TERMS: dict[Keyword, Term] = {
-    kw: Term(KEYWORD_DEFS[kw].name, _keyword_rule(kw), _KEYWORD_ICON[kw]) for kw in Keyword
+    kw: Term(KEYWORD_DEFS[kw].name, _keyword_rule(kw), _KEYWORD_ICON[kw],
+             REACTION_INK if kw is Keyword.REACTION else KEYWORD)
+    for kw in Keyword
 }
 
 EXHAUST = Term("Agotar", "Al jugarla se retira del combate (no vuelve al descarte).", "exhaust",
@@ -104,7 +183,8 @@ SHIELD = Term("Escudo", "Absorbe el daño de los golpes antes que tu vida. "
               words=("escudo", "Escudo", "bloqueo", "Bloqueo"))
 
 # Order = priority when several terms are found (statuses first, then keywords, then flags).
-ALL_TERMS: tuple[Term, ...] = (*STATUS_TERMS.values(), *KEYWORD_TERMS.values(), EXHAUST, ETHEREAL, UNPLAYABLE)
+ALL_TERMS: tuple[Term, ...] = (*STATUS_TERMS.values(), *KEYWORD_TERMS.values(),
+                               *REACTION_TERMS.values(), ELEMENTS_RULE, EXHAUST, ETHEREAL, UNPLAYABLE)
 
 
 def status_term(name: str, is_buff: bool | None = None) -> Term:

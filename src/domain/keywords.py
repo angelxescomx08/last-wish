@@ -17,6 +17,10 @@ its rule. Current keywords:
   resolves when you already discarded a card this turn with a card or relic
   effect (``CombatState.discards_this_turn``; the end-of-turn discard does not
   count). Rogue cards only (see ``card_pool``).
+* REACTION ("Reacción") — an extra effect layer (``CardEffect.reaction``) that also
+  resolves when playing the card causes an elemental reaction: an element the card
+  applies meets a different element already on that enemy (``domain/elements.py``,
+  ``CombatState.reaction_ready``). Mage cards only.
 
 Design rule: the keyword *is* the condition. A keyword layer never adds a second
 condition of its own ("Combo: si además…" is not allowed).
@@ -36,6 +40,7 @@ class Keyword(Enum):
     SINGULAR = "singular"
     VOID = "void"
     SPOIL = "spoil"
+    REACTION = "reaction"
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,10 @@ KEYWORD_DEFS: dict[Keyword, KeywordDef] = {
     Keyword.SPOIL: KeywordDef(
         Keyword.SPOIL, "Despojo",
         "Despojo: efecto extra si ya descartaste una carta este turno.",
+    ),
+    Keyword.REACTION: KeywordDef(
+        Keyword.REACTION, "Reacción",
+        "Reacción: efecto extra si al jugarla provocas una reacción elemental.",
     ),
 }
 
@@ -95,6 +104,11 @@ def spoil_text(card: "Card") -> str:
     return layer_text(card.spoil_effects())
 
 
+def reaction_text(card: "Card") -> str:
+    """Spanish summary of a card's Reacción layers as printed."""
+    return layer_text(card.reaction_effects())
+
+
 def void_triggers(cost: int, mana_before: int) -> bool:
     """Keyword VOID: paying ``cost`` leaves exactly 0 mana (a free card never triggers it)."""
     return cost > 0 and mana_before - cost == 0
@@ -113,6 +127,8 @@ def layer_text(effects) -> str:
             parts.append(f"roba {fx.draw}")
         if fx.mana_gain:
             parts.append(f"+{fx.mana_gain} de maná")
+        if getattr(fx, "element", None) is not None and fx.element_stacks > 0:
+            parts.append(f"+{fx.element_stacks} de {fx.element.value}" + (" a todos" if fx.element_all else ""))
         if fx.text:
             parts.append(fx.text)
     return ", ".join(parts) or "efecto extra"

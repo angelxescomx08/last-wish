@@ -16,7 +16,9 @@ from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
 from src.application.card_preview import combat_card_bonus
 from src.application.enemy_ai import intent_hit_damage
+from src.domain.elements import is_frozen
 from src.domain.entities import BLADES, IntentType, status_stacks
+from src.presentation.ui.glossary import ICE_INK, REACTION_COLOR, REACTION_ICON
 from src.infrastructure.enemy_sprites import sheet_for_enemy
 from src.infrastructure import colors
 from src.infrastructure.audio import SoundPlayer
@@ -122,6 +124,7 @@ _HEAL_TEXT = (120, 236, 120)
 _VENGEANCE_TEXT = (255, 90, 70)
 _VENGEANCE_DELAY = 1.0          # after the blow (or blast) that killed the partner
 _DEBUFF_TEXT = (220, 120, 240)
+_REACTION_DELAY = 0.35         # attack: the reaction label waits for the blade to connect
 
 _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)
 
@@ -687,6 +690,7 @@ class CombatScene:
                 singular     = self._state.singular_ready(card),
                 void         = self._state.void_ready(card),
                 spoil        = self._state.spoil_ready(card),
+                reaction     = self._state.reaction_ready(card),
             )
 
         self._draw_dealt(surface, dealing)
@@ -761,15 +765,17 @@ class CombatScene:
     def _ready_damage(self, card) -> int:
         """Printed damage of ``card`` with every keyword layer that would resolve now."""
         return card.total_damage(self._combo_ready(card), self._state.singular_ready(card),
-                                 self._state.void_ready(card), self._state.spoil_ready(card))
+                                 self._state.void_ready(card), self._state.spoil_ready(card),
+                                 self._state.reaction_ready(card))
 
     def _bonuses(self, card) -> tuple[int, int]:
         combo, singular = self._combo_ready(card), self._state.singular_ready(card)
         void, spoil = self._state.void_ready(card), self._state.spoil_ready(card)
+        reaction = self._state.reaction_ready(card)
         scarf = relic_effects.combo_scarf_bonus(self._state.relics) if combo else 0
         dmg = (relic_effects.extra_attack_damage(self._state.relics) + self._state.player.attack_bonus
-               + self._state.next_damage_bonus + scarf) if card.total_damage(combo, singular, void, spoil) > 0 else 0
-        blk = (self._state.player.dexterity + scarf) if card.total_block(combo, singular, void, spoil) > 0 else 0
+               + self._state.next_damage_bonus + scarf) if card.total_damage(combo, singular, void, spoil, reaction) > 0 else 0
+        blk = (self._state.player.dexterity + scarf) if card.total_block(combo, singular, void, spoil, reaction) > 0 else 0
         return dmg, blk
 
     def _held_index(self) -> int | None:
@@ -919,6 +925,7 @@ class CombatScene:
                             outline=_PLAYABLE if ready else _HELD, combo=self._combo_ready(card),
                             singular=self._state.singular_ready(card),
                             void=self._state.void_ready(card), spoil=self._state.spoil_ready(card),
+                            reaction=self._state.reaction_ready(card, self._play.target),
                             cost=self._state.card_cost(card))
         if self._play.aiming:
             draw_arrow(surface, (rect.centerx, rect.top + 6), self._arrow_end(),
@@ -975,7 +982,8 @@ class CombatScene:
                                 combo_active=self._combo_ready(card),
                                 singular_active=self._state.singular_ready(card),
                                 void_active=self._state.void_ready(card),
-                                spoil_active=self._state.spoil_ready(card))
+                                spoil_active=self._state.spoil_ready(card),
+                                reaction_active=self._state.reaction_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             enemy = self._state.enemies[self._hovered_enemy]
@@ -1246,11 +1254,13 @@ class CombatScene:
         shown = 1 if result.combo else 0
         for flag, label, color in ((result.singular, "¡SINGULAR!", (185, 140, 255)),
                                    (result.void, "¡VACÍO!", (90, 170, 255)),
-                                   (result.spoil, "¡DESPOJO!", (240, 150, 60))):
+                                   (result.spoil, "¡DESPOJO!", (240, 150, 60)),
+                                   (result.reaction, "¡REACCIÓN!", (255, 130, 205))):
             if flag and self._player_rect:
                 self._fx.add_text(self._player_rect.centerx, self._player_rect.top - 10 - 24 * shown,
                                   label, color, lifetime=1.1)
                 shown += 1
+        self._announce_reactions(_REACTION_DELAY if is_attack else 0.1)
 
         if result.casts > 1 and played is not None:
             # Golden: replay every cast on screen, one after another.
@@ -1405,6 +1415,20 @@ class CombatScene:
             self._hero_action_time = 0.0
             self._idle_time = 0.0
 
+    def _announce_reactions(self, delay: float = 0.0) -> None:
+        """"¡VAPOR!" with its icon over every enemy that just suffered an elemental reaction."""
+        per_enemy: dict[str, int] = {}
+        for ev in self._state.reaction_log:
+            i = next((k for k, e in enumerate(self._state.enemies) if e.id == ev.enemy_id), None)
+            if i is None or i >= len(self._enemy_rects):
+                continue
+            n = per_enemy.get(ev.enemy_id, 0)
+            per_enemy[ev.enemy_id] = n + 1
+            rect = self._enemy_rects[i]
+            label = f"¡{ev.reaction.value.upper()}!"
+            self._fx.add_text(rect.centerx, rect.centery - 26 * n, label, REACTION_COLOR[ev.reaction],
+                              1.5, delay=delay + 0.18 * n, icon=ui_icon(REACTION_ICON[ev.reaction]))
+
     def _announce_actions(self, log, intents: dict, names: dict) -> None:
         """One banner per enemy that acted: its move and what it did to the hero."""
         self._banners.clear()
@@ -1502,7 +1526,15 @@ class CombatScene:
             if pose is not None and key not in self._deals:
                 self._leaving.append([card, CardPose(pose.x, pose.y, pose.scale, pose.angle, _shrink_face(pose)), 0.0,
                                       *self._bonuses(card)])
+        frozen = {i for i, e in enumerate(before)
+                  if e.is_alive and is_frozen(e) and not (e.is_boss or e.is_elite)}
         end_player_turn(state)
+        for i in frozen:                      # Congelado: it lost its action
+            if i < len(self._enemy_rects):
+                rect = self._enemy_rects[i]
+                self._fx.add_text(rect.centerx, rect.centery, "¡Congelado!", ICE_INK, 1.4,
+                                  delay=0.3, icon=ui_icon("frozen"))
+        self._announce_reactions(1.4)         # reactions at the start of your turn (Corazón Ígneo)
         self._motion.clear()                  # every card of the new hand is dealt in
         self._deals.clear()
         self._deal_plan = [_DRAW_AFTER_ENEMY_TURN + j * DEAL_STAGGER for j in range(state.hand.count)]

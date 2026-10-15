@@ -46,14 +46,43 @@ al robarla se juega sola gratis y desaparece del combate.
 |---|---|---|---|
 | **Combo** | Efecto extra si ya jugaste otra carta este turno. | Solo Pícara | ✅ |
 | **Singular** | Efecto extra si tu mazo inicial no contiene cartas repetidas. | Pícara por ahora (Abanico de Cuchillas, Tormenta de Acero) | ✅ |
-| **Vacío** | Efecto extra si al jugar la carta te quedas con 0 de maná (ej.: te queda 1 de maná y juegas una carta de 1). Las cartas de coste 0 no lo activan. | Solo Mago (aún no hay cartas con Vacío) | ✅ |
+| **Vacío** | Efecto extra si al jugar la carta te quedas con 0 de maná (ej.: te queda 1 de maná y juegas una carta de 1). Las cartas de coste 0 no lo activan. | Solo Mago | ✅ |
 | **Despojo** | Efecto extra si ya descartaste una carta este turno. Solo cuentan los descartes de cartas o reliquias, no el descarte del final del turno. | Solo Pícara | ✅ |
+| **Reacción** | Efecto extra si al jugar la carta provocas una reacción elemental (un elemento de la carta choca con otro distinto que ya tiene ese enemigo). | Solo Mago | ✅ |
 
 **Regla de diseño:** la palabra clave *es* la condición. Un efecto de palabra clave nunca
 añade otra condición propia ("Combo: si además…" no vale). Lo comprueba un test.
 
 La columna **Clases** indica qué clases tienen cartas con esa palabra: *Todas*, *Solo X*
 o una lista (*Guerrera y Mago*). La regla en sí funciona igual para cualquier carta.
+
+---
+
+## Elementos del Mago ✅
+
+Las cartas elementales **aplican un elemento al enemigo** con acumulaciones ("+2 de Fuego").
+Cada enemigo tiene **un solo elemento a la vez**: el mismo elemento suma acumulaciones; uno
+distinto provoca una **reacción**, consume los dos y usa la **suma** de acumulaciones.
+Los elementos no bajan solos. Cada uno tiene su icono (insignia del enemigo, esquina del
+arte de la carta, tooltips y el texto flotante "¡VAPOR!").
+
+| Elemento | Solo |
+|---|---|
+| 🔥 Fuego | Pierde tantos PV como acumulaciones al final de su turno (ignora el escudo). |
+| 💧 Agua | Cada golpe que da hace tantos puntos menos de daño. |
+| 🪨 Tierra | Cada golpe que recibe hace tantos puntos más de daño. |
+| 🌬 Aire | Nada solo; sus reacciones afectan a todos los enemigos. |
+
+| Reacción | Elementos | Efecto |
+|---|---|---|
+| Vapor | Fuego + Agua | 2× las acumulaciones como daño a ese enemigo. |
+| Magma | Fuego + Tierra | Pierde todo su escudo y recibe Vulnerable 2 (recibe +50 % del daño de tus cartas). |
+| Incendio | Fuego + Aire | Todos los enemigos reciben esas acumulaciones de Fuego (puede provocar otras reacciones, sin volver a propagarse). |
+| Barro | Agua + Tierra | Ganas 3× las acumulaciones como escudo. |
+| Congelar | Agua + Aire | Pierde su próxima acción (estado Congelado). Jefes y élites: sus golpes hacen la mitad. |
+| Tormenta de Arena | Tierra + Aire | Débil 1 a todos los enemigos. |
+
+Ejemplo: Bola de Fuego deja 3 de Fuego; Gota aplica 2 de Agua → Vapor: (3 + 2) × 2 = 10 de daño.
 
 ---
 
@@ -256,7 +285,40 @@ en una élite.
 - ⏳ *
 
 ### Mago
-- ⏳ *
+
+Arquetipo: elementos y reacciones, Vacío y Reacción. El daño en área de las cartas (Ola,
+Terremoto…) es fijo: no suma el Ataque del héroe.
+
+| Carta | Tipo | Coste | Efecto | Rareza | Sobre | Estado |
+|---|---|---|---|---|---|---|
+| Chispa Arcana | Ataque | 1 | 4 de daño, +2 de Fuego. **Vacío:** +2 de Agua (→ Vapor). Carta de clase. | Común | Acero | ✅ |
+| Lengua de Fuego | Ataque | 0 | 3 de daño, +1 de Fuego. | Común | Acero | ✅ |
+| Bola de Fuego | Ataque | 2 | 8 de daño, +3 de Fuego. | Común | Acero | ✅ |
+| Gota | Ataque | 0 | 2 de daño, +2 de Agua. | Común | Acero | ✅ |
+| Ola | Ataque | 2 | 6 de daño y +1 de Agua a todos. | Poco común | Acero | ✅ |
+| Diluvio | Ataque | 3 | +4 de Agua a todos. **Vacío:** 10 de daño a todos. | Rara | Acero | ✅ |
+| Piedra | Ataque | 1 | 5 de daño, +2 de Tierra. | Común | Acero | ✅ |
+| Terremoto | Ataque | 3 | 10 de daño y +2 de Tierra a todos. **Vacío:** Débil 1 a todos. | Rara | Acero | ✅ |
+| Ráfaga | Ataque | 1 | 3 de daño, +1 de Aire, golpea otra vez por 3. | Común | Acero | ✅ |
+| Ciclón | Ataque | 2 | 4 de daño y +2 de Aire a todos. | Poco común | Acero | ✅ |
+| Vapor Hirviente | Ataque | 1 | 4 de daño, +2 de Agua. **Reacción:** +1 de maná. | Poco común | Acero | ✅ |
+| Grieta | Ataque | 1 | 5 de daño, +2 de Tierra. **Reacción:** +6 de escudo. | Común | Acero | ✅ |
+| Llamarada | Ataque | 1 | 6 de daño, +2 de Fuego. **Reacción:** +6 de daño. | Poco común | Acero | ✅ |
+| Marea | Habilidad | 1 | 6 de escudo, +2 de Agua. **Vacío:** +4 de escudo. | Común | Escudo | ✅ |
+| Burbuja | Habilidad | 1 | 8 de escudo. **Vacío:** tu escudo dura un turno más. | Poco común | Escudo | ✅ |
+| Muro de Roca | Habilidad | 2 | 12 de escudo, +2 de Tierra a un enemigo. | Común | Escudo | ✅ |
+| Piel de Granito | Poder | 1 | Cada reacción que provoques te da 4 de escudo. | Poco común | Escudo | ✅ |
+| Avivar | Habilidad | 1 | Duplica el Fuego del enemigo. | Rara | Magia | ✅ |
+| Brisa | Habilidad | 0 | Roba 1, +1 de Aire a todos. | Común | Magia | ✅ |
+| Corriente Ascendente | Habilidad | 1 | +1 de maná, roba 1. **Vacío:** roba 2. | Rara | Magia | ✅ |
+| Ojo del Huracán | Poder | 2 | Cada reacción que provoques te hace robar 1 carta. | Rara | Magia | ✅ |
+| Remolino | Habilidad | 0 | +1 de Aire a un enemigo. **Reacción:** roba 2. | Rara | Magia | ✅ |
+| Catalizador | Habilidad | 1 | Tu próxima reacción de este turno ocurre 2 veces. | Épica | Magia | ✅ |
+| Combustión | Ataque | 2 | Consume el Fuego del enemigo: 3 de daño por acumulación. **Vacío:** a todos. | Épica | Épico | ✅ |
+| Avalancha | Ataque | 2 | 6 de daño, +4 de daño por cada Tierra del enemigo. | Épica | Épico | ✅ |
+| Corazón Ígneo | Poder | 2 | Al inicio de tu turno, +1 de Fuego a todos. | Épica | Épico | ✅ |
+| Convergencia | Ataque | 3 | +2 de Fuego, Agua, Tierra y Aire en orden (Vapor y Tormenta de Arena). | Legendaria | Épico | ✅ |
+| Archimago | Poder | 3 | Tus reacciones afectan a todos los enemigos. | Legendaria | Épico | ✅ |
 
 ### Guerrera
 - ⏳ *

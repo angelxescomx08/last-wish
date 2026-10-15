@@ -121,6 +121,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `map_node.py` | `MapNode`, `RoomType` | Single node on the run map: id, room_type, row, col, connections, visited, available |
 | `game_map.py` | `GameMap` | Floor map: nodes dict, boss_id, rows, cols; `available_nodes()`, `mark_visited()` |
 | `run.py` | `Run` | Persistent state across rooms: character, seed, floor, gold, hp, deck, relics, map; `add_card`, `add_relic`, `apply_combat_result` |
+| `elements.py` | `Element`, `Reaction`, `REACTIONS`, `apply_element(state, enemy, element, stacks)`, `apply_to_all`, `element_of`, `element_stacks`, `would_react`, `card_reacts`, `element_line`, `burn`, `is_frozen`/`thaw`, `ReactionEvent` | Mage elements and reactions (see *Mage elements*) |
 | `card_pool.py` | `PackTheme`, `PackDef`, `ALL_PACKS`, `starter_deck`, `CARD_CLASS_BY_ID`, `CARD_CLASS_LABEL`, `CardFactory`, `card_factories_for_theme(theme, classes=None)`, `card_factories_for_classes(classes)`, `class_for_character(id)`, `PACK_SIZE` | 4 card packs (ACERO/ESCUDO/MAGIA/EPICO), pack definitions with gold costs, `starter_deck(character_id)` (neutral 10-card deck; La Pícara: own 9-card deck — 4× Puñalada 6 dmg, 4× Esquiva 6 block, 1× Finta 1 mana 4 dmg + Combo +4 block); every pool card has a class (see *Card classes*) |
 
 ### Application layer — `src/application/`
@@ -609,6 +610,8 @@ One test file per source module. All test files follow the same structure:
 | `presentation/scenes/test_purge_scene.py` | `scenes/purge_scene.py`, `fx/card_burn.py`, SceneManager wiring | click → confirm removes that card, Enter, cancel (button/Escape/outside), closes after the burn, click hurries it, only one card, leave without removing, no gold / minimum deck messages, price rises, every phase draws, tooltip; map node opens and pops the altar; burn bottom-first, edge glows, gone, capped edge points, tiny face, 10 000-value stress |
 | `presentation/ui/test_gold_hud.py` | `ui/gold_hud.py` + `SceneManager` | format, sync, counting time, +N/−N labels and expiry, flash/spin, anchors, 10 000-step stress; manager sync on new run, map position, change animates, hidden without run |
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
+| `application/test_mage_elements.py` | `domain/elements.py`, Mage cards, Reacción, element hooks in `play_card`/`end_turn`/`entities` | stacking, one element at a time, each element alone (burn, Agua, Tierra), the six reactions (numbers, block, chains, bosses), powers (Piel de Granito, Ojo del Huracán, Catalizador, Archimago, Corazón Ígneo), Reacción ready/target/layers, every card, golden casts, 10^18 stacks, 300 random plays |
+| `presentation/ui/test_mage_ui.py` | icons, glossary, rich text, card faces, tooltips, ready style, combat labels | icon per element/reaction/keyword, element terms not matched inside names ("Bola de Fuego"), reaction lines in panels, colours, face lines + badges, every Mage card fits its face, "¡VAPOR!" / "¡Congelado!" labels, 100-frame stress |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
 
 ### Testing rules
@@ -903,8 +906,8 @@ When a card, relic or keyword is added or renamed, update its row there too.
 
 ## Keyword Vacío (`Keyword.VOID`)
 
-"Vacío: efecto extra si al jugarla te quedas con 0 de maná." Mage cards only (by design;
-none exist yet). Same layer pattern as Combo/Singular: `CardEffect.void`, `Card.void_effects()`,
+"Vacío: efecto extra si al jugarla te quedas con 0 de maná." Mage cards only (Chispa Arcana,
+Diluvio, Terremoto, Marea, Burbuja, Corriente Ascendente, Combustión). Same layer pattern as Combo/Singular: `CardEffect.void`, `Card.void_effects()`,
 `void=` on every `total_*` / `active_effects`, helper `card_pool._add_void`.
 
 - `keywords.void_triggers(cost, mana_before)`: `cost > 0 and mana_before - cost == 0`
@@ -1292,3 +1295,37 @@ existing event contract. `HeroFx` accepts optional `guard_seconds` and
 aligns them with 40% of guard and 60% of death duration. Other heroes keep their
 previous cue timing. See `docs/warrior-v3-art.md` for exact prompt/reproduction
 and `docs/visual-design.md` for animation and backup details.
+
+## Mage elements and keyword Reacción (2026-10-14)
+
+User: the Mage plays with four elements (agua, fuego, tierra, aire) with synergies between
+them, plus a keyword; icons so it is easy to understand. Rules and numbers in
+`docs/game_design.md` → *Elementos del Mago* and *Cartas → Mago* (28 cards, ids `mg_*`).
+
+- **Rules** (`domain/elements.py`, pure): an element is an enemy status named after it
+  (`entities.FIRE/WATER/EARTH/AIR`); one per enemy. Same element → stacks add; another →
+  reaction with the summed stacks, both consumed (`apply_element`, `spread=False` stops
+  Incendio chains). Fuego burns at the end of the enemy's turn (`end_turn`, ignores block);
+  Agua lowers each enemy hit and Congelado zeroes it (bosses/elites: half) in
+  `entities.enemy_hit_damage`; Tierra adds per hit in `deal_damage`. Congelado regular
+  enemies skip their action (no log entry); Vulnerable on enemies now raises card damage
+  (`play_card`) and ticks after their action.
+- **Cards** carry data, not callbacks: `CardEffect.element / element_stacks / element_all`
+  (applied by `play_card._apply_elements` after damage, before `on_play`, layer by layer)
+  and `element_hint` (card-face badges for on_play cards). Helpers `card_pool._mg`,
+  `_mg_void`, `_mg_reaction`. `requires_target` / `target_kind` read the element fields.
+- **Keyword Reacción** (`Keyword.REACTION`): layer `CardEffect.reaction`, 5th flag
+  `reaction=` on every `total_*` / `active_effects`, `Card.reaction_effects()`,
+  `CombatState.reaction_ready(card, target=None)` (decided before paying, like Vacío),
+  `PlayResult.reaction` and `PlayResult.reactions` (names caused by the play).
+- **State**: `reactions_this_turn`, `catalyst` (per turn), `reaction_block`, `reaction_draw`,
+  `archmage`, `reaction_log` (`ReactionEvent`s of the last play, or of the turn start).
+- **UI**: icons `fire water earth air frozen steam magma wildfire mud sandstorm reaction`
+  (`generate_ui_icons.py`); glossary terms per element (regex skips names like "Bola de
+  Fuego"; panel lines list its three reactions with icons), one per reaction and
+  "Reacción elemental"; element colours in rich text; card face "+2 de Fuego." lines
+  (skipped when the text already names it) and element icons in the art corner;
+  tooltip "[[fire]]Aplica 2 de Fuego."; ready style "¡REACCIÓN!" (pink); combat floats
+  "¡VAPOR!" with its icon over the enemy (`FxLayer.add_text(icon=)`) and "¡Congelado!"
+  when a frozen enemy loses its turn; intent breakdown shows "−N Agua" / "Congelado".
+- The Mage starter deck is unchanged (Chispa Arcana, the class card, is in the Acero pool).

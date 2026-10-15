@@ -45,8 +45,9 @@ READY_STYLES: dict[Keyword, ReadyStyle] = {
     Keyword.SPOIL: ReadyStyle("¡DESPOJO!", (250, 150, 50), (255, 222, 170), "spoil"),
     Keyword.VOID: ReadyStyle("¡VACÍO!", (90, 160, 255), (200, 225, 255), "void"),
     Keyword.SINGULAR: ReadyStyle("¡SINGULAR!", (190, 130, 255), (236, 214, 255), "singular"),
+    Keyword.REACTION: ReadyStyle("¡REACCIÓN!", (255, 120, 200), (255, 220, 240), "reaction"),
 }
-_ORDER = (Keyword.COMBO, Keyword.SPOIL, Keyword.VOID, Keyword.SINGULAR)
+_ORDER = (Keyword.COMBO, Keyword.REACTION, Keyword.SPOIL, Keyword.VOID, Keyword.SINGULAR)
 
 COMET_SPEED = 0.32          # laps per second
 COMETS_PER_KEYWORD = 3
@@ -54,9 +55,10 @@ TRAIL = 9
 
 
 def ready_keywords(card: Card, combo: bool = False, singular: bool = False,
-                   void: bool = False, spoil: bool = False) -> list[Keyword]:
+                   void: bool = False, spoil: bool = False, reaction: bool = False) -> list[Keyword]:
     """The card's keywords whose condition holds now (only layers the card really has)."""
     flags = {
+        Keyword.REACTION: reaction and bool(card.reaction_effects()),
         Keyword.COMBO: combo and bool(card.combo_effects()),
         Keyword.SPOIL: spoil and bool(card.spoil_effects()),
         Keyword.VOID: void and bool(card.void_effects()),

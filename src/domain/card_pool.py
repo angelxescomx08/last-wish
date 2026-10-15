@@ -22,6 +22,7 @@ from typing import Callable, Iterable
 
 from src.domain.card import Card, CardClass, CardEffect, CardRarity, CardType
 from src.domain.chroma import Chroma
+from src.domain.elements import Element, apply_element, apply_to_all, element_stacks
 from src.domain.entities import MARKED, POISON, WEAK, add_status, deal_damage
 from src.domain.numbers import BigValue
 
@@ -808,6 +809,234 @@ CARD_CLASS_LABEL: dict[CardClass, str] = {
     CardClass.ROGUE:   "La Pícara",
 }
 
+# ---------------------------------------------------------------------------
+# El Mago — elements (Fuego, Agua, Tierra, Aire), reactions, Vacío and Reacción
+# (rules in ``domain/elements.py``; all MAGE, see CARD_CLASS_BY_ID)
+# ---------------------------------------------------------------------------
+
+_FIRE, _WATER, _EARTH, _AIR = Element.FIRE, Element.WATER, Element.EARTH, Element.AIR
+
+
+def _mg(id: str, name: str, ctype: CardType, cost: int, rarity: CardRarity, *, dmg: int = 0,
+        blk: int = 0, draw: int = 0, mana: int = 0, element: Element | None = None,
+        stacks: int = 0, everyone: bool = False, on_play=None, text: str = "",
+        needs_target: bool = False, hits_all: bool = False, on_turn_start=None,
+        hint: tuple = ()) -> Card:
+    """A Mage card. ``element``/``stacks`` (+ ``everyone``) = "aplica N de X" (a todos)."""
+    return Card(
+        id=id, name=name, card_type=ctype, cost=cost, rarity=rarity,
+        base_effect=_mg_fx(name, dmg=dmg, blk=blk, draw=draw, mana=mana, element=element,
+                           stacks=stacks, everyone=everyone, on_play=on_play, text=text,
+                           needs_target=needs_target, hits_all=hits_all,
+                           on_turn_start=on_turn_start, hint=hint),
+    )
+
+
+def _mg_fx(name: str, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: int = 0,
+           element: Element | None = None, stacks: int = 0, everyone: bool = False,
+           on_play=None, text: str = "", needs_target: bool = False, hits_all: bool = False,
+           on_turn_start=None, hint: tuple = ()) -> CardEffect:
+    return CardEffect(name=name, damage=BigValue(dmg), block=BigValue(blk), draw=draw,
+                      mana_gain=mana, element=element, element_stacks=stacks,
+                      element_all=everyone, on_play=on_play, text=text,
+                      needs_target=needs_target or (element is not None and not everyone),
+                      hits_all_enemies=hits_all or everyone, on_turn_start=on_turn_start,
+                      element_hint=hint)
+
+
+def _mg_void(card: Card, **kw) -> Card:
+    """Vacío layer (extra effect if the card spends your last mana)."""
+    card.base_effect.void = _mg_fx("Vacío", **kw)
+    return card
+
+
+def _mg_reaction(card: Card, **kw) -> Card:
+    """Reacción layer (extra effect if playing the card causes an elemental reaction)."""
+    card.base_effect.reaction = _mg_fx("Reacción", **kw)
+    return card
+
+
+# --- on_play / power effects -------------------------------------------------
+
+def _mg_target(state):
+    i = state.targeted_enemy_index
+    if i is None or not (0 <= i < len(state.enemies)) or not state.enemies[i].is_alive:
+        return None
+    return state.enemies[i]
+
+
+def _on_fan_flames(state) -> None:
+    """Avivar: doubles the target's Fuego."""
+    enemy = _mg_target(state)
+    if enemy is not None:
+        n = element_stacks(enemy, Element.FIRE)
+        if n > 0:
+            add_status(enemy.status_effects, Element.FIRE.value, n, is_buff=False)
+
+
+COMBUSTION_MULT: int = 3     # Combustión: damage = 3 × the Fuego consumed
+
+
+def _combust(enemy) -> None:
+    n = element_stacks(enemy, Element.FIRE)
+    if n > 0:
+        enemy.status_effects = [se for se in enemy.status_effects if se.name != Element.FIRE.value]
+        deal_damage(enemy, COMBUSTION_MULT * n)
+
+
+def _on_combustion(state) -> None:
+    enemy = _mg_target(state)
+    if enemy is not None:
+        _combust(enemy)
+
+
+def _on_combustion_all(state) -> None:
+    for enemy in [e for e in state.enemies if e.is_alive]:
+        _combust(enemy)
+
+
+def _on_fire_heart(state) -> None:
+    """Corazón Ígneo (start of turn): 1 Fuego on every enemy."""
+    apply_to_all(state, Element.FIRE, 1)
+
+
+def _on_all_hit(amount: int):
+    def hit(state) -> None:
+        for enemy in [e for e in state.enemies if e.is_alive]:
+            deal_damage(enemy, amount)
+    return hit
+
+
+def _on_hit_target(amount: int):
+    def hit(state) -> None:
+        enemy = _mg_target(state)
+        if enemy is not None:
+            deal_damage(enemy, amount)
+    return hit
+
+
+AVALANCHE_PER_EARTH: int = 4     # Avalancha: extra damage per Tierra stack
+
+
+def _on_avalanche(state) -> None:
+    enemy = _mg_target(state)
+    if enemy is not None:
+        n = element_stacks(enemy, Element.EARTH)
+        if n > 0:
+            deal_damage(enemy, AVALANCHE_PER_EARTH * n)
+
+
+def _on_granite_skin(state) -> None:
+    state.reaction_block += 4
+
+
+def _on_hurricane_eye(state) -> None:
+    state.reaction_draw += 1
+
+
+def _on_catalyst(state) -> None:
+    state.catalyst += 1
+
+
+def _on_archmage(state) -> None:
+    state.archmage = True
+
+
+def _on_convergence(state) -> None:
+    """Convergencia: 2 of every element on the target, in order (reactions in a chain)."""
+    for element in (Element.FIRE, Element.WATER, Element.EARTH, Element.AIR):
+        enemy = _mg_target(state)
+        if enemy is None:
+            return
+        apply_element(state, enemy, element, 2)
+
+
+def _on_weaken_all_1(state) -> None:
+    for enemy in [e for e in state.enemies if e.is_alive]:
+        add_status(enemy.status_effects, WEAK, 1, is_buff=False)
+
+
+def _on_keep_block(state) -> None:
+    state.retain_block = True
+
+
+# --- cards ---------------------------------------------------------------------
+
+def arcane_spark() -> Card:
+    """Chispa Arcana: the Mage's class card (Fuego, and Agua with Vacío → Vapor)."""
+    return _mg_void(_mg("mg_chispa_arcana", "Chispa Arcana", CardType.ATTACK, 1, CardRarity.COMMON,
+                        dmg=4, element=_FIRE, stacks=2),
+                    element=_WATER, stacks=2)
+
+
+_MAGE_ACERO: list[Callable[[], Card]] = [
+    arcane_spark,
+    lambda: _mg("mg_lengua_fuego", "Lengua de Fuego", _A, 0, _C, dmg=3, element=_FIRE, stacks=1),
+    lambda: _mg("mg_bola_fuego", "Bola de Fuego", _A, 2, _C, dmg=8, element=_FIRE, stacks=3),
+    lambda: _mg("mg_gota", "Gota", _A, 0, _C, dmg=2, element=_WATER, stacks=2),
+    lambda: _mg("mg_ola", "Ola", _A, 2, _U, element=_WATER, stacks=1, everyone=True,
+                on_play=_on_all_hit(6), text="6 de daño a todos"),
+    lambda: _mg_void(_mg("mg_diluvio", "Diluvio", _A, 3, _RA, element=_WATER, stacks=4, everyone=True),
+                     on_play=_on_all_hit(10), hits_all=True, text="10 de daño a todos"),
+    lambda: _mg("mg_piedra", "Piedra", _A, 1, _C, dmg=5, element=_EARTH, stacks=2),
+    lambda: _mg_void(_mg("mg_terremoto", "Terremoto", _A, 3, _RA, element=_EARTH, stacks=2,
+                         everyone=True, on_play=_on_all_hit(10),
+                         text="10 de daño y +2 de Tierra a todos"),
+                     on_play=_on_weaken_all_1, hits_all=True, text="Débil 1 a todos"),
+    lambda: _mg("mg_rafaga", "Ráfaga", _A, 1, _C, dmg=3, element=_AIR, stacks=1,
+                on_play=_on_hit_target(3), text="golpea otra vez por 3"),
+    lambda: _mg("mg_ciclon", "Ciclón", _A, 2, _U, element=_AIR, stacks=2, everyone=True,
+                on_play=_on_all_hit(4), text="4 de daño a todos"),
+    lambda: _mg_reaction(_mg("mg_vapor_hirviente", "Vapor Hirviente", _A, 1, _U, dmg=4,
+                             element=_WATER, stacks=2),
+                         mana=1),
+    lambda: _mg_reaction(_mg("mg_grieta", "Grieta", _A, 1, _C, dmg=5, element=_EARTH, stacks=2),
+                         blk=6),
+    lambda: _mg_reaction(_mg("mg_llamarada", "Llamarada", _A, 1, _U, dmg=6, element=_FIRE, stacks=2),
+                         dmg=6),
+]
+
+_MAGE_ESCUDO: list[Callable[[], Card]] = [
+    lambda: _mg_void(_mg("mg_marea", "Marea", _S, 1, _C, blk=6, element=_WATER, stacks=2),
+                     blk=4),
+    lambda: _mg_void(_mg("mg_burbuja", "Burbuja", _S, 1, _U, blk=8),
+                     on_play=_on_keep_block, text="tu escudo dura un turno más"),
+    lambda: _mg("mg_muro_roca", "Muro de Roca", _S, 2, _C, blk=12, element=_EARTH, stacks=2),
+    lambda: _mg("mg_piel_granito", "Piel de Granito", _P, 1, _U, on_play=_on_granite_skin,
+                text="cada reacción que provoques te da 4 de escudo"),
+]
+
+_MAGE_MAGIA: list[Callable[[], Card]] = [
+    lambda: _mg("mg_avivar", "Avivar", _S, 1, _RA, on_play=_on_fan_flames, needs_target=True, hint=(_FIRE,),
+                text="duplica el Fuego del enemigo"),
+    lambda: _mg("mg_brisa", "Brisa", _S, 0, _C, draw=1, element=_AIR, stacks=1, everyone=True),
+    lambda: _mg_void(_mg("mg_corriente", "Corriente Ascendente", _S, 1, _RA, draw=1, mana=1),
+                     draw=2),
+    lambda: _mg("mg_ojo_huracan", "Ojo del Huracán", _P, 2, _RA, on_play=_on_hurricane_eye,
+                text="cada reacción que provoques te hace robar 1 carta"),
+    lambda: _mg_reaction(_mg("mg_remolino", "Remolino", _S, 0, _RA, element=_AIR, stacks=1),
+                         draw=2),
+    lambda: _mg("mg_catalizador", "Catalizador", _S, 1, _E, on_play=_on_catalyst,
+                text="tu próxima reacción este turno ocurre 2 veces"),
+]
+
+_MAGE_EPICO: list[Callable[[], Card]] = [
+    lambda: _mg_void(_mg("mg_combustion", "Combustión", _A, 2, _E, on_play=_on_combustion,
+                         needs_target=True, hint=(_FIRE,),
+                         text="consume su Fuego: x3 de daño"),
+                     on_play=_on_combustion_all, hits_all=True, text="a todos"),
+    lambda: _mg("mg_avalancha", "Avalancha", _A, 2, _E, dmg=6, on_play=_on_avalanche, hint=(_EARTH,),
+                text="+4 de daño por cada Tierra"),
+    lambda: _mg("mg_corazon_igneo", "Corazón Ígneo", _P, 2, _E, on_turn_start=_on_fire_heart, hint=(_FIRE,),
+                text="al inicio de tu turno, +1 de Fuego a todos"),
+    lambda: _mg("mg_convergencia", "Convergencia", _A, 3, _L, on_play=_on_convergence,
+                needs_target=True, hint=(_FIRE, _WATER, _EARTH, _AIR),
+                text="+2 de Fuego, Agua, Tierra y Aire, en orden"),
+    lambda: _mg("mg_archimago", "Archimago", _P, 3, _L, on_play=_on_archmage,
+                text="tus reacciones afectan a todos los enemigos"),
+]
+
+
 _N, _W, _M, _R = CardClass.NEUTRAL, CardClass.WARRIOR, CardClass.MAGE, CardClass.ROGUE
 
 # Class of every pool card, by card id. Cards missing here are NEUTRAL
@@ -851,6 +1080,8 @@ CARD_CLASS_BY_ID: dict[str, CardClass] = {
     "r_hoja_envenenada": _R, "r_tirar_los_dados": _R, "r_marcar_objetivo": _R,
     "r_rapina": _R, "r_maestra_de_dagas": _R, "r_sombra_gemela": _R, "r_fortuna_audaz": _R,
     "r_nada_que_perder": _R, "r_cadena_perfecta": _R, "r_asesina": _R, "r_mil_cortes": _R,
+    # El Mago — elements, reactions, Vacío and Reacción (2026-10-14)
+    **{build().id: _M for build in _MAGE_ACERO + _MAGE_ESCUDO + _MAGE_MAGIA + _MAGE_EPICO},
 }
 
 
@@ -900,10 +1131,10 @@ def _factories(theme: PackTheme, raw: list[Callable[[], Card]]) -> list[CardFact
 # ---------------------------------------------------------------------------
 
 _POOL: dict[PackTheme, list[CardFactory]] = {
-    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO + _ROGUE_ACERO),
-    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO + _ROGUE_ESCUDO),
-    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA + _ROGUE_MAGIA),
-    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO + _ROGUE_EPICO),
+    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO + _ROGUE_ACERO + _MAGE_ACERO),
+    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO + _ROGUE_ESCUDO + _MAGE_ESCUDO),
+    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA + _ROGUE_MAGIA + _MAGE_MAGIA),
+    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO + _ROGUE_EPICO + _MAGE_EPICO),
 }
 
 

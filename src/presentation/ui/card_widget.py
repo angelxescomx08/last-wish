@@ -22,11 +22,13 @@ import pygame
 
 from src.domain.card import Card, CardRarity, CardType
 from src.domain.chroma import chroma_def
-from src.domain.keywords import combo_text, singular_text, spoil_text, void_text
+from src.domain.elements import element_line
+from src.domain.keywords import combo_text, reaction_text, singular_text, spoil_text, void_text
 from src.domain.numbers import BigValue
 from src.infrastructure import colors
 from src.infrastructure.card_assets import card_frame, card_illustration, card_layout
 from src.infrastructure.fonts import FontRegistry
+from src.infrastructure.ui_icons import ui_icon
 from src.presentation.fx import card_fx, chroma_fx
 from src.presentation.ui import rich_text
 
@@ -106,15 +108,16 @@ def _wrap(text: str, font: pygame.font.Font, max_w: int) -> list[str]:
 
 
 def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = False,
-                   singular: bool = False, void: bool = False, spoil: bool = False) -> list[str]:
+                   singular: bool = False, void: bool = False, spoil: bool = False,
+                   reaction: bool = False) -> list[str]:
     """Spanish effect lines built from the card's data (effective values).
 
     ``combo`` / ``singular``: that keyword is ready, so the numbers already include
     its layer and the keyword line says so.
     """
     lines: list[str] = []
-    draw = card.total_draw(combo, singular, void, spoil)
-    mana = card.total_mana_gain(combo, singular, void, spoil)
+    draw = card.total_draw(combo, singular, void, spoil, reaction)
+    mana = card.total_mana_gain(combo, singular, void, spoil, reaction)
     if card.card_type == CardType.ATTACK and damage > 0:
         lines.append(f"Inflige {BigValue.format_int(damage)} de daño.")
     if block > 0:
@@ -123,6 +126,9 @@ def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = Fa
         lines.append(f"Roba {draw} carta{'s' if draw > 1 else ''}.")
     if mana > 0:
         lines.append(f"+{mana} de maná.")
+    for fx in card.all_effects():          # Mage elements: "+2 de Fuego." (unless its text says it)
+        if fx.element is not None and fx.element_stacks > 0 and f"de {fx.element.value}" not in fx.text:
+            lines.append(element_line(fx) + ".")
     for fx in card.all_effects():          # on_play effects described in words
         if fx.text:
             lines.append(fx.text[0].upper() + fx.text[1:] + ("" if fx.text.endswith(".") else "."))
@@ -136,7 +142,28 @@ def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = Fa
         lines.append("¡Vacío activo!" if void else f"Vacío: {void_text(card)}.")
     if card.spoil_effects():
         lines.append("¡Despojo activo!" if spoil else f"Despojo: {spoil_text(card)}.")
+    if card.reaction_effects():
+        lines.append("¡Reacción!" if reaction else f"Reacción: {reaction_text(card)}.")
     return lines[:4]
+
+
+_ELEMENT_ICON = {"Fuego": "fire", "Agua": "water", "Tierra": "earth", "Aire": "air"}
+
+
+def _draw_element_badges(surf: pygame.Surface, card: Card, art_rect: pygame.Rect, h: int) -> None:
+    """Mage cards: the icon of every element the card uses, in the art window's top-right corner."""
+    elements = card.element_badges()
+    if not elements:
+        return
+    scale = 2 if h >= 150 else 1
+    x = art_rect.right - 6
+    for el in reversed(elements):
+        icon = ui_icon(_ELEMENT_ICON[el.value], scale)
+        if icon is None:
+            continue
+        x -= icon.get_width()
+        surf.blit(icon, (x, art_rect.top + 6))
+        x -= 1
 
 
 def _outlined(font: pygame.font.Font, text: str, color, outline=(10, 8, 12)) -> pygame.Surface:
@@ -195,7 +222,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
                         affordable: bool = True, bonus_damage: int = 0,
                         bonus_block: int = 0, combo: bool = False,
                         singular: bool = False, void: bool = False, spoil: bool = False,
-                        cost: int | None = None) -> pygame.Surface:
+                        cost: int | None = None, reaction: bool = False) -> pygame.Surface:
     """Compose the static part of a card (cached by every value it displays).
 
     ``combo`` / ``singular``: that keyword is ready — numbers include its layer (shown boosted).
@@ -204,16 +231,18 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     singular = singular and bool(card.singular_effects())
     void = void and bool(card.void_effects())
     spoil = spoil and bool(card.spoil_effects())
-    raw_damage = card.total_damage(combo, singular, void, spoil)
-    raw_block = card.total_block(combo, singular, void, spoil)
+    reaction = reaction and bool(card.reaction_effects())
+    raw_damage = card.total_damage(combo, singular, void, spoil, reaction)
+    raw_block = card.total_block(combo, singular, void, spoil, reaction)
     damage = raw_damage + bonus_damage if raw_damage > 0 else 0
     block = raw_block + bonus_block if raw_block > 0 else 0
-    combo_dmg = (combo or singular or void or spoil) and raw_damage > card.total_damage()
-    combo_blk = (combo or singular or void or spoil) and raw_block > card.total_block()
+    layer_on = combo or singular or void or spoil or reaction
+    combo_dmg = layer_on and raw_damage > card.total_damage()
+    combo_blk = layer_on and raw_block > card.total_block()
     rarity = (card.rarity or CardRarity.COMMON).name
     shown_cost = card.cost if cost is None else cost
     key = (card.id, card.name, card.card_type, rarity, shown_cost, damage, block, bonus_damage > 0 or combo_dmg,
-           bonus_block > 0 or combo_blk, tuple(_ability_lines(card, damage, block, combo, singular, void, spoil)), affordable,
+           bonus_block > 0 or combo_blk, tuple(_ability_lines(card, damage, block, combo, singular, void, spoil, reaction)), affordable,
            card.is_broken, card.chroma, w, h, id(fonts))
     cached = _cache.get(key)
     if cached is not None:
@@ -244,6 +273,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     else:
         pygame.draw.rect(surf, _RARITY_COLOR.get(card.rarity, colors.CARD_BORDER), surf.get_rect(), 3,
                          border_radius=8)
+    _draw_element_badges(surf, card, art_rect, h)
 
     # 4. text
     c, r = _circle(z["mana"], w, h)
@@ -272,7 +302,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
         plate = _outlined(fonts.get(max(7, round(h * 0.048))), label, st.bright, outline=st.dark)
         surf.blit(plate, plate.get_rect(centerx=text_rect.centerx, bottom=text_rect.bottom))
         text_rect = pygame.Rect(text_rect.x, text_rect.y, text_rect.w, max(1, text_rect.h - plate.get_height()))
-    lines = _ability_lines(card, damage, block, combo, singular, void, spoil)
+    lines = _ability_lines(card, damage, block, combo, singular, void, spoil, reaction)
     if lines:
         # Colour-coded like the tooltips: damage red, block blue, keywords gold.
         font = _card_font(fonts, max(8, round(h * 0.052)))
@@ -337,14 +367,15 @@ def draw_card(
     void: bool = False,
     spoil: bool = False,
     cost: int | None = None,
+    reaction: bool = False,
 ) -> pygame.Rect:
     """Draw a card and return its bounding Rect (lifted when hovered or selected)."""
     lift = -20 if (selected or hovered) else 0
     rect = pygame.Rect(x, y + lift, CARD_W, CARD_H)
     body = render_card_surface(card, fonts, affordable=affordable, bonus_damage=bonus_damage,
                                bonus_block=bonus_block, combo=combo, singular=singular, void=void,
-                               spoil=spoil, cost=cost)
-    ready = card_fx.ready_keywords(card, combo, singular, void, spoil)
+                               spoil=spoil, cost=cost, reaction=reaction)
+    ready = card_fx.ready_keywords(card, combo, singular, void, spoil, reaction)
     if ready:                      # keyword condition met: aura behind, comets + badge in front
         card_fx.draw_ready_back(surface, body, rect.center, ready, chroma_fx.now(),
                                 key=(CARD_W, CARD_H, card.rarity))
@@ -421,6 +452,7 @@ def draw_card_at(
     spoil: bool = False,
     cost: int | None = None,
     face_scale: float | None = None,
+    reaction: bool = False,
 ) -> pygame.Rect:
     """Draw a card centred on ``center``; returns its (unrotated) rect.
 
@@ -438,10 +470,10 @@ def draw_card_at(
     fw, fh = card_size(face_scale) if face_scale is not None else (w, h)
     body = render_card_surface(card, fonts, w=fw, h=fh, affordable=affordable, bonus_damage=bonus_damage,
                                bonus_block=bonus_block, combo=combo, singular=singular, void=void,
-                               spoil=spoil, cost=cost)
+                               spoil=spoil, cost=cost, reaction=reaction)
     body = _resized(body, (w, h))
     tilt = int(round(angle))
-    ready = card_fx.ready_keywords(card, combo, singular, void, spoil)
+    ready = card_fx.ready_keywords(card, combo, singular, void, spoil, reaction)
     if ready:              # keyword condition met: aura behind (comets + badge drawn on top below)
         card_fx.draw_ready_back(surface, body, (round(center[0]), round(center[1])), ready,
                                 chroma_fx.now(), key=(w, h, card.rarity), angle=tilt)
