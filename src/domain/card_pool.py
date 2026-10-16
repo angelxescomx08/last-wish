@@ -981,7 +981,7 @@ _MAGE_ACERO: list[Callable[[], Card]] = [
     lambda: _mg("mg_piedra", "Piedra", _A, 1, _C, dmg=5, element=_EARTH, stacks=2),
     lambda: _mg_void(_mg("mg_terremoto", "Terremoto", _A, 3, _RA, element=_EARTH, stacks=2,
                          everyone=True, on_play=_on_all_hit(10),
-                         text="10 de daño y +2 de Tierra a todos"),
+                         text="10 de daño a todos"),
                      on_play=_on_weaken_all_1, hits_all=True, text="Débil 1 a todos"),
     lambda: _mg("mg_rafaga", "Ráfaga", _A, 1, _C, dmg=3, element=_AIR, stacks=1,
                 on_play=_on_hit_target(3), text="golpea otra vez por 3"),
@@ -999,10 +999,10 @@ _MAGE_ACERO: list[Callable[[], Card]] = [
 _MAGE_ESCUDO: list[Callable[[], Card]] = [
     lambda: _mg_void(_mg("mg_marea", "Marea", _S, 1, _C, blk=6, element=_WATER, stacks=2),
                      blk=4),
-    lambda: _mg_void(_mg("mg_burbuja", "Burbuja", _S, 1, _U, blk=8),
+    lambda: _mg_void(_mg("mg_burbuja", "Burbuja", _S, 1, _U, blk=8, hint=(_WATER,)),
                      on_play=_on_keep_block, text="tu escudo dura un turno más"),
     lambda: _mg("mg_muro_roca", "Muro de Roca", _S, 2, _C, blk=12, element=_EARTH, stacks=2),
-    lambda: _mg("mg_piel_granito", "Piel de Granito", _P, 1, _U, on_play=_on_granite_skin,
+    lambda: _mg("mg_piel_granito", "Piel de Granito", _P, 1, _U, on_play=_on_granite_skin, hint=(_EARTH,),
                 text="cada reacción que provoques te da 4 de escudo"),
 ]
 
@@ -1010,9 +1010,9 @@ _MAGE_MAGIA: list[Callable[[], Card]] = [
     lambda: _mg("mg_avivar", "Avivar", _S, 1, _RA, on_play=_on_fan_flames, needs_target=True, hint=(_FIRE,),
                 text="duplica el Fuego del enemigo"),
     lambda: _mg("mg_brisa", "Brisa", _S, 0, _C, draw=1, element=_AIR, stacks=1, everyone=True),
-    lambda: _mg_void(_mg("mg_corriente", "Corriente Ascendente", _S, 1, _RA, draw=1, mana=1),
+    lambda: _mg_void(_mg("mg_corriente", "Corriente Ascendente", _S, 1, _RA, draw=1, mana=1, hint=(_AIR,)),
                      draw=2),
-    lambda: _mg("mg_ojo_huracan", "Ojo del Huracán", _P, 2, _RA, on_play=_on_hurricane_eye,
+    lambda: _mg("mg_ojo_huracan", "Ojo del Huracán", _P, 2, _RA, on_play=_on_hurricane_eye, hint=(_AIR,),
                 text="cada reacción que provoques te hace robar 1 carta"),
     lambda: _mg_reaction(_mg("mg_remolino", "Remolino", _S, 0, _RA, element=_AIR, stacks=1),
                          draw=2),

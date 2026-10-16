@@ -444,6 +444,80 @@ def enemy_tooltip(enemy: Enemy, hit_damage: int | None = None,
     return content
 
 
+QUICK_MAX_STATUSES: int = 5
+INSPECT_HINT: str = "  Clic derecho (o mantener pulsado): ver todo"
+
+
+def intent_summary(enemy: Enemy, hit_damage: int | None = None) -> str:
+    """One line for what the enemy will do: "[[attack_2]]Escupitajo: 9×2 (18) · +6 de escudo · te aplica Frágil 1"."""
+    it = enemy.intent
+    parts: list[str] = []
+    if it.intent_type == IntentType.ATTACK:
+        dmg = hit_damage if hit_damage is not None else it.value
+        hits = max(1, it.hits)
+        parts.append(f"ataca {dmg}×{hits} ({dmg * hits} de daño)" if hits > 1 else f"ataca {dmg} de daño")
+    elif it.intent_type == IntentType.BLOCK and it.value > 0:
+        parts.append(f"+{it.value} de escudo")
+    elif it.intent_type == IntentType.BUFF and not it.buffs:
+        parts.append("se fortalece")
+    elif it.intent_type == IntentType.DEBUFF and not it.debuffs:
+        parts.append("te debilita")
+    elif it.intent_type == IntentType.UNKNOWN:
+        parts.append("¿?")
+    if it.block > 0:
+        parts.append(f"+{it.block} de escudo")
+    if it.buffs:
+        parts.append("gana " + ", ".join(f"{n} {k}" for n, k in it.buffs))
+    if it.debuffs:
+        parts.append("te aplica " + ", ".join(f"{n} {k}" for n, k in it.debuffs))
+    if it.cards:
+        parts.append("mete " + ", ".join(f"{n} carta(s)" for _, n, _ in it.cards))
+    if it.heal_allies or it.lifesteal:
+        parts.append("se cura")
+    if it.self_destruct:
+        parts.append("¡explota!")
+    head = f"{it.move}: " if it.move else ""
+    return f"[[{intent_icon(it, hit_damage)}]]{head}" + " · ".join(parts or ["actúa"])
+
+
+def _quick_status_lines(effects) -> list[str]:
+    """One short line per status; the element first (it is the big badge), then the rest."""
+    effects = sorted(effects, key=lambda fx: fx.name not in gl.ELEMENT_COLOR)
+    lines = [f"[[{gl.status_icon(fx.name, fx.is_buff)}]]" + gl.status_short(fx.name, fx.stacks)
+             for fx in effects[:QUICK_MAX_STATUSES]]
+    if len(effects) > QUICK_MAX_STATUSES:
+        lines.append(f"  … y {len(effects) - QUICK_MAX_STATUSES} más")
+    return lines
+
+
+def enemy_quick_tooltip(enemy: Enemy, hit_damage: int | None = None,
+                        player: Player | None = None) -> TooltipContent:
+    """Hovering an enemy: the essentials only (Slay the Spire / Hearthstone quick look):
+    HP and block, one line for its intent, one short line per status. No glossary panels —
+    everything else is in the inspect panel (right click / long press)."""
+    hp = f"Vida {enemy.current_hp}/{enemy.max_hp}" + (f"  ·  Escudo {enemy.block}" if enemy.block > 0 else "")
+    lines = [hp, intent_summary(enemy, hit_damage), *_quick_status_lines(enemy.status_effects), INSPECT_HINT]
+    return TooltipContent(
+        title=enemy.name, lines=lines,
+        tag="JEFE" if enemy.is_boss else "ÉLITE" if enemy.is_elite else "",
+        subtitle=("Jefe del piso" if enemy.is_boss else "Élite" if enemy.is_elite else
+                  f"Pareja: {enemy.pair}" if enemy.pair else "Enemigo"),
+    )
+
+
+def player_quick_tooltip(player: Player, incoming: int | None = None) -> TooltipContent:
+    """Hovering the hero: HP, block, incoming damage and one line per status."""
+    lines = [f"Vida {player.current_hp}/{player.max_hp}" + (f"  ·  Escudo {player.block}" if player.block else "")]
+    if incoming:
+        lost = max(0, incoming - player.block)
+        lines.append(f"[[{attack_icon(incoming)}]]Daño entrante: {incoming} → pierdes {lost}")
+        if lost >= player.current_hp > 0:
+            lines.append("[[lethal]]¡Letal! Consigue escudo o mata a quien ataca.")
+    lines += _quick_status_lines(player.status_effects)
+    lines.append(INSPECT_HINT)
+    return TooltipContent(title=player.name, lines=lines, subtitle="Tu héroe")
+
+
 # ---------------------------------------------------------------------------
 # Relics, piles, mana, player
 # ---------------------------------------------------------------------------
@@ -660,13 +734,20 @@ def _render_stack(content: TooltipContent, fonts: FontRegistry, screen_h: int) -
     # Columns: the main panel then as many glossary panels as fit; the rest go in a 2nd column.
     columns: list[list[tuple]] = [[("main", main_h)]]
     col_h = main_h
+    hidden = 0
     for item in panels:
         h = item[3]
         if col_h + _STACK_GAP + h > limit and len(columns) < 2:
             columns.append([])
             col_h = -_STACK_GAP
+        if col_h + _STACK_GAP + h > limit - 30:          # both columns full: never off-screen
+            hidden += 1
+            continue
         columns[-1].append(("panel", item))
         col_h += _STACK_GAP + h
+    if hidden:                                             # "+N más": the rest is in the inspect panel
+        more = TooltipPanel(f"+{hidden} más", ["Clic derecho para verlo todo."], "unknown", (176, 170, 160))
+        columns[-1].append(("panel", (more, *_measure_panel(more, fonts))))
     heights = [sum(_entry_h(e) for e in col) + _STACK_GAP * (len(col) - 1) for col in columns]
     total_w = _MAIN_W * len(columns) + 6 * (len(columns) - 1)
     stack = pygame.Surface((total_w, max(heights)), pygame.SRCALPHA)

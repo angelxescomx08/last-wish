@@ -612,6 +612,10 @@ One test file per source module. All test files follow the same structure:
 | `presentation/scenes/test_gacha_scene.py` | `scenes/gacha_scene.py`, `gacha_assets.py`, `scripts/generate_gacha_sprites.py` | assets, generator contract, phase order, skip, auto-open, keys/buttons, poor/busy refusals, exit, keep/decline (mouse, R, Enter), vortex, thunk, lightning, focus, shockwave, drop path, shakes per tier, screen shake, confetti, every phase drawn per tier, 10 000-step stress |
 | `application/test_mage_elements.py` | `domain/elements.py`, Mage cards, Reacción, element hooks in `play_card`/`end_turn`/`entities` | stacking, one element at a time, each element alone (burn, Agua, Tierra), the six reactions (numbers, block, chains, bosses), powers (Piel de Granito, Ojo del Huracán, Catalizador, Archimago, Corazón Ígneo), Reacción ready/target/layers, every card, golden casts, 10^18 stacks, 300 random plays |
 | `presentation/ui/test_mage_ui.py` | icons, glossary, rich text, card faces, tooltips, ready style, combat labels | icon per element/reaction/keyword, element terms not matched inside names ("Bola de Fuego"), reaction lines in panels, colours, face lines + badges, every Mage card fits its face, "¡VAPOR!" / "¡Congelado!" labels, 100-frame stress |
+| `presentation/ui/test_element_readability.py` | `application/play_preview`, `ui/element_preview`, `fx/reaction_fx`, `ui/element_wheel`, element card art, enemy element badge, `CombatScene` wiring | preview never changes the state or the global RNG (200 random plays), full/compact bubble rows, bubble on screen, reaction show phases/burst/shake/end/10^9 dt, wheel spots/closing/drawing, card art differs per element, chips fit, every size renders, badge first in hitboxes, R key/button, no wheel without elements, aiming preview, hover hints, victory waits for a killing reaction |
+| `application/test_combat_log.py` | `application/combat_log.py` | add/version, cap keeps the newest (10^4 adds), enemy sentences, hero entry (damage, kill, element, reaction, block, nothing), immutable entries |
+| `presentation/ui/test_combat_log_widget.py` | `ui/combat_log_widget.py` + `CombatScene` | newest first, heights, wheel only over the strip, clamp, drag ≠ tap, pin/unpin, arrows, view stays put on new entries, smooth scroll with 10^9 dt, only visible tiles rendered (1000 entries), < 4 ms per 100 frames bound, scene logs plays/enemy turns/turns, hover shows the detail |
+| `presentation/ui/test_quick_and_inspect.py` | `glossary.status_short`, quick tooltips, renderer overflow, `ui/inspect_panel.py`, `CombatScene` inspect wiring | short line per status (stacks, ≤ 48 chars, fallback), quick look capped / element first / no panels / much shorter than full, 40-panel tooltip stays on screen, inspect body/wheel/keys/clamp/drag/closing/smooth scroll/no scroll when short/icons + notes, hover quick look, right click, long press vs short tap, moving cancels, hero + I key, right click with a held card cancels |
 | `test_hero_idle.py` | hero sheet in `sprite_loader.py` + `CombatScene` | sheet slicing, whole-number scaling, planted idle boots, actions ending on idle frame 0, time-based frame selection, attack/guard/hurt triggers |
 
 ### Testing rules
@@ -1329,3 +1333,93 @@ them, plus a keyword; icons so it is easy to understand. Rules and numbers in
   "¡VAPOR!" with its icon over the enemy (`FxLayer.add_text(icon=)`) and "¡Congelado!"
   when a frozen enemy loses its turn; intent breakdown shows "−N Agua" / "Congelado".
 - The Mage starter deck is unchanged (Chispa Arcana, the class card, is in the Acero pool).
+
+### Readable elements (2026-10-16)
+
+User: element cards and the moment effects trigger were hard to read. Four layers now:
+
+1. **Aiming preview** — `application/play_preview.preview_play(state, i, target)` plays the card
+   on a `copy.deepcopy` of the combat (global `random` state restored) → `PlayPreview`
+   (`EnemyPreview`: element before/after, `ReactionEvent`s, HP loss, killed; `reaction_keyword`).
+   `CombatScene._draw_element_preview` draws `ui/element_preview.draw_preview_bubble` under the
+   aimed enemy ("[fuego]3 + [agua]2 = [vapor] ¡VAPOR!" / `elements.reaction_summary` / Reacción
+   layer / "−N de vida"); area cards show compact bubbles under every enemy. Cached by a state
+   signature (`_preview_cache`). While a card is hovered or held, `reacting_enemies` → a ring and
+   the reaction icon by each enemy's element badge (`draw_react_hint`) and a stronger floor glow.
+2. **Card art** — Mage cards without `assets/cards-v2/art/<id>.png` (`card_assets.has_card_art`)
+   get an element backdrop (diagonal bands when several, motif per element) and the element
+   icon(s) big instead of the placeholder, a small type mark, and a chip "[icon] +N" ("todos" on
+   area cards) at the foot of the art window (`card_widget._draw_element_art/_draw_element_chips`).
+   The face text no longer repeats "+N de X"; tooltips still say "Aplica N de X".
+   `CardEffect.element_hint` gives on_play cards (Avivar, Burbuja…) their element art.
+3. **Reaction show** — `fx/reaction_fx.ReactionShow`: the two element icons fly in and clash
+   (`CLASH`), burst in the reaction palette + flash + screen shake (`CombatScene.draw` renders to
+   `_shake_canvas` and blits at `shake_offset()`), then the big icon, "¡VAPOR!" and the result.
+   The first two times a reaction appears in a fight a banner explains it; a killing reaction
+   holds victory (`_hold_time`). `ReactionEvent.first/second` carry the two elements.
+4. **Enemy badge + wheel** — `entity_widget.draw_element_badge`: round badge at the right end of
+   the HP bar (first in `hitboxes["statuses"]`, also `hitboxes["element"]`; status tooltips now
+   read the fx from the hitbox), floor glow in the element colour (`draw_element_floor`).
+   `ui/element_wheel.ElementWheelOverlay`: diamond of the four elements with the six reaction
+   icons on their lines + legend; opened with the "R" button next to the mana orb
+   (`elements_button_rect`) or the R key, only when the fight involves elements.
+
+## Combat history (2026-10-16)
+
+User: a Hearthstone-style history of what you did and what the enemies did, with scroll,
+mindful of phone performance.
+
+- **Data** (`application/combat_log.py`, pure): `CombatLog` (entries oldest first, capped at
+  `MAX_ENTRIES` = 150, `version` bumped on every add), `LogEntry(kind, turn, icon, title, lines,
+  value, value_kind, card)` with kinds `turn` / `hero` / `enemy` / `effect`; `hero_entry(turn,
+  card, result, enemy_names, enemies_after, block_gain, reactions)` builds the text of a play
+  (HP per enemy + "(muere)", block, draws, elements applied, reactions, keywords).
+- **Scene** (`CombatScene`): `combat_log` property; "Turno N" at start and after each enemy
+  phase; `_do_play_card` adds the hero entry; `_log_enemy_turn` adds one entry per enemy
+  action (`describe_action` text, HP lost), frozen enemies, turn-start reactions.
+- **Strip** (`ui/combat_log_widget.CombatLogStrip`, `RECT` on the battlefield's left edge):
+  newest on top, "T3" separators, tile colour = who (gold you / red enemy / blue effect),
+  icon = what, corner number = damage dealt / block / HP lost. Wheel over the strip, drag
+  (touch) or the end arrows scroll it (smooth, clamped; the view stays still while you read
+  old entries). Hover — or tap, which pins until tapped again — shows `entry_tooltip` and,
+  for your plays, the card itself (`_draw_log_detail`). It handles its events first
+  (`handle_event` → True when used), even while a replay is playing.
+- **Performance**: tiles rendered once and cached (pruned with the log), one background blit
+  and one blit per visible tile (≈ 9) inside a clip rect; ~0.1 ms per frame measured.
+- **Who → whom** (user: the history did not show who you attacked; modelled on Hearthstone's
+  history, where hovering shows the source, an arrow and the affected cards with their damage
+  and a skull on deaths): `LogEntry.source / source_name / verb / targets`, `LogTarget(name,
+  portrait, hp, block, healed, died, statuses, reactions, enemy_id, aimed, blocked)`.
+  `hero_entry(..., statuses_before=, target=, hero_name=)` lists every enemy that lost HP, got a
+  status/element or reacted, plus the aimed one; self skills and powers target the hero.
+  `_log_enemy_turn` targets the hero (HP lost, debuffs, "blocked"), allies (ally block/buffs) or
+  itself (block, buffs, heal, explosion). The detail is `combat_log_widget.render_entry_detail`
+  (cached per entry): the card you played (or the enemy's portrait) → arrow with the verb icon →
+  one portrait box per target (damage/block/heal splash, skull + grey when it died, reaction
+  icons, statuses gained, gold rim on the aimed one), then the sentences. Portraits come from
+  `CombatScene._portrait` (idle frame 0 of the enemy sheet cropped, or the static sprite; hero
+  sprite; generic icon otherwise). While shown, the targets still alive get red reticles on the
+  battlefield (the hero a blue one) and an attacking enemy a gold one.
+
+## Quick look and inspect panel (2026-10-16)
+
+User: hovering an enemy with many statuses was overwhelming and the tooltip ran off the
+screen. Card games keep the hover light and put the full text one step away (Slay the Spire:
+one short box per power beside the creature; Hearthstone / Legends of Runeterra: right click
+or hold for a zoomed view; progressive disclosure: show the essentials, the rest on demand).
+
+- **Quick look** (hover an enemy / the hero): `tooltip.enemy_quick_tooltip` /
+  `player_quick_tooltip` — HP + block, one line for the intent (`intent_summary`), one short
+  line per status (`glossary.status_short`, `_STATUS_SHORT`; element first; at most
+  `QUICK_MAX_STATUSES` = 5, then "… y N más"), and the hint "Clic derecho (o mantener
+  pulsado): ver todo". No glossary panels. Drawn beside the enemy / hero rect.
+- **Inspect panel** (`ui/inspect_panel.InspectOverlay`): right click, a long press of
+  `LONG_PRESS` = 0.5 s (phones; moving > 10 px cancels it) or the I key on an enemy or the hero
+  opens the full `enemy_tooltip` / `player_tooltip` (identity, pair, intent in detail, every
+  status with its rule, glossary) with the portrait (`CombatScene._portrait`). Scroll: wheel,
+  drag, ↑/↓/PgUp/PgDn, arrows; scrollbar; close with Esc, right click, click outside, "Cerrar".
+  Content rendered once (`render_content`) into one tall surface; a frame blits the visible
+  slice. Right click with a card held still cancels the card.
+- **Renderer safety**: `_render_stack` never goes past the screen — once both columns are
+  full, the remaining panels become one "+N más · Clic derecho para verlo todo" box.
+- Hovering one status badge or the intent keeps its own precise tooltip.

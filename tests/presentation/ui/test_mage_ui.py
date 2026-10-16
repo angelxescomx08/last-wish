@@ -81,13 +81,9 @@ class TestGlossary:
 
 
 class TestCardFaces:
-    def test_element_line_on_the_face(self):
-        lines = _ability_lines(_card("mg_bola_fuego"), damage=16)
-        assert lines == ["Inflige 16 de daño.", "+3 de Fuego."]
-
-    def test_text_that_names_the_element_is_not_repeated(self):
-        lines = _ability_lines(_card("mg_terremoto"))
-        assert sum("Tierra" in line for line in lines) == 1
+    def test_elements_are_on_the_chip_not_in_the_text(self):
+        assert _ability_lines(_card("mg_bola_fuego"), damage=16) == ["Inflige 16 de daño."]
+        assert not any("Tierra" in line for line in _ability_lines(_card("mg_terremoto")))
 
     def test_keyword_lines(self):
         assert _ability_lines(_card("mg_vapor_hirviente"), damage=4)[-1] == "Reacción: +1 de maná."
@@ -179,14 +175,12 @@ class TestCombat:
         fx.update(0.1)
         fx.draw(pygame.Surface((300, 300)))
 
-    def test_reaction_label_over_the_enemy(self):
+    def test_reaction_show_over_the_enemy(self):
         state, scene = self._scene()
         scene.draw(pygame.Surface((1280, 720)))
         apply_element(state, state.enemies[0], Element.FIRE, 3)
-        before = len(scene._fx._effects)
         scene._do_play_card(0, 0)                       # Gota: Agua → Vapor
-        assert len(scene._fx._effects) > before
-        assert any(getattr(e, "_text", "") == "¡VAPOR!" for e in scene._fx._effects)
+        assert scene._reaction_show.count == 1
 
     def test_frozen_label_at_end_of_turn(self):
         state, scene = self._scene()

@@ -99,10 +99,27 @@ REACTION_RULE: str = ("Si un enemigo con un elemento recibe otro distinto, se co
 
 @dataclass(frozen=True)
 class ReactionEvent:
-    """One reaction that happened (read by the combat screen)."""
+    """One reaction that happened (read by the combat screen).
+
+    ``first`` is the element the enemy held, ``second`` the one that met it.
+    """
     enemy_id: str
     reaction: Reaction
     stacks: int
+    first: Element | None = None
+    second: Element | None = None
+
+
+def reaction_summary(reaction: Reaction, stacks: int) -> str:
+    """What a reaction did, in a few Spanish words: "10 de daño", "+12 de escudo"…"""
+    return {
+        Reaction.STEAM: f"{STEAM_MULT * stacks} de daño",
+        Reaction.MAGMA: f"sin escudo y Vulnerable {MAGMA_VULNERABLE}",
+        Reaction.WILDFIRE: f"{stacks} de Fuego a todos",
+        Reaction.MUD: f"+{MUD_BLOCK_MULT * stacks} de escudo",
+        Reaction.FREEZE: "pierde su próxima acción",
+        Reaction.SANDSTORM: f"Débil {SANDSTORM_WEAK} a todos",
+    }[reaction]
 
 
 def element_of(enemy: Enemy) -> Element | None:
@@ -153,7 +170,7 @@ def apply_element(state, enemy: Enemy, element: Element, stacks: int, *,
         state.catalyst -= 1
         times = 2
     for _ in range(times):
-        _resolve(state, enemy, reaction, total, spread)
+        _resolve(state, enemy, reaction, total, spread, current, element)
     return [reaction]
 
 
@@ -164,7 +181,8 @@ def _targets(state, enemy: Enemy) -> list[Enemy]:
     return [enemy]
 
 
-def _resolve(state, enemy: Enemy, reaction: Reaction, stacks: int, spread: bool) -> None:
+def _resolve(state, enemy: Enemy, reaction: Reaction, stacks: int, spread: bool,
+             first: Element | None = None, second: Element | None = None) -> None:
     if reaction is Reaction.STEAM:
         for e in _targets(state, enemy):
             deal_damage(e, STEAM_MULT * stacks)
@@ -192,7 +210,7 @@ def _resolve(state, enemy: Enemy, reaction: Reaction, stacks: int, spread: bool)
     state.reactions_this_turn = getattr(state, "reactions_this_turn", 0) + 1
     log = getattr(state, "reaction_log", None)
     if log is not None:
-        log.append(ReactionEvent(enemy.id, reaction, stacks))
+        log.append(ReactionEvent(enemy.id, reaction, stacks, first, second))
 
 
 def apply_to_all(state, element: Element, stacks: int) -> list[Reaction]:

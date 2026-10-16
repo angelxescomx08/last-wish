@@ -23,7 +23,7 @@ from src.domain.entities import Enemy, Intent, IntentType, Player, StatusEffect
 from src.infrastructure import colors
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.ui_icons import ui_icon
-from src.presentation.ui.glossary import status_icon
+from src.presentation.ui.glossary import ELEMENT_COLOR, status_icon
 from src.presentation.ui.tooltip import intent_icon
 
 _CORNER: int = 6
@@ -387,12 +387,44 @@ def draw_enemy(
     _draw_hp_bar(surface, hp_rect, enemy.current_hp, enemy.max_hp, fonts, block=enemy.block)
     _draw_block_badge(surface, hp_rect.x, hp_rect.centery, enemy.block, fonts)
 
-    # Status effects
-    statuses = _draw_status_effects(surface, enemy.status_effects, x, rect.bottom + 21, fonts, max(w, 124))
+    # Mage element: a big round badge at the right end of the HP bar (not one status among many)
+    element = next((se for se in enemy.status_effects if se.name in ELEMENT_COLOR and se.stacks > 0), None)
+    others = [se for se in enemy.status_effects if se is not element]
+    statuses = _draw_status_effects(surface, others, x, rect.bottom + 21, fonts, max(w, 124))
+    if element is not None:
+        badge = draw_element_badge(surface, element, (hp_rect.right + 4, hp_rect.centery), fonts, t)
+        statuses = [(element, badge)] + statuses
+        if hitboxes is not None:
+            hitboxes["element"] = badge
     if hitboxes is not None:
         hitboxes["intent"] = intent_rect
         hitboxes["statuses"] = statuses
     return rect
+
+
+ELEMENT_BADGE_R: int = 17
+
+
+def draw_element_badge(surface: pygame.Surface, fx: StatusEffect, center: tuple[int, int],
+                       fonts: FontRegistry, t: float = 0.0) -> pygame.Rect:
+    """The element an enemy holds: dark disc, rim in the element colour (gently pulsing),
+    its icon and the stacks. Returns the badge rect (hover → the element's tooltip)."""
+    ink = ELEMENT_COLOR[fx.name]
+    r = ELEMENT_BADGE_R
+    cx, cy = center
+    pulse = 0.5 + 0.5 * math.sin(t * 3.2)
+    glow = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
+    for k in range(6, 0, -1):
+        pygame.draw.circle(glow, (*ink, int((10 + 8 * pulse) * k / 6)), (r * 2, r * 2), r + k * 2)
+    surface.blit(glow, (cx - r * 2, cy - r * 2))
+    pygame.draw.circle(surface, (16, 12, 20), (cx, cy), r)
+    pygame.draw.circle(surface, ink, (cx, cy), r, 2)
+    icon = ui_icon(status_icon(fx.name), 2)
+    if icon is not None:
+        surface.blit(icon, icon.get_rect(center=(cx, cy - 1)))
+    stacks = _outlined(fonts.get(16), str(fx.stacks), ink)
+    surface.blit(stacks, stacks.get_rect(midleft=(cx + r - 6, cy + r - 6)))
+    return pygame.Rect(cx - r, cy - r, r * 2, r * 2)
 
 
 # ---------------------------------------------------------------------------

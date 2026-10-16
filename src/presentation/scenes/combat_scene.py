@@ -16,8 +16,18 @@ from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
 from src.application.card_preview import combat_card_bonus
 from src.application.enemy_ai import intent_hit_damage
-from src.domain.elements import is_frozen
+from src.application.combat_log import HERO, CombatLog, LogTarget, hero_entry
+from src.application.play_preview import preview_play, reacting_enemies
+from src.presentation.ui.combat_log_widget import CombatLogStrip, render_entry_detail
+from src.infrastructure.enemy_sprites import sheet_for_enemy as _sheet_for_name
+from src.domain.elements import REACTION_TEXT, element_of, is_frozen, reaction_summary
 from src.domain.entities import BLADES, IntentType, status_stacks
+from src.domain.keywords import reaction_text
+from src.presentation.fx.reaction_fx import CLASH, ReactionShow
+from src.presentation.ui.element_preview import (draw_element_floor, draw_preview_bubble, draw_react_hint,
+                                                 element_ink, preview_rows)
+from src.presentation.ui.element_wheel import ElementWheelOverlay
+from src.presentation.ui.inspect_panel import InspectOverlay
 from src.presentation.ui.glossary import ICE_INK, REACTION_COLOR, REACTION_ICON
 from src.infrastructure.enemy_sprites import sheet_for_enemy
 from src.infrastructure import colors
@@ -65,8 +75,10 @@ from src.presentation.ui.tooltip import (
     TooltipContent,
     card_tooltip,
     draw_tooltip,
+    enemy_quick_tooltip,
     enemy_tooltip,
     intent_tooltip,
+    player_quick_tooltip,
     mana_tooltip,
     pile_tooltip,
     status_tooltip,
@@ -124,6 +136,7 @@ _HEAL_TEXT = (120, 236, 120)
 _VENGEANCE_TEXT = (255, 90, 70)
 _VENGEANCE_DELAY = 1.0          # after the blow (or blast) that killed the partner
 _DEBUFF_TEXT = (220, 120, 240)
+LONG_PRESS = 0.5               # s held on an enemy / the hero (phones) to open the inspect panel
 _REACTION_DELAY = 0.35         # attack: the reaction label waits for the blade to connect
 
 _TARGETING_COLOR: pygame.Color = pygame.Color(255, 190, 50)
@@ -337,6 +350,20 @@ class CombatScene:
         self._feedback_time = 0.0
         self._banners = ActionBanners()
         self._announce_pair()
+        # Mage elements: reaction shows, the explanation banner (first times), aiming preview,
+        # and the "Elementos" button (wheel of reactions, key R).
+        self._reaction_show = ReactionShow(self._bursts, seed=17)
+        self._reactions_explained: dict = {}
+        self._preview_cache: tuple | None = None
+        self._react_hints: dict[int, object] = {}
+        self.elements_button_rect = pygame.Rect(118, 618, 46, 36)
+        self._shake_canvas: pygame.Surface | None = None
+        self._long_press: list | None = None      # [pos, ("enemy", i) | ("hero",), seconds held]
+        # Combat history (Hearthstone style): left edge of the battlefield, scrollable.
+        self._log = CombatLog()
+        self._log.turn(state.turn)
+        self._log_strip = CombatLogStrip()
+        self._log_strip.sync(self._log)
 
     # ------------------------------------------------------------------
     # Protocol
@@ -346,11 +373,18 @@ class CombatScene:
         if self._overlay is not None:
             self._overlay.handle_event(event)
             return
+        if self._log_strip.handle_event(event):      # history: scroll, drag, tap a tile
+            if event.type == pygame.MOUSEMOTION:
+                self._mouse = event.pos
+            return
         if self.presentation_busy and event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
             return      # a multi-cast replay is playing: wait for it
 
         if event.type == pygame.MOUSEMOTION:
             self._mouse = event.pos
+            lp = self._long_press
+            if lp is not None and abs(event.pos[0] - lp[0][0]) + abs(event.pos[1] - lp[0][1]) > 10:
+                self._long_press = None
             self._play.move(event.pos, self._enemy_at(event.pos))
             if self._play.active:
                 self._clear_hover()
@@ -358,12 +392,20 @@ class CombatScene:
                 self._update_hover(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._mouse_down = True
+            if not self._play.active:                 # a long press on someone opens the inspect panel
+                who = self._inspectable_at(event.pos)
+                self._long_press = [event.pos, who, 0.0] if who is not None else None
             self._handle_click(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             self._mouse_down = False
+            self._long_press = None
             self._handle_release(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-            self._cancel_selection()
+            who = None if self._play.active else self._inspectable_at(event.pos)
+            if who is not None:
+                self.open_inspect(who)
+            else:
+                self._cancel_selection()
         elif event.type == pygame.KEYDOWN:
             self._handle_key(event.key)
 
@@ -401,16 +443,39 @@ class CombatScene:
         self._bursts.update(dt)
         self._hold_time = max(0.0, self._hold_time - max(0.0, dt))
         self._advance_sequence(max(0.0, dt))
+        self._reaction_show.update(dt)
+        if self._long_press is not None and self._overlay is None:
+            self._long_press[2] += max(0.0, dt)
+            if self._long_press[2] >= LONG_PRESS:
+                who, self._long_press = self._long_press[1], None
+                self.open_inspect(who)
+        self._log_strip.sync(self._log)
+        self._log_strip.update(dt)
+        if self._overlay is not None and hasattr(self._overlay, "update"):
+            self._overlay.update(dt)
 
     def draw(self, surface: pygame.Surface) -> None:
+        dx, dy = self._reaction_show.shake_offset()
+        if not (dx or dy):
+            self._draw_frame(surface)
+            return
+        if self._shake_canvas is None or self._shake_canvas.get_size() != surface.get_size():
+            self._shake_canvas = pygame.Surface(surface.get_size())
+        self._draw_frame(self._shake_canvas)          # a reaction hit: the screen shakes a little
+        surface.fill((0, 0, 0))
+        surface.blit(self._shake_canvas, (dx, dy))
+
+    def _draw_frame(self, surface: pygame.Surface) -> None:
         self._backdrop.draw(surface)
         self._draw_top_bar(surface)
         self._draw_battlefield(surface)
+        self._log_strip.draw(surface, self._fonts, self._fx_time)
         self._draw_hand_area(surface)
 
         self._draw_leaving(surface)
         self._draw_cast_stage(surface)
         self._bursts.draw(surface)
+        self._reaction_show.draw(surface, self._fonts)
         self._banners.draw(surface, self._fonts)
         self._fx.draw(surface)
         if self._feedback_time > 0:
@@ -418,18 +483,26 @@ class CombatScene:
             surface.blit(message, message.get_rect(center=(640, _HAND_AREA_Y - 48)))
 
         self._draw_targets(surface)
+        self._draw_element_preview(surface)
         self._draw_held_card(surface)
         if self._play.active:
             self._draw_targeting_hint(surface)
 
         if self._overlay is not None:
             self._overlay.draw(surface)
+        elif not self._play.active and self._draw_log_detail(surface):
+            pass
         elif not self._play.active:
             tooltip = self._get_tooltip()
             if tooltip is not None:
                 hovered = self._hovered_card
                 beside = (self._card_rects[hovered]
                           if hovered is not None and hovered < len(self._card_rects) else None)
+                if beside is None and self._hovered_detail is None:      # next to who it describes
+                    if self._hovered_enemy is not None and self._hovered_enemy < len(self._enemy_rects):
+                        beside = self._enemy_rects[self._hovered_enemy]
+                    elif self._hovered_player and self._player_rect is not None:
+                        beside = self._player_rect
                 draw_tooltip(surface, tooltip, self._mouse, self._fonts, beside=beside)
 
     # ------------------------------------------------------------------
@@ -552,11 +625,13 @@ class CombatScene:
         for anim, slot in self._gone:                     # left the fight, still exploding/dying
             gx, gy = _ENEMY_SLOTS[min(slot, len(_ENEMY_SLOTS) - 1)]
             anim.draw(surface, (gx + ENEMY_W // 2, gy + ENEMY_H + 6))
+        self._react_hints = self._reaction_targets()
         for i, enemy in enumerate(self._state.enemies):
             slot = self._slot_of.get(enemy.id, i)
             if slot >= len(_ENEMY_SLOTS):
                 break
             ex, ey = _ENEMY_SLOTS[slot]
+            self._draw_enemy_floor(surface, i, enemy, ex, ey)
             shown = self._shown_enemies
             saved = None
             if shown is not None and i < len(shown):      # replay: show HP/block cast by cast
@@ -594,6 +669,9 @@ class CombatScene:
                     enemy.current_hp, enemy.block = saved
             self._enemy_rects.append(rect)
             self._enemy_hitboxes.append(boxes)
+            hint = self._react_hints.get(i)
+            if hint is not None and boxes.get("element") is not None and enemy.is_alive:
+                draw_react_hint(surface, boxes["element"], hint, self._fx_time)
 
         real_block = self._state.player.block
         if self._shown_player_block is not None:
@@ -705,6 +783,10 @@ class CombatScene:
             _DISCARD_X, _DISCARD_Y, self._fonts, hovered=self._hovered_disc_pile,
         )
 
+        if self._elements_relevant():
+            er = self.elements_button_rect
+            draw_button(surface, er, "", self._fonts, icon="reaction", key="R",
+                        state=button_state(er, self._mouse, self._mouse_down), t=self._idle_time, size=14)
         hc = self._hand_collection_rect
         draw_button(surface, hc, f"Mano {self._state.hand.count - waiting}/{self._state.hand.max_size}", self._fonts,
                     icon="hand_cards", state=button_state(hc, self._mouse, self._mouse_down),
@@ -986,8 +1068,8 @@ class CombatScene:
                                 reaction_active=self._state.reaction_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
-            enemy = self._state.enemies[self._hovered_enemy]
-            return enemy_tooltip(enemy, intent_hit_damage(enemy, self._state.player), self._state.player)
+            enemy = self._state.enemies[self._hovered_enemy]      # quick look; everything: inspect
+            return enemy_quick_tooltip(enemy, intent_hit_damage(enemy, self._state.player), self._state.player)
 
         if self._hovered_relic is not None and self._hovered_relic < len(self._state.relics):
             return relic_tooltip(self._state.relics[self._hovered_relic])
@@ -1000,7 +1082,7 @@ class CombatScene:
                 'y a las cartas disponibles en robo y descarte.',
             ])
         if self._hovered_player:
-            return player_tooltip(self._state.player, self._incoming_damage())
+            return player_quick_tooltip(self._state.player, self._incoming_damage())
 
         if self._hovered_mana:
             return mana_tooltip(self._state.mana)
@@ -1025,10 +1107,13 @@ class CombatScene:
                 return intent_tooltip(enemy, intent_hit_damage(enemy, player), player)
         if d[0] == "status":
             owner, j = d[1], d[2]
-            effects = (player.status_effects if owner == "player"
-                       else self._state.enemies[owner].status_effects if owner < len(self._state.enemies) else [])
+            if owner != "player":            # badges may be reordered (the element comes first)
+                boxes = self._enemy_hitboxes[owner] if owner < len(self._enemy_hitboxes) else {}
+                shown = boxes.get("statuses", [])
+                return status_tooltip(shown[j][0]) if j < len(shown) else None
+            effects = player.status_effects
             if j < len(effects):
-                return status_tooltip(effects[j], on_player=owner == "player")
+                return status_tooltip(effects[j], on_player=True)
         return None
 
     def _detail_at(self, pos: tuple[int, int]) -> tuple | None:
@@ -1114,6 +1199,9 @@ class CombatScene:
     # ------------------------------------------------------------------
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self._elements_relevant() and self.elements_button_rect.collidepoint(pos):
+            self.open_element_wheel()
+            return
         if self._relic_collection_rect.collidepoint(pos) or any(r.collidepoint(pos) for r in self._relic_rects):
             self._overlay = RelicViewer(self._state.relics, self._fonts)
             self._sound.play_confirm()
@@ -1178,6 +1266,10 @@ class CombatScene:
                 self._finish(self._play.confirm())
         elif key == pygame.K_e and self._enemy_phase <= 0:
             self._do_end_turn()
+        elif key == pygame.K_i and not self._play.active and self._inspectable_at(self._mouse) is not None:
+            self.open_inspect(self._inspectable_at(self._mouse))
+        elif key == pygame.K_r and self._elements_relevant():
+            self.open_element_wheel()
 
     def _pick_card(self, index: int, pos: tuple[int, int] | None) -> None:
         """Pick up a card with the mouse (``pos``) or with its number key."""
@@ -1225,6 +1317,7 @@ class CombatScene:
         state         = self._state
         old_enemy_hps = [e.current_hp for e in state.enemies]
         old_enemy_blk = [e.block for e in state.enemies]
+        old_status    = [{se.name: se.stacks for se in e.status_effects} for e in state.enemies]
         old_block     = state.player.block
         is_attack     = (0 <= card_idx < state.hand.count
                          and self._ready_damage(state.hand.cards[card_idx]) > 0)
@@ -1261,6 +1354,11 @@ class CombatScene:
                                   label, color, lifetime=1.1)
                 shown += 1
         self._announce_reactions(_REACTION_DELAY if is_attack else 0.1)
+        if played is not None:
+            self._log.add(hero_entry(state.turn, played, result, [e.name for e in state.enemies],
+                                     state.enemies, block_gained, list(state.reaction_log),
+                                     statuses_before=old_status, target=target_idx,
+                                     hero_name=state.player.name))
 
         if result.casts > 1 and played is not None:
             # Golden: replay every cast on screen, one after another.
@@ -1416,7 +1514,8 @@ class CombatScene:
             self._idle_time = 0.0
 
     def _announce_reactions(self, delay: float = 0.0) -> None:
-        """"¡VAPOR!" with its icon over every enemy that just suffered an elemental reaction."""
+        """Every reaction just caused plays its show at the enemy (clash → burst → "¡VAPOR!"),
+        and the first two times each reaction appears in a fight a banner explains the rule."""
         per_enemy: dict[str, int] = {}
         for ev in self._state.reaction_log:
             i = next((k for k, e in enumerate(self._state.enemies) if e.id == ev.enemy_id), None)
@@ -1425,9 +1524,225 @@ class CombatScene:
             n = per_enemy.get(ev.enemy_id, 0)
             per_enemy[ev.enemy_id] = n + 1
             rect = self._enemy_rects[i]
-            label = f"¡{ev.reaction.value.upper()}!"
-            self._fx.add_text(rect.centerx, rect.centery - 26 * n, label, REACTION_COLOR[ev.reaction],
-                              1.5, delay=delay + 0.18 * n, icon=ui_icon(REACTION_ICON[ev.reaction]))
+            at = delay + 0.55 * n
+            self._reaction_show.add((rect.centerx, rect.centery - 10), ev.reaction, ev.first, ev.second,
+                                    reaction_summary(ev.reaction, ev.stacks), delay=at)
+            seen = self._reactions_explained.get(ev.reaction, 0)
+            if seen < 2:
+                self._reactions_explained[ev.reaction] = seen + 1
+                rule = REACTION_TEXT[ev.reaction].split(": ", 1)
+                self._banners.add(REACTION_ICON[ev.reaction], f"{ev.reaction.value}: {rule[0]}",
+                                  rule[-1][0].upper() + rule[-1][1:], delay=at + CLASH)
+            if not self._state.enemies[i].is_alive:          # killed by it: let the show be seen
+                self._hold_time = max(self._hold_time, at + CLASH + 0.7)
+
+    # --- Inspect panel (right click / long press / I) ---------------------------------------------
+
+    def _inspectable_at(self, pos) -> tuple | None:
+        i = self._enemy_at(pos)
+        if i is not None:
+            return ("enemy", i)
+        if self._player_rect is not None and self._player_rect.collidepoint(pos):
+            return ("hero",)
+        return None
+
+    def open_inspect(self, who: tuple) -> None:
+        """Everything about an enemy or the hero, in a scrollable panel."""
+        player = self._state.player
+        if who[0] == "enemy" and who[1] < len(self._state.enemies):
+            enemy = self._state.enemies[who[1]]
+            content = enemy_tooltip(enemy, intent_hit_damage(enemy, player), player)
+            portrait = self._portrait(enemy.name)
+        elif who[0] == "hero":
+            content = player_tooltip(player, self._incoming_damage())
+            portrait = self._portrait(HERO)
+        else:
+            return
+        self._play.cancel()
+        self._clear_hover()
+        self._overlay = InspectOverlay(content, self._fonts, portrait)
+        self._sound.play_confirm()
+
+    # --- Combat history -----------------------------------------------------------------------
+
+    @property
+    def combat_log(self) -> CombatLog:
+        return self._log
+
+    def _portrait(self, key: str):
+        """Small picture of a character for the history detail (cached): the hero or an enemy by name."""
+        cache = self.__dict__.setdefault("_portraits", {})
+        if key in cache:
+            return cache[key]
+        image = None
+        if key == HERO:
+            image = self._sprites.get_player_sprite(self._state.player.name, size=96)
+        else:
+            sheet = _sheet_for_name(key)
+            if sheet is not None:
+                frame = sheet.frame("idle", 0.0)
+                box = frame.get_bounding_rect()
+                if box.w and box.h:
+                    image = frame.subsurface(box).copy()
+            if image is None:
+                image = self._sprites.get_enemy_sprite(key, 64)
+        cache[key] = image
+        return image
+
+    def _card_face(self, card):
+        w, h = card_size(0.7)
+        return render_card_surface(card, self._fonts, w=w, h=h)
+
+    def _draw_log_detail(self, surface: pygame.Surface) -> bool:
+        """Hovered / pinned history tile: who did what to whom (Hearthstone style), and the
+        characters involved marked on the battlefield."""
+        entry = self._log_strip.shown_entry()
+        if entry is None:
+            return False
+        t = self._fx_time
+        for target in entry.targets:                    # point at them on the board
+            if target.portrait == HERO:
+                if self._player_rect is not None:
+                    draw_reticle(surface, self._player_rect, RETICLE_SELF, t)
+                continue
+            i = next((k for k, e in enumerate(self._state.enemies)
+                      if e.id == target.enemy_id and e.is_alive), None)
+            if i is not None and i < len(self._enemy_rects):
+                draw_reticle(surface, self._enemy_rects[i], (255, 90, 70), t)
+        if entry.kind == "enemy":                       # the attacker, in gold
+            i = next((k for k, e in enumerate(self._state.enemies)
+                      if e.name == entry.source and e.is_alive), None)
+            if i is not None and i < len(self._enemy_rects):
+                draw_reticle(surface, self._enemy_rects[i], RETICLE_ENEMY, t)
+        panel = render_entry_detail(entry, self._fonts, self._portrait, self._card_face)
+        tile = self._log_strip.tile_rect(entry) or self._log_strip.rect
+        x = self._log_strip.rect.right + 8
+        y = max(_TOP_BAR_H + 4, min(surface.get_height() - panel.get_height() - 4,
+                                    tile.centery - panel.get_height() // 2))
+        surface.blit(panel, (x, y))
+        return True
+
+    def _log_enemy_turn(self, turn: int, intents: dict, names: dict, frozen: set, before=()) -> None:
+        hero = self._state.player.name
+        for action in self._state.enemy_log:
+            intent = intents.get(action.index)
+            if intent is None:
+                continue
+            name = names.get(action.index, "")
+            icon, title, detail = describe_action(name, intent, action)
+            actor = before[action.index] if action.index < len(before) else None
+            targets: list[LogTarget] = []
+            if action.hits or action.debuffs or action.cards:
+                targets.append(LogTarget(hero, HERO, hp=sum(action.hits), statuses=tuple(action.debuffs),
+                                         blocked=bool(action.hits) and sum(action.hits) == 0))
+            allies = [e for e in before if e is not actor and e.current_hp > 0] if before else []
+            if intent.ally_block > 0 or intent.ally_buffs:
+                for ally in allies:
+                    targets.append(LogTarget(ally.name, ally.name, block=intent.ally_block,
+                                             statuses=tuple(intent.ally_buffs), enemy_id=ally.id))
+            own_block = intent.block + (intent.value if intent.intent_type == IntentType.BLOCK else 0)
+            if actor is not None and (own_block > 0 or intent.buffs or action.healed or action.exploded) \
+                    and not any(t.enemy_id == actor.id for t in targets):
+                targets.append(LogTarget(name, name, block=own_block, healed=action.healed,
+                                         statuses=tuple(intent.buffs), died=action.exploded, enemy_id=actor.id))
+            self._log.enemy(turn, icon, title, detail, sum(action.hits), source=name, targets=tuple(targets))
+        for i in sorted(frozen):
+            e = before[i] if i < len(before) else None
+            self._log.effect(turn, "frozen", f"{names.get(i, '')} está Congelado", "Pierde su turno.",
+                             targets=(LogTarget(e.name, e.name, enemy_id=e.id),) if e is not None else ())
+        if self._state.reaction_log:                   # turn start (Corazón Ígneo…)
+            by_id = {e.id: e for e in self._state.enemies}
+            for ev in self._state.reaction_log:
+                e = by_id.get(ev.enemy_id)
+                self._log.effect(self._state.turn, REACTION_ICON[ev.reaction], f"¡{ev.reaction.value}!",
+                                 f"En {e.name if e else ''}: {reaction_summary(ev.reaction, ev.stacks)}.",
+                                 targets=(LogTarget(e.name, e.name, reactions=(ev.reaction.value,),
+                                                    enemy_id=e.id, died=not e.is_alive),) if e else ())
+        self._log.turn(self._state.turn)
+
+    # --- Mage elements -------------------------------------------------------------------------
+
+    def _elements_relevant(self) -> bool:
+        """The fight involves elements: an element card anywhere in your piles, or an enemy holds one."""
+        s = self._state
+        piles = (s.hand.cards, s.draw_pile.cards, s.discard_pile.cards, s.active_powers, s.exhausted)
+        return (any(c.element_badges() for pile in piles for c in pile)
+                or any(element_of(e) is not None for e in s.enemies))
+
+    def open_element_wheel(self) -> None:
+        self._play.cancel()
+        self._state.selected_card_index = None
+        self._overlay = ElementWheelOverlay(self._fonts)
+        self._sound.play_confirm()
+
+    def _considered_card(self):
+        """The card the player is looking at: held, or hovered in hand."""
+        held = self._held_index()
+        idx = held if held is not None else self._hovered_card
+        if idx is None or not (0 <= idx < self._state.hand.count):
+            return None, None
+        return idx, self._state.hand.cards[idx]
+
+    def _reaction_targets(self) -> dict:
+        """Enemy index → reaction the considered card would cause on it (hint while hovering)."""
+        _, card = self._considered_card()
+        if card is None or not card.element_badges():
+            return {}
+        return reacting_enemies(self._state, card)
+
+    def _draw_enemy_floor(self, surface: pygame.Surface, i: int, enemy, ex: int, ey: int) -> None:
+        el = element_of(enemy) if enemy.is_alive else None
+        hint = self._react_hints.get(i)
+        if el is None and hint is None:
+            return
+        anim = self._enemy_anims.get(i)
+        if anim is not None and anim.sheet.is_boss:
+            feet, width = (_BOSS_CX, _BOSS_GROUND), 220
+        else:
+            feet, width = (ex + ENEMY_W // 2, ey + ENEMY_H + (6 if anim is not None else 0)), 150
+        color = REACTION_COLOR[hint] if hint is not None else element_ink(el)
+        draw_element_floor(surface, feet, color, self._fx_time, width, strong=hint is not None)
+
+    def _element_preview(self, index: int, target: int | None):
+        s = self._state
+        sig = (index, target, id(s.hand.cards[index]), s.mana.current, s.cards_played_this_turn, s.turn,
+               tuple((e.current_hp, e.block, tuple((x.name, x.stacks) for x in e.status_effects))
+                     for e in s.enemies))
+        if self._preview_cache is None or self._preview_cache[0] != sig:
+            self._preview_cache = (sig, preview_play(s, index, target))
+        return self._preview_cache[1]
+
+    def _draw_element_preview(self, surface: pygame.Surface) -> None:
+        """While aiming a Mage card: what it will do to the target(s), under each enemy."""
+        play = self._play
+        if not play.active:
+            return
+        index, card = self._considered_card()
+        if card is None or not card.element_badges():
+            return
+        if play.kind is TargetKind.ENEMY and play.aiming and play.target is not None:
+            targets, chosen = [play.target], play.target
+        elif play.kind is TargetKind.ALL_ENEMIES and play.armed:
+            targets, chosen = list(range(len(self._state.enemies))), None
+        else:
+            return
+        preview = self._element_preview(index, chosen)
+        if preview is None:
+            return
+        keyword = reaction_text(card) if preview.reaction_keyword else ""
+        for i in targets:
+            if i >= len(preview.enemies) or i >= len(self._enemy_rects):
+                continue
+            ep = preview.enemies[i]
+            rows = preview_rows(ep, keyword, compact=False) if chosen is not None \
+                else preview_rows(ep, compact=True)
+            if not rows:
+                continue
+            rect = self._enemy_rects[i]
+            accent = (REACTION_COLOR[ep.reactions[0].reaction] if ep.reactions
+                      else element_ink(ep.after[0]) if ep.after else (200, 190, 220))
+            draw_preview_bubble(surface, (rect.centerx, rect.bottom + 46), rows, self._fonts, accent,
+                                self._fx_time, bottom_limit=_HAND_AREA_Y - 4)
 
     def _announce_actions(self, log, intents: dict, names: dict) -> None:
         """One banner per enemy that acted: its move and what it did to the hero."""
@@ -1535,6 +1850,7 @@ class CombatScene:
                 self._fx.add_text(rect.centerx, rect.centery, "¡Congelado!", ICE_INK, 1.4,
                                   delay=0.3, icon=ui_icon("frozen"))
         self._announce_reactions(1.4)         # reactions at the start of your turn (Corazón Ígneo)
+        self._log_enemy_turn(state.turn - 1, intents, names, frozen, before)
         self._motion.clear()                  # every card of the new hand is dealt in
         self._deals.clear()
         self._deal_plan = [_DRAW_AFTER_ENEMY_TURN + j * DEAL_STAGGER for j in range(state.hand.count)]

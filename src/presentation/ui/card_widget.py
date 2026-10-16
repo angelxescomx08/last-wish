@@ -22,11 +22,10 @@ import pygame
 
 from src.domain.card import Card, CardRarity, CardType
 from src.domain.chroma import chroma_def
-from src.domain.elements import element_line
 from src.domain.keywords import combo_text, reaction_text, singular_text, spoil_text, void_text
 from src.domain.numbers import BigValue
 from src.infrastructure import colors
-from src.infrastructure.card_assets import card_frame, card_illustration, card_layout
+from src.infrastructure.card_assets import card_frame, card_illustration, card_layout, has_card_art
 from src.infrastructure.fonts import FontRegistry
 from src.infrastructure.ui_icons import ui_icon
 from src.presentation.fx import card_fx, chroma_fx
@@ -126,9 +125,6 @@ def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = Fa
         lines.append(f"Roba {draw} carta{'s' if draw > 1 else ''}.")
     if mana > 0:
         lines.append(f"+{mana} de maná.")
-    for fx in card.all_effects():          # Mage elements: "+2 de Fuego." (unless its text says it)
-        if fx.element is not None and fx.element_stacks > 0 and f"de {fx.element.value}" not in fx.text:
-            lines.append(element_line(fx) + ".")
     for fx in card.all_effects():          # on_play effects described in words
         if fx.text:
             lines.append(fx.text[0].upper() + fx.text[1:] + ("" if fx.text.endswith(".") else "."))
@@ -148,22 +144,131 @@ def _ability_lines(card: Card, damage: int = 0, block: int = 0, combo: bool = Fa
 
 
 _ELEMENT_ICON = {"Fuego": "fire", "Agua": "water", "Tierra": "earth", "Aire": "air"}
+# Art-window backdrop per element: (dark, mid, motif colour).
+_ELEMENT_BACKDROP = {
+    "Fuego": ((70, 16, 12), (150, 44, 22), (250, 150, 60)),
+    "Agua": ((12, 30, 72), (32, 82, 152), (120, 190, 250)),
+    "Tierra": ((42, 28, 16), (98, 68, 38), (40, 24, 14)),
+    "Aire": ((24, 52, 62), (62, 122, 134), (190, 240, 245)),
+}
+_TYPE_ICON = {CardType.ATTACK: "damage", CardType.SKILL: "block", CardType.POWER: "ritual"}
+_element_art_cache: dict = {}
 
 
-def _draw_element_badges(surf: pygame.Surface, card: Card, art_rect: pygame.Rect, h: int) -> None:
-    """Mage cards: the icon of every element the card uses, in the art window's top-right corner."""
-    elements = card.element_badges()
-    if not elements:
+def _element_backdrop(names: tuple[str, ...], size: tuple[int, int]) -> pygame.Surface:
+    """Banded gradient in the element's colours (diagonal bands when several) + its motif
+    (embers, waves, pebbles, gusts). Pixel art, cached."""
+    key = ("bg", names, size)
+    cached = _element_art_cache.get(key)
+    if cached is not None:
+        return cached
+    w, h = size
+    surf = pygame.Surface(size)
+    n = len(names)
+    bands = 6
+    for y in range(h):
+        band = min(bands - 1, y * bands // max(1, h))
+        k = 1 - abs(band / (bands - 1) - 0.5) * 1.4
+        for part in range(n):
+            dark, mid, _ = _ELEMENT_BACKDROP[names[part]]
+            col = tuple(round(d + (m - d) * k) for d, m in zip(dark, mid))
+            # diagonal split: element ``part`` covers x where (x/w + y/h)/2 falls in its slice
+            x0 = max(0, round((2 * part / n - y / max(1, h)) * w))
+            x1 = min(w, round((2 * (part + 1) / n - y / max(1, h)) * w)) if part < n - 1 else w
+            if x1 > x0:
+                surf.fill(col, (x0, y, x1 - x0, 1))
+    import random as _random
+    for part, name in enumerate(names):
+        rng = _random.Random(17 + part)
+        motif = _ELEMENT_BACKDROP[name][2]
+        for _ in range(max(8, w * h // 260 // n)):
+            x, y = rng.randrange(w), rng.randrange(h)
+            if int((x / w + y / h) / 2 * n) != part and n > 1:
+                continue
+            if name == "Fuego":
+                surf.fill(motif, (x, y, 2, 2))
+            elif name == "Agua":
+                for d in range(7):
+                    surf.fill(motif, (x + d, y + (1 if d in (2, 3) else 0), 1, 1))
+            elif name == "Tierra":
+                surf.fill(motif, (x, y, 3, 2))
+            else:
+                surf.fill(motif, (x, y, 9, 1))
+    _element_art_cache[key] = surf
+    return surf
+
+
+def _element_icons(names: tuple[str, ...], art: pygame.Rect, surf: pygame.Surface) -> None:
+    """The card's element(s) drawn big in the art window (instead of the generic sword)."""
+    big = max(1, art.h // 22)
+    cx, cy = art.centerx, art.y + round(art.h * 0.36)     # above the chip at the window's foot
+    if len(names) == 1:
+        icon = ui_icon(_ELEMENT_ICON[names[0]], big)
+        if icon is not None:
+            surf.blit(icon, icon.get_rect(center=(cx, cy)))
         return
-    scale = 2 if h >= 150 else 1
-    x = art_rect.right - 6
-    for el in reversed(elements):
-        icon = ui_icon(_ELEMENT_ICON[el.value], scale)
-        if icon is None:
-            continue
-        x -= icon.get_width()
-        surf.blit(icon, (x, art_rect.top + 6))
-        x -= 1
+    if len(names) == 2:
+        main = ui_icon(_ELEMENT_ICON[names[0]], big)
+        side = ui_icon(_ELEMENT_ICON[names[1]], max(1, big - 1))
+        if main is not None:
+            surf.blit(main, main.get_rect(center=(cx - art.w // 8, cy)))
+        if side is not None:
+            surf.blit(side, side.get_rect(center=(cx + art.w // 4, cy - art.h // 8)))
+        return
+    small = max(1, big - 1)
+    icons = [ui_icon(_ELEMENT_ICON[n], small) for n in names]
+    step = art.w // (len(icons) + 1)
+    for k, icon in enumerate(icons):
+        if icon is not None:
+            surf.blit(icon, icon.get_rect(center=(art.x + step * (k + 1), cy + (6 if k % 2 else -6))))
+
+
+def _element_chip(fx, scale: int, fonts) -> pygame.Surface:
+    """"[icon] +3" (and "todos" for area cards): what the card leaves on the enemy."""
+    from src.presentation.ui.glossary import ELEMENT_COLOR
+    ink = ELEMENT_COLOR[fx.element.value]
+    icon = ui_icon(_ELEMENT_ICON[fx.element.value], scale)
+    num = _outlined(fonts.get(16 if scale >= 2 else 8), f"+{fx.element_stacks}", ink)
+    extra = _outlined(fonts.get(8), "todos", ink) if fx.element_all and scale >= 2 else None
+    iw = icon.get_width() if icon is not None else 0
+    w = iw + num.get_width() + (extra.get_width() + 2 if extra else 0) + 8
+    h = max(iw, num.get_height()) + 4
+    chip = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(chip, (14, 10, 18, 235), chip.get_rect(), border_radius=6)
+    pygame.draw.rect(chip, ink, chip.get_rect(), 2, border_radius=6)
+    x = 3
+    if icon is not None:
+        chip.blit(icon, (x, (h - icon.get_height()) // 2))
+        x += iw + 1
+    chip.blit(num, (x, (h - num.get_height()) // 2))
+    x += num.get_width() + 2
+    if extra is not None:
+        chip.blit(extra, (x, (h - extra.get_height()) // 2 + 1))
+    return chip
+
+
+def _draw_element_art(surf: pygame.Surface, card: Card, art_rect: pygame.Rect, *, own_art: bool) -> None:
+    """Mage cards: element backdrop + big element icon (unless the card has real art)."""
+    names = tuple(el.value for el in card.element_badges())
+    if not names or own_art:
+        return
+    surf.blit(_element_backdrop(names, art_rect.size), art_rect.topleft)
+    _element_icons(names, art_rect, surf)
+    kind = ui_icon(_TYPE_ICON.get(card.card_type, "ritual"), 1)   # small type mark (attack / skill / power)
+    if kind is not None:
+        surf.blit(kind, (art_rect.x + 5, art_rect.y + 5))
+
+
+def _draw_element_chips(surf: pygame.Surface, card: Card, art_rect: pygame.Rect, fonts) -> None:
+    chips = [_element_chip(fx, 2 if art_rect.h >= 70 else 1, fonts)
+             for fx in card.all_effects() if fx.element is not None and fx.element_stacks > 0]
+    if not chips:
+        return
+    total = sum(c.get_width() for c in chips) + 3 * (len(chips) - 1)
+    x = art_rect.centerx - total // 2
+    for chip in chips:
+        surf.blit(chip, (x, art_rect.bottom - chip.get_height() - 1))
+        x += chip.get_width() + 3
 
 
 def _outlined(font: pygame.font.Font, text: str, color, outline=(10, 8, 12)) -> pygame.Surface:
@@ -255,9 +360,13 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     # 1. illustration window
     art_rect = _rect(z["art"], w, h).inflate(4, 4)
     surf.blit(_backdrop(card.card_type, art_rect.size), art_rect.topleft)
-    art = card_illustration(card.id, card.card_type.name, art_rect.w, art_rect.h)
-    if art is not None:
-        surf.blit(art, art.get_rect(center=art_rect.center))
+    own_art = has_card_art(card.id)
+    if card.element_badges() and not own_art:
+        _draw_element_art(surf, card, art_rect, own_art=own_art)
+    else:
+        art = card_illustration(card.id, card.card_type.name, art_rect.w, art_rect.h)
+        if art is not None:
+            surf.blit(art, art.get_rect(center=art_rect.center))
 
     # 2. dark discs behind see-through circles
     for name in ("mana", "attack", "block"):
@@ -273,7 +382,7 @@ def render_card_surface(card: Card, fonts: FontRegistry, *, w: int = CARD_W, h: 
     else:
         pygame.draw.rect(surf, _RARITY_COLOR.get(card.rarity, colors.CARD_BORDER), surf.get_rect(), 3,
                          border_radius=8)
-    _draw_element_badges(surf, card, art_rect, h)
+    _draw_element_chips(surf, card, art_rect.inflate(-4, -4), fonts)
 
     # 4. text
     c, r = _circle(z["mana"], w, h)

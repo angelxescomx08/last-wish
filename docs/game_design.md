@@ -84,6 +84,35 @@ arte de la carta, tooltips y el texto flotante "¡VAPOR!").
 
 Ejemplo: Bola de Fuego deja 3 de Fuego; Gota aplica 2 de Agua → Vapor: (3 + 2) × 2 = 10 de daño.
 
+**Cómo se lee en pantalla ✅:**
+- Las cartas del Mago tienen el fondo y el ícono grande de su elemento y una ficha "+N" (o "+N todos").
+- Al apuntar una carta aparece debajo del enemigo lo que pasará: "Fuego 3 + Agua 2 = ¡VAPOR!", su efecto y la vida que perderá.
+- Con la carta en la mano, los enemigos que reaccionarían muestran el ícono de la reacción junto a su insignia.
+- El enemigo con elemento tiene una insignia redonda al final de su barra de vida y un brillo de ese color en el suelo.
+- Al reaccionar: los dos elementos chocan, explosión de partículas, temblor y "¡VAPOR!" con su efecto; las dos primeras veces de cada reacción en un combate, un cartel explica la regla.
+- Botón **R** (junto al orbe de maná) o tecla R: rueda de elementos y reacciones.
+
+---
+
+## Información de enemigos ✅
+
+- **Pasar el ratón** por un enemigo (o por el héroe): vista rápida — vida y escudo, una línea con su intención y una línea corta por estado (máximo 5, el elemento primero; "… y N más").
+- **Clic derecho, mantener pulsado (móvil) o tecla I**: panel de inspección con todo (identidad, pareja, intención detallada, cada estado con su regla y el glosario), con scroll (rueda, arrastrar, flechas ↑↓).
+- Pasar el ratón por una sola insignia de estado o por la intención sigue mostrando solo eso.
+
+---
+
+## Historial de combate ✅
+
+Columna a la izquierda del campo (como en Hearthstone): una ficha por cada carta que jugaste
+(dorada) y cada acción enemiga (roja); efectos como Congelado o reacciones al inicio del turno en
+azul; separadores "T3" entre turnos. El número de la ficha es el daño que hiciste, el escudo que
+ganaste o la vida que perdiste. Rueda del ratón, arrastrar (móvil) o flechas para desplazarse;
+pasar el ratón o tocar una ficha muestra el detalle como en Hearthstone: quién actuó (la carta
+que jugaste o el enemigo) → flecha → a quién afectó, con el daño, escudo o curación de cada uno,
+una calavera si murió, los estados y reacciones que recibió; además se marcan en el campo los
+implicados que siguen vivos. Guarda las últimas 150.
+
 ---
 
 ## Estados

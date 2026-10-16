@@ -115,6 +115,11 @@ def pack_art(theme: str, height: int) -> pygame.Surface | None:
 
 
 @lru_cache(maxsize=128)
+def has_card_art(card_id: str) -> bool:
+    """True when ``assets/cards-v2/art/<card id>.png`` exists (real illustration, not a placeholder)."""
+    return _load(ART_DIR / f"{card_id}.png") is not None
+
+
 def card_illustration(card_id: str, card_type: str, w: int, h: int) -> pygame.Surface | None:
     """Art for the illustration window, cropped to fill (w, h) without distortion.
 

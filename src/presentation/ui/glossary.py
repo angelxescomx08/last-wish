@@ -224,3 +224,34 @@ def highlight_words() -> list[tuple[re.Pattern, tuple[int, int, int]]]:
 
 
 _HIGHLIGHTS = [(t.pattern, t.color) for t in ALL_TERMS]
+
+
+# One short line per status for the quick view (hover an enemy / the hero), Slay the Spire style.
+# ``{n}`` = stacks. The full rule stays in ``STATUS_TEXT`` (status badge hover, inspect panel).
+_STATUS_SHORT: dict[str, str] = {
+    POISON: "−{n} de vida por turno",
+    WEAK: "−25 % de daño",
+    VULNERABLE: "recibe +50 % de daño",
+    FRAIL: "−25 % de escudo",
+    ENTANGLED: "roba {n} menos",
+    STRENGTH: "+{n} de daño por golpe",
+    BLADES: "{n} espadas flotantes",
+    MARKED: "+{n} por golpe recibido",
+    FUSE: "explota en {n} turnos",
+    RITUAL: "se fortalece cada turno",
+    FIRE: "arde: −{n} de vida por turno",
+    WATER: "sus golpes hacen {n} menos",
+    EARTH: "recibe +{n} por golpe",
+    AIR: "listo para reaccionar",
+    FROZEN: "pierde su próxima acción",
+}
+
+
+def status_short(name: str, stacks: int) -> str:
+    """"Veneno 5: pierde 5 de vida al inicio de su turno" (first sentence of the rule if unknown)."""
+    text = _STATUS_SHORT.get(name)
+    if text is None:
+        rule = STATUS_TEXT.get(name, "")
+        text = rule.split(". ")[0].rstrip(".") if rule else ("mejora" if is_buff_status(name) else "perjuicio")
+        text = text[0].lower() + text[1:] if text else text
+    return f"{name} {stacks}: " + text.replace("{n}", str(stacks))
