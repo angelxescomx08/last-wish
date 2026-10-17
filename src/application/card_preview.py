@@ -48,6 +48,7 @@ def run_card_bonus(run: Run | None) -> CardBonus:
 
 def combat_card_bonus(state: CombatState) -> CardBonus:
     return CardBonus(
-        attack=state.player.attack_bonus + relic_effects.extra_attack_damage(state.relics),
+        attack=(state.player.attack_bonus + relic_effects.extra_attack_damage(state.relics)
+                + state.hero_strength),          # Fuerza (La Guerrera) counts like Ataque
         block=state.player.dexterity,
     )

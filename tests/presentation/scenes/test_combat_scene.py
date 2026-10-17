@@ -395,6 +395,7 @@ class TestMultiCastReplay:
         enemy.current_hp = enemy.max_hp = enemy_hp
         enemy.block = 0
         enemy.status_effects = []        # the sample enemy is Vulnerable (+50 % from cards)
+        state.player.status_effects = [] # the sample hero has Fuerza 2 (+2 per hit)
         state.player.attack_bonus = 0
         state.relics = []
         state.mana.current = 3

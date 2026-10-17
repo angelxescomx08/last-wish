@@ -4,7 +4,8 @@ import random
 from dataclasses import dataclass, field
 
 from src.domain.card import Card
-from src.domain.entities import Enemy, Player, deal_damage
+from src.domain.entities import (STRENGTH, Enemy, Player, add_status, deal_damage, frail,
+                                 status_stacks, vulnerable, weakened)
 from src.domain.mana import Mana
 from src.domain.pile import DiscardPile, DrawPile, Hand
 from src.domain.relic import Relic, RelicTag, relic_total
@@ -62,6 +63,8 @@ class CombatState:
     last_random_target: int | None = None   # id() of the last enemy hit at random (Moneda)
     lucky_coin_used: bool = False     # Moneda de la Suerte paid this turn
     reactions_this_turn: int = 0      # elemental reactions caused this turn
+    hp_lost_this_turn: int = 0        # HP the hero lost this turn (> 0 turns Furia on)
+    hp_loss_draw_used: bool = False   # Venda Empapada already drew this turn
     catalyst: int = 0                 # Catalizador: next reactions this turn resolve twice
 
     # --- whole-combat effects (powers, relics) --------------------------------------
@@ -82,6 +85,15 @@ class CombatState:
     reaction_draw: int = 0            # Ojo del Huracán: cards drawn per reaction
     archmage: bool = False            # Archimago: reactions hit every enemy
     reaction_log: list = field(default_factory=list)   # ReactionEvent, last play / turn start
+    # La Guerrera: losing HP, healing, Fuerza (powers set these; see ``lose_hp`` / ``heal_hero``).
+    block_on_hp_loss: int = 0         # Segunda Piel: block every time the hero loses HP
+    strength_on_hp_loss: int = 0      # Berserker: Fuerza every time the hero loses HP
+    block_on_heal: int = 0            # Fortaleza Interior: block every time the hero heals
+    end_turn_block: int = 0           # Piel de Acero: block at the end of each of your turns
+    self_damage_cap: bool = False     # Voluntad Inquebrantable: your effects cost at most 1 HP
+    furies: int = 0                   # Furia layers resolved this combat (Estandarte Desgarrado)
+    last_hit: int = 0                 # HP the target lost to the last card hit (lifesteal reads it)
+    last_area_hits: int = 0           # enemies hit by the last area hit of a card
 
     @property
     def combo_active(self) -> bool:
@@ -125,6 +137,14 @@ class CombatState:
         """Keyword SPOIL would resolve for ``card`` if played now."""
         return self.spoil_active and bool(card.spoil_effects())
 
+    def fury_ready(self, card) -> bool:
+        """Keyword FURY ("Furia") would resolve: the hero already lost HP this turn."""
+        return self.hp_lost_this_turn > 0 and bool(card.fury_effects())
+
+    def endure_ready(self, card) -> bool:
+        """Keyword ENDURE ("Aguante") would resolve: the hero has block right now."""
+        return self.player.block > 0 and bool(card.endure_effects())
+
     def reaction_ready(self, card, target: int | None = None) -> bool:
         """Keyword REACTION would resolve: an element of ``card`` meets another one.
 
@@ -134,6 +154,85 @@ class CombatState:
             return False
         from src.domain.elements import card_reacts      # local: elements imports entities only
         return card_reacts(self, card, target)
+
+    # ------------------------------------------------------------------
+    # La Guerrera: Fuerza, losing HP and healing
+    # ------------------------------------------------------------------
+
+    @property
+    def hero_strength(self) -> int:
+        """Fuerza on the hero: every hit of your attacks deals this much more."""
+        return status_stacks(self.player.status_effects, STRENGTH)
+
+    def gain_strength(self, amount: int) -> None:
+        """The hero gains ``amount`` Fuerza (lasts the whole combat)."""
+        if amount > 0:
+            add_status(self.player.status_effects, STRENGTH, amount, is_buff=True)
+
+    def hero_hit(self, enemy: Enemy, amount: int) -> int:
+        """One extra hit of a hero attack: + Fuerza, then Débil (hero) and Vulnerable (enemy).
+
+        Used by card effects that hit on their own (multi-hits, area hits). Returns HP lost.
+        """
+        if amount <= 0 or enemy is None or not enemy.is_alive:
+            return 0
+        dmg = weakened(amount + self.hero_strength, self.player.status_effects)
+        return deal_damage(enemy, vulnerable(dmg, enemy.status_effects))
+
+    def gain_block(self, amount: int) -> None:
+        """Block from a card effect (Frágil applies)."""
+        if amount > 0:
+            self.player.block += frail(amount, self.player.status_effects)
+
+    def lose_hp(self, amount: int) -> int:
+        """The hero loses ``amount`` HP by their own effects: block does not help.
+
+        Never below 1 HP (your own cards cannot kill you). Voluntad Inquebrantable:
+        at most 1 HP per effect. Returns the HP lost.
+        """
+        from src.domain.tuning import TUNING     # local: tuning is a leaf module
+        if amount <= 0 or TUNING.invincible:
+            return 0
+        if self.self_damage_cap:
+            amount = min(amount, 1)
+        lost = max(0, min(amount, self.player.current_hp - 1))
+        self.player.current_hp -= lost
+        self.on_hp_lost(lost, own_turn=True)
+        return lost
+
+    def on_hp_lost(self, lost: int, *, own_turn: bool) -> None:
+        """Hooks for any HP the hero lost (own effects, enemy hits, poison).
+
+        Furia counts it; Segunda Piel gives block, Berserker Fuerza; Venda Empapada
+        draws 1 the first time each of your turns (``pending_draws``).
+        """
+        if lost <= 0:
+            return
+        if own_turn:
+            self.hp_lost_this_turn += lost
+            bandage = relic_total(self.relics, RelicTag.SOAKED_BANDAGE)
+            if bandage and not self.hp_loss_draw_used:
+                self.hp_loss_draw_used = True
+                self.pending_draws += bandage
+        if self.block_on_hp_loss:
+            self.player.block += self.block_on_hp_loss
+        self.gain_strength(self.strength_on_hp_loss)
+
+    def heal_hero(self, amount: int) -> int:
+        """Heal the hero. Copa de Sangre: +2 per heal. Healing over max HP becomes block
+        (Corazón de Titán: double, golden: triple). Fortaleza Interior: block per heal.
+        Returns the HP recovered."""
+        if amount <= 0:
+            return 0
+        amount += relic_total(self.relics, RelicTag.BLOOD_CUP, 2)
+        healed = max(0, min(amount, self.player.max_hp - self.player.current_hp))
+        self.player.current_hp += healed
+        overflow = amount - healed
+        if overflow > 0:
+            self.player.block += overflow * (1 + relic_total(self.relics, RelicTag.TITAN_HEART))
+        if self.block_on_heal:
+            self.player.block += self.block_on_heal
+        return healed
 
     # ------------------------------------------------------------------
     # Shared effect helpers (used by card effects, relics and the turn pipeline)

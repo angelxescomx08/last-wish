@@ -13,7 +13,8 @@ player learns the picture once and then reads the board at a glance.
   block, junk_card, combo, singular, void, spoil, exhaust, ethereal, unplayable, damage,
   draw, mana, heal; HUD: gear, helmet, bag, hand_cards, clover, tower,
   hourglass, deck, coin; Mage: fire, water, earth, air, frozen (elements / Congelado),
-  steam, magma, wildfire, mud, sandstorm (reactions), reaction (keyword Reacción).
+  steam, magma, wildfire, mud, sandstorm (reactions), reaction (keyword Reacción);
+  Warrior: fury (keyword Furia), endure (keyword Aguante).
 
 Each icon is a small shape drawn with ramps, upper-left light and the usual dark
 outline (``pixel_kit``). The JSON maps every name to its ``[x, y, w, h]`` in the
@@ -524,6 +525,24 @@ def block_small() -> Canvas:
     return shield_small(BLUE)
 
 
+def blood_drop() -> Canvas:
+    """Furia: a red drop of blood with two sparks of rage above it."""
+    cv = droplet(RED)
+    for x, y in ((1, 1), (2, 2), (10, 1), (9, 2)):
+        cv.put(x, y, ORANGE[3])
+    return cv
+
+
+def steel_guard() -> Canvas:
+    """Aguante: a steel shield with a gold chevron (holding the line)."""
+    cv = shield_small(STEEL)
+    for x in range(1, 11):                       # gold rim across the top
+        cv.put(x, 1, GOLD[3] if x < 6 else GOLD[2])
+    for y in range(2, 10):                       # gold boss down the middle
+        cv.put(5, y, GOLD[3]); cv.put(6, y, GOLD[1])
+    return cv
+
+
 # ---------------------------------------------------------------- HUD / hero sheet icons (12 → 14)
 
 def gear() -> Canvas:
@@ -929,6 +948,8 @@ ICONS_12 = {
     "mud": mud,
     "sandstorm": sandstorm,
     "reaction": reaction_orb,
+    "fury": blood_drop,
+    "endure": steel_guard,
 }
 
 

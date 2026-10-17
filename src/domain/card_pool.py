@@ -163,11 +163,16 @@ def _rogue_starter() -> list[Card]:
 def starter_deck(character_id=None) -> list[Card]:
     """Initial deck for a character (a ``CharacterId``).
 
-    La Pícara has her own 9-card deck (see ``_rogue_starter``); the other classes
-    (and no id) get the shared neutral 10-card deck below.
+    Each class has its own deck: La Pícara 9 cards (``_rogue_starter``), La Guerrera and
+    El Mago 10 (``_warrior_starter`` / ``_mage_starter``). No id: the neutral 10-card deck.
     """
-    if character_id is not None and getattr(character_id, "value", None) == "rogue":
+    kind = getattr(character_id, "value", None)
+    if kind == "rogue":
         return _rogue_starter()
+    if kind == "warrior":
+        return _warrior_starter()
+    if kind == "mage":
+        return _mage_starter()
     return [
         _atk("golpe_base",   "Golpe",    1, 6),
         _atk("golpe_base",   "Golpe",    1, 6),
@@ -180,6 +185,13 @@ def starter_deck(character_id=None) -> list[Card]:
         _atk("embate_base",  "Embate",   2, 10),
         _skl("guardia_base", "Guardia",  2, 8),
     ]
+
+
+def _with_text(card: Card, on_play, text: str) -> Card:
+    """Add an on_play effect (and its Spanish text) to a plain card."""
+    card.base_effect.on_play = on_play
+    card.base_effect.text = text
+    return card
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +233,8 @@ _ESCUDO: list[Callable[[], Card]] = [
     lambda: _skl("e_guardia_solida",  "Guardia Sólida",  1,  8),
     lambda: _skl("e_escudo_solido",   "Escudo Sólido",   1,  5, draw=1),
     lambda: _skl("e_fortaleza",       "Fortaleza",       2, 14),
-    lambda: _skl("e_baluarte",        "Baluarte",        3, 22),
+    lambda: _wr_endure(_skl("e_baluarte", "Baluarte", 3, 22),
+                       on_play=_on_strength(1), text="+1 de Fuerza"),
     lambda: _skl("e_parada",          "Parada",          0,  4),
     lambda: _skl("e_capa_hierro",     "Capa de Hierro",  2, 11, draw=1),
     lambda: _skl("e_torre",           "Torre",           2, 16),
@@ -287,10 +300,12 @@ _MAGIA: list[Callable[[], Card]] = [
 
 _EPICO: list[Callable[[], Card]] = [
     lambda: _atk("ep_golpe_mortal",     "Golpe Mortal",        2, 22,       legendary=True),
-    lambda: _skl("ep_escudo_impenet",   "Escudo Impenetrable", 2, 22,       legendary=True),
+    lambda: _wr_endure(_skl("ep_escudo_impenet", "Escudo Impenetrable", 2, 22, legendary=True),
+                       on_play=_on_strength(2), text="+2 de Fuerza"),
     lambda: _combo("ep_tormenta",       "Tormenta",            3, 16, 12,   legendary=True),
     lambda: _pwr("ep_poder_oculto",     "Poder Oculto",        1, draw=4,   legendary=True),
-    lambda: _atk("ep_ejecucion",        "Ejecución",           3, 30,       legendary=True),
+    lambda: _with_text(_atk("ep_ejecucion", "Ejecución", 3, 30, legendary=True),
+                       _on_execution, "si lo mata, te curas 10"),
     lambda: _skl("ep_bastion",          "Bastión",             3, 30,       legendary=True),
     lambda: _atk("ep_descarga",         "Descarga",            2, 18, draw=2, legendary=True),
     lambda: _skl("ep_escudo_arcano",    "Escudo Arcano",       2, 14, draw=2, legendary=True),
@@ -1037,6 +1052,296 @@ _MAGE_EPICO: list[Callable[[], Card]] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# La Guerrera — losing HP, healing, block and Fuerza; keywords Furia and Aguante
+# (rules: ``CombatState.lose_hp`` / ``heal_hero`` / ``hero_hit``; all WARRIOR,
+# see CARD_CLASS_BY_ID). Cards that cost HP hit harder than plain ones.
+# ---------------------------------------------------------------------------
+
+def _wr(id: str, name: str, ctype: CardType, cost: int, rarity: CardRarity, *, dmg: int = 0,
+        blk: int = 0, draw: int = 0, mana: int = 0, on_play=None, text: str = "",
+        needs_target: bool = False, hits_all: bool = False, on_turn_start=None) -> Card:
+    """A Warrior card."""
+    return Card(
+        id=id, name=name, card_type=ctype, cost=cost, rarity=rarity,
+        base_effect=CardEffect(name=name, damage=BigValue(dmg), block=BigValue(blk), draw=draw,
+                               mana_gain=mana, on_play=on_play, text=text,
+                               needs_target=needs_target, hits_all_enemies=hits_all,
+                               on_turn_start=on_turn_start),
+    )
+
+
+def _wr_fx(name: str, *, dmg: int = 0, blk: int = 0, draw: int = 0, mana: int = 0,
+           on_play=None, text: str = "") -> CardEffect:
+    return CardEffect(name=name, damage=BigValue(dmg), block=BigValue(blk), draw=draw,
+                      mana_gain=mana, on_play=on_play, text=text)
+
+
+def _wr_fury(card: Card, **kw) -> Card:
+    """Furia layer (extra effect if you already lost HP this turn)."""
+    card.base_effect.fury = _wr_fx("Furia", **kw)
+    return card
+
+
+def _wr_endure(card: Card, **kw) -> Card:
+    """Aguante layer (extra effect if you have block when you play it)."""
+    card.base_effect.endure = _wr_fx("Aguante", **kw)
+    return card
+
+
+def _then(*effects):
+    """Run several on_play effects in order."""
+    def run(state) -> None:
+        for fx in effects:
+            fx(state)
+    return run
+
+
+# --- on_play / power effects -------------------------------------------------
+
+def _on_lose(amount: int):
+    def lose(state) -> None:
+        state.lose_hp(amount)
+    return lose
+
+
+def _on_heal(amount: int):
+    def heal(state) -> None:
+        state.heal_hero(amount)
+    return heal
+
+
+def _on_strength(amount: int):
+    def gain(state) -> None:
+        state.gain_strength(amount)
+    return gain
+
+
+def _on_mana(amount: int):
+    def gain(state) -> None:
+        state.mana.gain(amount)
+    return gain
+
+
+def _on_heal_last_hit(divisor: int = 1):
+    """Lifesteal: heal the HP the card's hit took from the enemy (÷ ``divisor``)."""
+    def heal(state) -> None:
+        state.heal_hero(state.last_hit // divisor)
+    return heal
+
+
+def _on_strike(amount: int, times: int = 1):
+    """``times`` more hits of ``amount`` on the target (Fuerza counts on every hit)."""
+    def strike(state) -> None:
+        for _ in range(times):
+            state.hero_hit(_mg_target(state), amount)
+    return strike
+
+
+def _on_area(amount: int):
+    """``amount`` to every living enemy (Fuerza counts on every hit)."""
+    def area(state) -> None:
+        hit = 0
+        for enemy in [e for e in state.enemies if e.is_alive]:
+            state.hero_hit(enemy, amount)
+            hit += 1
+        state.last_area_hits = hit
+    return area
+
+
+def _on_heal_per_area_hit(amount: int):
+    def heal(state) -> None:
+        state.heal_hero(amount * state.last_area_hits)
+    return heal
+
+
+def _on_shield_bash(state) -> None:
+    """Golpe de Escudo: damage equal to your block."""
+    state.hero_hit(_mg_target(state), state.player.block)
+
+
+RETALIATION_MULT: int = 2       # Represalia: damage = 2 × HP lost this turn
+
+
+def _on_retaliation(state) -> None:
+    if state.hp_lost_this_turn > 0:
+        state.hero_hit(_mg_target(state), RETALIATION_MULT * state.hp_lost_this_turn)
+
+
+LIVING_ARMOR_CAP: int = 30      # Coraza Viva: max block
+
+
+def _on_living_armor(state) -> None:
+    """Coraza Viva: 1 block per 2 HP missing (max 30)."""
+    missing = max(0, state.player.max_hp - state.player.current_hp)
+    state.gain_block(min(LIVING_ARMOR_CAP, missing // 2))
+
+
+def _on_double_block(state) -> None:
+    state.player.block *= 2
+
+
+def _on_transfusion(state) -> None:
+    """Transfusión: lose all your block and heal that much."""
+    block, state.player.block = state.player.block, 0
+    state.heal_hero(block)
+
+
+EXECUTION_HEAL: int = 10        # Ejecución: heal if the hit kills
+
+
+def _on_execution(state) -> None:
+    i = state.targeted_enemy_index
+    if (state.last_hit > 0 and i is not None and 0 <= i < len(state.enemies)
+            and not state.enemies[i].is_alive):
+        state.heal_hero(EXECUTION_HEAL)
+
+
+def _on_boiling_blood(state) -> None:
+    """Sangre Hirviente (start of turn): lose 2 HP, +1 Fuerza."""
+    state.lose_hp(2)
+    state.gain_strength(1)
+
+
+def _on_inner_fortress(state) -> None:
+    state.block_on_heal += 2
+
+
+def _on_second_skin(state) -> None:
+    state.block_on_hp_loss += 3
+
+
+def _on_steel_skin(state) -> None:
+    state.end_turn_block += 6
+
+
+def _on_berserker(state) -> None:
+    state.strength_on_hp_loss += 1
+
+
+def _on_iron_will(state) -> None:
+    state.self_damage_cap = True
+
+
+# --- cards ---------------------------------------------------------------------
+
+_WARRIOR_ACERO: list[Callable[[], Card]] = [
+    lambda: _wr("wr_corte_sangriento", "Corte Sangriento", _A, 1, _C, dmg=13,
+                on_play=_on_lose(3), text="pierdes 3 de vida"),
+    lambda: _wr_fury(_wr("wr_tajo_brutal", "Tajo Brutal", _A, 1, _C, dmg=8), dmg=5),
+    lambda: _wr("wr_golpe_escudo", "Golpe de Escudo", _A, 1, _RA, on_play=_on_shield_bash,
+                needs_target=True, text="inflige tanto daño como escudo tengas"),
+    lambda: _wr_endure(_wr("wr_embate_firme", "Embate Firme", _A, 2, _C, dmg=12), dmg=6),
+    lambda: _wr("wr_golpe_doble", "Golpe Doble", _A, 1, _C, dmg=5, on_play=_on_strike(5),
+                text="golpea otra vez por 5"),
+    lambda: _wr("wr_puno_hierro", "Puño de Hierro", _A, 1, _U, dmg=6, on_play=_on_strength(1),
+                text="+1 de Fuerza"),
+    lambda: _wr("wr_sed_batalla", "Sed de Batalla", _A, 2, _U, dmg=10, on_play=_on_heal_last_hit(),
+                text="te curas el daño hecho"),
+    lambda: _wr("wr_hachazo_temerario", "Hachazo Temerario", _A, 2, _U, dmg=24,
+                on_play=_on_lose(5), text="pierdes 5 de vida"),
+    lambda: _wr_fury(_wr("wr_torbellino_acero", "Torbellino de Acero", _A, 2, _RA,
+                         on_play=_on_area(7), hits_all=True, text="7 de daño a todos"),
+                     on_play=_on_heal_per_area_hit(3), text="cura 3 por golpe"),
+    lambda: _wr("wr_represalia", "Represalia", _A, 2, _RA, on_play=_on_retaliation, needs_target=True,
+                text="inflige el doble de la vida que perdiste este turno"),
+    lambda: _wr_fury(_wr("wr_sacrificio", "Sacrificio", _A, 0, _RA, dmg=16, on_play=_on_lose(6),
+                         text="pierdes 6 de vida"), draw=1),
+    lambda: _wr_endure(_wr("wr_martillo_sismico", "Martillo Sísmico", _A, 3, _RA,
+                           on_play=_on_area(18), hits_all=True, text="18 de daño a todos"),
+                       on_play=_on_strength(2), text="+2 de Fuerza"),
+]
+
+_WARRIOR_ESCUDO: list[Callable[[], Card]] = [
+    lambda: _wr("wr_escudo_sangre", "Escudo de Sangre", _S, 1, _C, blk=14, on_play=_on_lose(3),
+                text="pierdes 3 de vida"),
+    lambda: _wr_fury(_wr("wr_postura_firme", "Postura Firme", _S, 1, _C, blk=8), blk=5),
+    lambda: _wr_endure(_wr("wr_muro_acero", "Muro de Acero", _S, 2, _C, blk=14),
+                       on_play=_on_strength(1), text="+1 de Fuerza"),
+    lambda: _wr("wr_respiro", "Respiro", _S, 2, _U, blk=8, on_play=_on_heal(7), text="te curas 7"),
+    lambda: _wr("wr_coraza_viva", "Coraza Viva", _S, 2, _RA, on_play=_on_living_armor,
+                text="1 de escudo por cada 2 de vida que te faltan (máx. 30)"),
+    lambda: _wr("wr_segunda_piel", "Segunda Piel", _P, 2, _RA, on_play=_on_second_skin,
+                text="cada vez que pierdes vida, ganas 3 de escudo"),
+]
+
+_WARRIOR_MAGIA: list[Callable[[], Card]] = [
+    lambda: _wr("wr_herida_abierta", "Herida Abierta", _S, 0, _C, draw=2, on_play=_on_lose(3),
+                text="pierdes 3 de vida"),
+    lambda: _wr_endure(_wr("wr_vendaje", "Vendaje", _S, 1, _C, on_play=_on_heal(5), text="te curas 5"),
+                       on_play=_on_heal(4), text="te curas 4 más"),
+    lambda: _wr_fury(_wr("wr_rugido", "Rugido", _S, 1, _U, on_play=_on_strength(1), text="+1 de Fuerza"),
+                     on_play=_on_strength(2), text="+2 de Fuerza más"),
+    lambda: _wr("wr_sangria", "Sangría", _S, 1, _U, on_play=_then(_on_lose(4), _on_strength(3)),
+                text="pierdes 4 de vida; +3 de Fuerza"),
+    lambda: _wr_endure(_wr("wr_grito_batalla", "Grito de Batalla", _S, 1, _U, draw=2),
+                       on_play=_on_strength(1), text="+1 de Fuerza"),
+    lambda: _wr("wr_pacto_hierro", "Pacto de Hierro", _S, 0, _RA, mana=1, on_play=_on_lose(4),
+                text="pierdes 4 de vida"),
+    lambda: _wr("wr_transfusion", "Transfusión", _S, 2, _RA, on_play=_on_transfusion,
+                text="pierdes todo tu escudo y te curas esa cantidad"),
+    lambda: _wr("wr_sangre_hirviente", "Sangre Hirviente", _P, 1, _U, on_turn_start=_on_boiling_blood,
+                text="al inicio de tu turno pierdes 2 de vida y ganas 1 de Fuerza"),
+    lambda: _wr("wr_fortaleza_interior", "Fortaleza Interior", _P, 1, _U, on_play=_on_inner_fortress,
+                text="cada vez que te curas, ganas 2 de escudo"),
+    lambda: _wr("wr_regeneracion", "Regeneración", _P, 2, _RA, on_turn_start=_on_heal(3),
+                text="al inicio de tu turno te curas 3"),
+]
+
+_WARRIOR_EPICO: list[Callable[[], Card]] = [
+    lambda: _wr_fury(_wr("wr_furia_desatada", "Furia Desatada", _A, 2, _E, needs_target=True,
+                         on_play=_on_strike(4, 4), text="4 golpes de 4"),
+                     on_play=_on_strike(4, 2), text="+2 golpes"),
+    lambda: _wr("wr_ira_carmesi", "Ira Carmesí", _A, 3, _E, dmg=40,
+                on_play=_then(_on_lose(8), _on_heal_last_hit(2)),
+                text="pierdes 8 de vida; cura la mitad"),
+    lambda: _wr("wr_golpe_vampirico", "Golpe Vampírico", _A, 3, _L, dmg=24, on_play=_on_heal_last_hit(),
+                text="te curas el daño hecho"),
+    lambda: _wr("wr_doblar_escudo", "Doblar Escudo", _S, 2, _L, on_play=_on_double_block,
+                text="duplica tu escudo"),
+    lambda: _wr("wr_muralla_infranqueable", "Muralla Infranqueable", _S, 3, _L, blk=30,
+                on_play=_on_keep_block, text="tu escudo dura un turno más"),
+    lambda: _wr("wr_piel_acero", "Piel de Acero", _P, 2, _E, on_play=_on_steel_skin,
+                text="al final de tu turno ganas 6 de escudo"),
+    lambda: _wr("wr_berserker", "Berserker", _P, 2, _L, on_play=_on_berserker,
+                text="cada vez que pierdes vida, +1 de Fuerza"),
+    lambda: _wr("wr_voluntad_hierro", "Voluntad de Hierro", _P, 2, _L, on_play=_on_iron_will,
+                text="tus propios efectos no te quitan más de 1 de vida cada vez"),
+]
+
+
+# ---------------------------------------------------------------------------
+# Class starter decks (10 cards: 5 attacks, 5 blocks — one of them the class card)
+# ---------------------------------------------------------------------------
+
+def _stamp(card: Card, card_class: CardClass) -> Card:
+    card.card_class = card_class
+    card.rarity = CardRarity.COMMON
+    return card
+
+
+def _warrior_starter() -> list[Card]:
+    """La Guerrera: 5 attacks (6 dmg), 4 blocks (5 block) and Guardia Férrea, her class
+    card: 1 mana, 5 block; Aguante: +1 Fuerza (play a block first). All WARRIOR, common."""
+    w = CardClass.WARRIOR
+    attacks = [_stamp(_atk("espadazo_base", "Espadazo", 1, 6), w) for _ in range(5)]
+    blocks = [_stamp(_skl("bloqueo_base", "Bloqueo", 1, 5), w) for _ in range(4)]
+    guard = _stamp(_wr_endure(_skl("guardia_ferrea_base", "Guardia Férrea", 1, 5),
+                              on_play=_on_strength(1), text="+1 de Fuerza"), w)
+    return attacks + blocks + [guard]
+
+
+def _mage_starter() -> list[Card]:
+    """El Mago: 4 attacks (6 dmg), Chispa Ígnea, his class card (1 mana, 4 dmg, 2 Fuego),
+    and 5 blocks (5 block). All MAGE, common."""
+    m = CardClass.MAGE
+    attacks = [_stamp(_atk("proyectil_base", "Proyectil Arcano", 1, 6), m) for _ in range(4)]
+    spark = _stamp(_mg("chispa_ignea_base", "Chispa Ígnea", CardType.ATTACK, 1, CardRarity.COMMON,
+                       dmg=4, element=Element.FIRE, stacks=2), m)
+    blocks = [_stamp(_skl("egida_base", "Égida", 1, 5), m) for _ in range(5)]
+    return attacks + [spark] + blocks
+
+
 _N, _W, _M, _R = CardClass.NEUTRAL, CardClass.WARRIOR, CardClass.MAGE, CardClass.ROGUE
 
 # Class of every pool card, by card id. Cards missing here are NEUTRAL
@@ -1049,7 +1354,7 @@ CARD_CLASS_BY_ID: dict[str, CardClass] = {
     "a_tajo": _R, "a_corte_rapido": _R, "a_instinto": _R,
     # Escudo
     "e_parada": _N, "e_guardia_solida": _N, "e_escudo_solido": _N, "e_fortaleza": _N,
-    "e_baluarte": _W, "e_gran_muralla": _W, "e_torre": _W, "e_retribucion": _W,
+    "e_baluarte": _W, "e_gran_muralla": _W, "e_torre": _W, "e_retribucion": _N,
     "e_muro_de_mana": _M, "e_capa_hierro": _M,
     "e_agilidad": _R, "e_escudo_reactivo": _R,
     # Magia
@@ -1082,6 +1387,8 @@ CARD_CLASS_BY_ID: dict[str, CardClass] = {
     "r_nada_que_perder": _R, "r_cadena_perfecta": _R, "r_asesina": _R, "r_mil_cortes": _R,
     # El Mago — elements, reactions, Vacío and Reacción (2026-10-14)
     **{build().id: _M for build in _MAGE_ACERO + _MAGE_ESCUDO + _MAGE_MAGIA + _MAGE_EPICO},
+    # La Guerrera — Furia, Aguante, losing HP, healing and Fuerza (2026-10-17)
+    **{build().id: _W for build in _WARRIOR_ACERO + _WARRIOR_ESCUDO + _WARRIOR_MAGIA + _WARRIOR_EPICO},
 }
 
 
@@ -1131,10 +1438,10 @@ def _factories(theme: PackTheme, raw: list[Callable[[], Card]]) -> list[CardFact
 # ---------------------------------------------------------------------------
 
 _POOL: dict[PackTheme, list[CardFactory]] = {
-    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO + _ROGUE_ACERO + _MAGE_ACERO),
-    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO + _ROGUE_ESCUDO + _MAGE_ESCUDO),
-    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA + _ROGUE_MAGIA + _MAGE_MAGIA),
-    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO + _ROGUE_EPICO + _MAGE_EPICO),
+    PackTheme.ACERO:  _factories(PackTheme.ACERO, _ACERO + _ROGUE_ACERO + _MAGE_ACERO + _WARRIOR_ACERO),
+    PackTheme.ESCUDO: _factories(PackTheme.ESCUDO, _ESCUDO + _ROGUE_ESCUDO + _MAGE_ESCUDO + _WARRIOR_ESCUDO),
+    PackTheme.MAGIA:  _factories(PackTheme.MAGIA, _MAGIA + _ROGUE_MAGIA + _MAGE_MAGIA + _WARRIOR_MAGIA),
+    PackTheme.EPICO:  _factories(PackTheme.EPICO, _EPICO + _ROGUE_EPICO + _MAGE_EPICO + _WARRIOR_EPICO),
 }
 
 

@@ -65,6 +65,8 @@ _KEYWORD_ICON: dict[Keyword, str] = {
     Keyword.VOID: "void",
     Keyword.SPOIL: "spoil",
     Keyword.REACTION: "reaction",
+    Keyword.FURY: "fury",
+    Keyword.ENDURE: "endure",
 }
 
 REACTION_ICON: dict[Reaction, str] = {

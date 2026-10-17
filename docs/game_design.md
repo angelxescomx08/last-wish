@@ -49,6 +49,8 @@ al robarla se juega sola gratis y desaparece del combate.
 | **Vacío** | Efecto extra si al jugar la carta te quedas con 0 de maná (ej.: te queda 1 de maná y juegas una carta de 1). Las cartas de coste 0 no lo activan. | Solo Mago | ✅ |
 | **Despojo** | Efecto extra si ya descartaste una carta este turno. Solo cuentan los descartes de cartas o reliquias, no el descarte del final del turno. | Solo Pícara | ✅ |
 | **Reacción** | Efecto extra si al jugar la carta provocas una reacción elemental (un elemento de la carta choca con otro distinto que ya tiene ese enemigo). | Solo Mago | ✅ |
+| **Furia** | Efecto extra si ya perdiste vida este turno (por tus cartas, tus poderes o el Veneno). La vida que cuesta la propia carta no cuenta. | Solo Guerrera | ✅ |
+| **Aguante** | Efecto extra si tienes escudo al jugar la carta (se mira antes del escudo que da la propia carta). | Solo Guerrera | ✅ |
 
 **Regla de diseño:** la palabra clave *es* la condición. Un efecto de palabra clave nunca
 añade otra condición propia ("Combo: si además…" no vale). Lo comprueba un test.
@@ -350,7 +352,82 @@ Terremoto…) es fijo: no suma el Ataque del héroe.
 | Archimago | Poder | 3 | Tus reacciones afectan a todos los enemigos. | Legendaria | Épico | ✅ |
 
 ### Guerrera
-- ⏳ *
+
+Arquetipo: perder vida, curarse, escudo y Fuerza; palabras clave Furia y Aguante. Diseño
+revisado con el usuario en `docs/guerrera_cartas.xlsx` (2026-10-17).
+
+Reglas de la Guerrera:
+- **Fuerza** (estado del héroe): cada golpe de tus ataques hace +1 de daño por acumulación,
+  todo el combate. También cuenta en los golpes extra (Golpe Doble, Furia Desatada) y en el
+  daño en área de sus cartas.
+- **Perder vida** por tus propias cartas ignora el escudo y nunca te deja por debajo de 1.
+- **Curación sobrante → escudo**: lo que te curas por encima de tu vida máxima se convierte
+  en escudo.
+- Las cartas que te quitan vida son algo más fuertes que una normal del mismo coste
+  (Corte Sangriento 13 frente a los 9 de Golpe Férreo).
+
+| Carta | Tipo | Coste | Efecto | Rareza | Sobre | Estado |
+|---|---|---|---|---|---|---|
+| Golpe Pesado | Ataque | 2 | 16 de daño. | Rara | Acero | ✅ |
+| Gran Golpe | Ataque | 3 | 26 de daño. | Épica | Acero | ✅ |
+| Golpe Total | Ataque | 2 | Inflige 10 de daño a todos los enemigos. | Rara | Acero | ✅ |
+| Corte Sangriento | Ataque | 1 | 13 de daño, pierdes 3 de vida. | Común | Acero | ✅ |
+| Tajo Brutal | Ataque | 1 | 8 de daño. **Furia:** +5 de daño. | Común | Acero | ✅ |
+| Golpe de Escudo | Ataque | 1 | Inflige tanto daño como escudo tengas. | Rara | Acero | ✅ |
+| Embate Firme | Ataque | 2 | 12 de daño. **Aguante:** +6 de daño. | Común | Acero | ✅ |
+| Golpe Doble | Ataque | 1 | 5 de daño, golpea otra vez por 5. | Común | Acero | ✅ |
+| Puño de Hierro | Ataque | 1 | 6 de daño, +1 de Fuerza. | Poco común | Acero | ✅ |
+| Sed de Batalla | Ataque | 2 | 10 de daño, te curas el daño hecho. | Poco común | Acero | ✅ |
+| Hachazo Temerario | Ataque | 2 | 24 de daño, pierdes 5 de vida. | Poco común | Acero | ✅ |
+| Torbellino de Acero | Ataque | 2 | 7 de daño a todos. **Furia:** cura 3 por golpe. | Rara | Acero | ✅ |
+| Represalia | Ataque | 2 | Inflige el doble de la vida que perdiste este turno. | Rara | Acero | ✅ |
+| Sacrificio | Ataque | 0 | 16 de daño, pierdes 6 de vida. **Furia:** roba 1. | Rara | Acero | ✅ |
+| Martillo Sísmico | Ataque | 3 | 18 de daño a todos. **Aguante:** +2 de Fuerza. | Rara | Acero | ✅ |
+| Baluarte | Habilidad | 3 | 22 de escudo. **Aguante:** +1 de Fuerza. | Épica | Escudo | ✅ |
+| Torre | Habilidad | 2 | 16 de escudo. | Rara | Escudo | ✅ |
+| Gran Muralla | Habilidad | 3 | 28 de escudo. | Épica | Escudo | ✅ |
+| Escudo de Sangre | Habilidad | 1 | 14 de escudo, pierdes 3 de vida. | Común | Escudo | ✅ |
+| Postura Firme | Habilidad | 1 | 8 de escudo. **Furia:** +5 de escudo. | Común | Escudo | ✅ |
+| Muro de Acero | Habilidad | 2 | 14 de escudo. **Aguante:** +1 de Fuerza. | Común | Escudo | ✅ |
+| Respiro | Habilidad | 2 | 8 de escudo, te curas 7. | Poco común | Escudo | ✅ |
+| Coraza Viva | Habilidad | 2 | 1 de escudo por cada 2 de vida que te faltan (máx. 30). | Rara | Escudo | ✅ |
+| Segunda Piel | Poder | 2 | Cada vez que pierdes vida, ganas 3 de escudo. | Rara | Escudo | ✅ |
+| Conjuro de Combate | Ataque | 2 | 10 de daño, 6 de escudo. | Rara | Magia | ✅ |
+| Grito de Guerra | Habilidad | 1 | Gana 1 de maná por cada enemigo vivo. | Poco común | Magia | ✅ |
+| Herida Abierta | Habilidad | 0 | Roba 2, pierdes 3 de vida. | Común | Magia | ✅ |
+| Vendaje | Habilidad | 1 | Te curas 5. **Aguante:** te curas 4 más. | Común | Magia | ✅ |
+| Rugido | Habilidad | 1 | +1 de Fuerza. **Furia:** +2 de Fuerza más. | Poco común | Magia | ✅ |
+| Sangría | Habilidad | 1 | Pierdes 4 de vida; +3 de Fuerza. | Poco común | Magia | ✅ |
+| Grito de Batalla | Habilidad | 1 | Roba 2. **Aguante:** +1 de Fuerza. | Poco común | Magia | ✅ |
+| Pacto de Hierro | Habilidad | 0 | +1 de maná, pierdes 4 de vida. | Rara | Magia | ✅ |
+| Transfusión | Habilidad | 2 | Pierdes todo tu escudo y te curas esa cantidad. | Rara | Magia | ✅ |
+| Sangre Hirviente | Poder | 1 | Al inicio de tu turno pierdes 2 de vida y ganas 1 de Fuerza. | Poco común | Magia | ✅ |
+| Fortaleza Interior | Poder | 1 | Cada vez que te curas, ganas 2 de escudo. | Poco común | Magia | ✅ |
+| Regeneración | Poder | 2 | Al inicio de tu turno te curas 3. | Rara | Magia | ✅ |
+| Escudo Impenetrable | Habilidad | 2 | 22 de escudo. **Aguante:** +2 de Fuerza. | Legendaria | Épico | ✅ |
+| Ejecución | Ataque | 3 | 30 de daño, si lo mata, te curas 10. | Legendaria | Épico | ✅ |
+| Bastión | Habilidad | 3 | 30 de escudo. | Legendaria | Épico | ✅ |
+| Furia Desatada | Ataque | 2 | 4 golpes de 4. **Furia:** +2 golpes. | Épica | Épico | ✅ |
+| Ira Carmesí | Ataque | 3 | 40 de daño, pierdes 8 de vida; cura la mitad. | Épica | Épico | ✅ |
+| Golpe Vampírico | Ataque | 3 | 24 de daño, te curas el daño hecho. | Legendaria | Épico | ✅ |
+| Doblar Escudo | Habilidad | 2 | Duplica tu escudo. | Legendaria | Épico | ✅ |
+| Muralla Infranqueable | Habilidad | 3 | 30 de escudo, tu escudo dura un turno más. | Legendaria | Épico | ✅ |
+| Piel de Acero | Poder | 2 | Al final de tu turno ganas 6 de escudo. | Épica | Épico | ✅ |
+| Berserker | Poder | 2 | Cada vez que pierdes vida, +1 de Fuerza. | Legendaria | Épico | ✅ |
+| Voluntad de Hierro | Poder | 2 | Tus propios efectos no te quitan más de 1 de vida cada vez. | Legendaria | Épico | ✅ |
+
+Cambios tras la revisión: Golpe de Escudo y Torbellino de Acero suben a Rara, Doblar Escudo
+a Legendaria; Transfusión cuesta 2 y Berserker 2; Pacto de Hierro da 1 de maná (pierdes 4);
+Voluntad de Hierro limita a 1 la vida que te quita cada efecto propio. Retribución pasa
+a neutral; Baluarte y Escudo Impenetrable ganan Aguante; Ejecución cura 10 si mata.
+
+### Mazos iniciales
+
+| Personaje | Cartas (10, salvo la Pícara) |
+|---|---|
+| La Guerrera | 5 Espadazo (1: 6 de daño), 4 Bloqueo (1: 5 de escudo), Guardia Férrea (1: 5 de escudo; **Aguante:** +1 de Fuerza) |
+| El Mago | 4 Proyectil Arcano (1: 6 de daño), Chispa Ígnea (1: 4 de daño, +2 de Fuego), 5 Égida (1: 5 de escudo) |
+| La Pícara | 4 Puñalada (1: 6 de daño), 4 Esquiva (1: 6 de escudo), Finta (1: 4 de daño; **Combo:** +4 de escudo) |
 
 ### Pícara
 
@@ -438,6 +515,8 @@ Torbellino, Veneno, Lluvia de Golpes, Tormenta de Veneno, Mazo Impecable y Finta
 | Llave Maestra | Las salas del tesoro te dejan elegir entre 2 reliquias. | Épica | ✅ |
 | Interés Compuesto | Cada vez que ganas oro, ganas además un 10% de tu oro total (tras sumar la ganancia, redondeado hacia abajo; dorada 20%). El interés no genera más interés. | Épica | ✅ |
 | Reloj Roto | Una vez por combate, al quedarte en 0 de maná con cartas en la mano, recuperas todo el maná. | Legendaria | ✅ |
+| Cicatriz | Empiezas cada combate con 1 de Fuerza. | Común | ✅ |
+| Brazal de Guerra | Al empezar cada combate ganas 8 de escudo. | Común | ✅ |
 
 ### Pícara
 
@@ -458,6 +537,16 @@ Torbellino, Veneno, Lluvia de Golpes, Tormenta de Veneno, Mazo Impecable y Finta
 
 Regla: las reliquias de la Pícara solo tocan sus temas (Combo, Despojo, dagas y veneno);
 lo demás es neutral.
+
+### Guerrera
+
+| Reliquia | Efecto | Rareza | Estado |
+|---|---|---|---|
+| Colmillo de Hierro | Tu primer ataque de cada turno te cura 2. | Poco común | ✅ |
+| Venda Empapada | La primera vez que pierdes vida en tu turno, robas 1 carta. | Poco común | ✅ |
+| Copa de Sangre | Todas tus curaciones en combate curan 2 más. | Rara | ✅ |
+| Estandarte Desgarrado | Cada 3 veces que activas Furia, ganas 1 de Fuerza. | Épica | ✅ |
+| Corazón de Titán | La curación que sobrepasa tu vida máxima te da el doble de escudo. | Legendaria | ✅ |
 
 ### Ya existentes (antes de esta lista)
 
@@ -533,7 +622,7 @@ Las cartas mejorables varias veces cuestan más en cada nivel: precio × (nivel 
 |---|---|
 | Pícara | Combo · Despojo · Dagas · Veneno · Suerte |
 | Mago | Vacío · Cartas de elementos |
-| Guerrera | Bloqueo · Fuerza · Curación |
+| Guerrera | Bloqueo · Fuerza · Curación · Perder vida (Furia, Aguante) |
 
 ---
 

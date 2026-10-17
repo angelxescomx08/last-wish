@@ -46,8 +46,11 @@ READY_STYLES: dict[Keyword, ReadyStyle] = {
     Keyword.VOID: ReadyStyle("¡VACÍO!", (90, 160, 255), (200, 225, 255), "void"),
     Keyword.SINGULAR: ReadyStyle("¡SINGULAR!", (190, 130, 255), (236, 214, 255), "singular"),
     Keyword.REACTION: ReadyStyle("¡REACCIÓN!", (255, 120, 200), (255, 220, 240), "reaction"),
+    Keyword.FURY: ReadyStyle("¡FURIA!", (235, 50, 50), (255, 200, 190), "fury"),
+    Keyword.ENDURE: ReadyStyle("¡AGUANTE!", (200, 205, 220), (245, 248, 255), "endure"),
 }
-_ORDER = (Keyword.COMBO, Keyword.REACTION, Keyword.SPOIL, Keyword.VOID, Keyword.SINGULAR)
+_ORDER = (Keyword.COMBO, Keyword.REACTION, Keyword.FURY, Keyword.ENDURE, Keyword.SPOIL, Keyword.VOID,
+          Keyword.SINGULAR)
 
 COMET_SPEED = 0.32          # laps per second
 COMETS_PER_KEYWORD = 3
@@ -55,7 +58,8 @@ TRAIL = 9
 
 
 def ready_keywords(card: Card, combo: bool = False, singular: bool = False,
-                   void: bool = False, spoil: bool = False, reaction: bool = False) -> list[Keyword]:
+                   void: bool = False, spoil: bool = False, reaction: bool = False,
+                   fury: bool = False, endure: bool = False) -> list[Keyword]:
     """The card's keywords whose condition holds now (only layers the card really has)."""
     flags = {
         Keyword.REACTION: reaction and bool(card.reaction_effects()),
@@ -63,6 +67,8 @@ def ready_keywords(card: Card, combo: bool = False, singular: bool = False,
         Keyword.SPOIL: spoil and bool(card.spoil_effects()),
         Keyword.VOID: void and bool(card.void_effects()),
         Keyword.SINGULAR: singular and bool(card.singular_effects()),
+        Keyword.FURY: fury and bool(card.fury_effects()),
+        Keyword.ENDURE: endure and bool(card.endure_effects()),
     }
     return [k for k in _ORDER if flags[k]]
 

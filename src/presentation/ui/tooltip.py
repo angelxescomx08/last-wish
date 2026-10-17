@@ -33,7 +33,7 @@ from src.domain.entities import (
     StatusEffect, status_stacks,
 )
 from src.domain.keywords import (
-    Keyword, combo_text, reaction_text, singular_text, spoil_text, void_text,
+    Keyword, combo_text, endure_text, fury_text, reaction_text, singular_text, spoil_text, void_text,
 )
 from src.domain.mana import Mana
 from src.domain.numbers import BigValue
@@ -130,6 +130,8 @@ _KEYWORD_SUMMARY = {
     Keyword.VOID: void_text,
     Keyword.SPOIL: spoil_text,
     Keyword.REACTION: reaction_text,
+    Keyword.FURY: fury_text,
+    Keyword.ENDURE: endure_text,
 }
 
 
@@ -152,6 +154,8 @@ def card_tooltip(
     void_active: bool = False,
     spoil_active: bool = False,
     reaction_active: bool = False,
+    fury_active: bool = False,
+    endure_active: bool = False,
 ) -> TooltipContent:
     active = {
         Keyword.REACTION: reaction_active and bool(card.reaction_effects()),
@@ -159,9 +163,12 @@ def card_tooltip(
         Keyword.SINGULAR: singular_active and bool(card.singular_effects()),
         Keyword.VOID: void_active and bool(card.void_effects()),
         Keyword.SPOIL: spoil_active and bool(card.spoil_effects()),
+        Keyword.FURY: fury_active and bool(card.fury_effects()),
+        Keyword.ENDURE: endure_active and bool(card.endure_effects()),
     }
-    combo, singular, void, spoil, reaction = (active[k] for k in (Keyword.COMBO, Keyword.SINGULAR, Keyword.VOID,
-                                                                   Keyword.SPOIL, Keyword.REACTION))
+    combo, singular, void, spoil, reaction, fury, endure = (
+        active[k] for k in (Keyword.COMBO, Keyword.SINGULAR, Keyword.VOID, Keyword.SPOIL,
+                            Keyword.REACTION, Keyword.FURY, Keyword.ENDURE))
     title = chroma_title(card.name, card.chroma) + (" (Rota)" if card.is_broken else "")
     cost = "Injugable" if card.unplayable else f"Coste: {card.cost} maná"
     content = TooltipContent(
@@ -171,8 +178,8 @@ def card_tooltip(
     )
     lines = content.lines
 
-    dmg = card.total_damage(combo, singular, void, spoil, reaction)
-    blk = card.total_block(combo, singular, void, spoil, reaction)
+    dmg = card.total_damage(combo, singular, void, spoil, reaction, fury, endure)
+    blk = card.total_block(combo, singular, void, spoil, reaction, fury, endure)
     if dmg > 0:
         lines.append(f"Inflige {BigValue.format_int(dmg + bonus_damage)} de daño a un enemigo.")
         if bonus_damage > 0:
@@ -182,7 +189,7 @@ def card_tooltip(
         if bonus_block > 0:
             lines.append(f"  ({BigValue.format_int(blk)} base + {bonus_block} destreza)")
 
-    base_draw = card.total_draw(combo, singular, void, spoil, reaction)
+    base_draw = card.total_draw(combo, singular, void, spoil, reaction, fury, endure)
     if base_draw > 0:
         lines.append(f"Roba {base_draw} carta{'s' if base_draw > 1 else ''}.")
 

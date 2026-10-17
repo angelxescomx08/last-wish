@@ -145,7 +145,8 @@ def hero_entry(turn: int, card: Card, result, enemy_names: list[str], enemies_af
         target = names_by_id.get(ev.enemy_id, "")
         lines.append(f"¡{ev.reaction.value}! en {target}: {reaction_summary(ev.reaction, ev.stacks)}")
     for flag, label in ((result.combo, "¡Combo!"), (result.singular, "¡Singular!"), (result.void, "¡Vacío!"),
-                        (result.spoil, "¡Despojo!"), (result.reaction, "¡Reacción!")):
+                        (result.spoil, "¡Despojo!"), (result.reaction, "¡Reacción!"),
+                        (result.fury, "¡Furia!"), (result.endure, "¡Aguante!")):
         if flag:
             lines.append(label)
     title = f"Jugaste {card.name}" + (f" x{result.casts}" if result.casts > 1 else "")

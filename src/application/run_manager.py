@@ -267,6 +267,26 @@ def _all_relic_defs() -> list[Relic]:
         Relic("r_clock",    "Reloj Roto",
               "Una vez por combate, al quedarte en 0 de maná con cartas en la mano, recuperas todo el maná.",
               tag=RelicTag.BROKEN_CLOCK),
+        Relic("r_scar",     "Cicatriz",
+              "Empiezas cada combate con 1 de Fuerza.", tag=RelicTag.SCAR),
+        Relic("r_bracer",   "Brazal de Guerra",
+              "Al empezar cada combate ganas 8 de escudo.", tag=RelicTag.WAR_BRACER),
+        # La Guerrera — vida, curación, escudo y Fuerza
+        Relic("r_iron_fang", "Colmillo de Hierro",
+              "Tu primer ataque de cada turno te cura 2.",
+              tag=RelicTag.IRON_FANG, relic_class=CardClass.WARRIOR),
+        Relic("r_bandage",  "Venda Empapada",
+              "La primera vez que pierdes vida en tu turno, robas 1 carta.",
+              tag=RelicTag.SOAKED_BANDAGE, relic_class=CardClass.WARRIOR),
+        Relic("r_blood_cup", "Copa de Sangre",
+              "Todas tus curaciones en combate curan 2 más.",
+              tag=RelicTag.BLOOD_CUP, relic_class=CardClass.WARRIOR),
+        Relic("r_banner",   "Estandarte Desgarrado",
+              "Cada 3 veces que activas Furia, ganas 1 de Fuerza.",
+              tag=RelicTag.TORN_BANNER, relic_class=CardClass.WARRIOR),
+        Relic("r_titan",    "Corazón de Titán",
+              "La curación que sobrepasa tu vida máxima te da el doble de escudo.",
+              tag=RelicTag.TITAN_HEART, relic_class=CardClass.WARRIOR),
     ]
 
 

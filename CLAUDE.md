@@ -420,7 +420,8 @@ Four pack themes are available in the shop. Each pack shows 5 cards; the player 
 | `MAGIA` | 75 gold | Special / utility cards |
 | `EPICO` | 150 gold | High-power mixed cards |
 
-`starter_deck()` returns the initial 10-card deck used when creating a new run.
+`starter_deck(character_id)` returns the class starter deck (Pícara 9 cards, Guerrera and
+Mago 10; no id = the neutral 10-card deck). See *La Guerrera* below.
 `card_factories_for_theme(theme)` returns a list of zero-argument callables that produce the cards belonging to that theme — used by `pick_pack_cards()`.
 
 ### Chromas — golden cards and relics (`src/domain/chroma.py`)
@@ -1332,7 +1333,8 @@ them, plus a keyword; icons so it is easy to understand. Rules and numbers in
   tooltip "[[fire]]Aplica 2 de Fuego."; ready style "¡REACCIÓN!" (pink); combat floats
   "¡VAPOR!" with its icon over the enemy (`FxLayer.add_text(icon=)`) and "¡Congelado!"
   when a frozen enemy loses its turn; intent breakdown shows "−N Agua" / "Congelado".
-- The Mage starter deck is unchanged (Chispa Arcana, the class card, is in the Acero pool).
+- Chispa Arcana, the class card, is in the Acero pool. The Mage starter deck (2026-10-17) is
+  `_mage_starter`: 4 Proyectil Arcano, Chispa Ígnea (4 dmg + 2 Fuego), 5 Égida.
 
 ### Readable elements (2026-10-16)
 
@@ -1423,3 +1425,38 @@ or hold for a zoomed view; progressive disclosure: show the essentials, the rest
 - **Renderer safety**: `_render_stack` never goes past the screen — once both columns are
   full, the remaining panels become one "+N más · Clic derecho para verlo todo" box.
 - Hovering one status badge or the intent keeps its own precise tooltip.
+
+## La Guerrera: Fuerza, losing HP, healing, Furia and Aguante (2026-10-17)
+
+User design: she heals and hurts herself, focused on block and Fuerza; cards that cost HP are
+slightly stronger. Reviewed card by card in `docs/guerrera_cartas.xlsx`; rules, the 36 new
+cards (ids `wr_*`), relics and starter decks in `docs/game_design.md` → *Guerrera*.
+
+- **Rules** (`CombatState`, domain): `hero_strength` / `gain_strength` (hero status
+  `STRENGTH`, a buff, whole combat); `hero_hit(enemy, amount)` = one extra hit of a hero
+  attack (+ Fuerza, Débil, Vulnerable) used by multi-hit / area on_play effects;
+  `lose_hp(amount)` ignores block, never below 1 HP (`self_damage_cap`: at most 1 per
+  effect), counts `hp_lost_this_turn`; `on_hp_lost(lost, own_turn)` is also called by enemy
+  hits (`own_turn=False`) and hero Veneno (Segunda Piel `block_on_hp_loss`, Berserker
+  `strength_on_hp_loss`, Venda Empapada → `pending_draws`); `heal_hero(amount)` caps at max
+  HP, the overflow becomes block (Corazón de Titán ×2), Copa de Sangre +2, Fortaleza Interior
+  `block_on_heal`. `last_hit` (HP the card's main hit took, set in `_resolve_cast`) feeds
+  lifesteal; `last_area_hits` feeds Torbellino de Acero. `end_turn_block` = Piel de Acero.
+- `play_card` adds Fuerza to the main hit (like `attack_bonus`); combat-start Cicatriz
+  (+1 Fuerza) and Brazal de Guerra (8 block) in `draw_opening_hand`.
+- **Keywords** `Keyword.FURY` ("Furia": HP lost earlier this turn) and `Keyword.ENDURE`
+  ("Aguante": block > 0 when played, before the card's own block). Layers
+  `CardEffect.fury` / `endure`; 6th/7th flags `fury=` / `endure=` on every `total_*` /
+  `active_effects` (keyword args, default False); `CombatState.fury_ready` / `endure_ready`;
+  `PlayResult.fury` / `endure`. Helpers `card_pool._wr`, `_wr_fury`, `_wr_endure`.
+- **UI**: icons `fury` (blood drop) and `endure` (steel shield, gold boss) appended to
+  `generate_ui_icons.py`; ready styles "¡FURIA!" (red) / "¡AGUANTE!" (steel); card face
+  "Furia: …" / "¡Furia activa!"; tooltip keyword panels; the combat scene passes both flags
+  and adds Fuerza to the shown damage bonus. Card texts kept to ≤ 5 lines on the face.
+- **Relics**: neutral `SCAR` (Cicatriz), `WAR_BRACER` (Brazal de Guerra); Warrior
+  `IRON_FANG`, `SOAKED_BANDAGE`, `BLOOD_CUP`, `TORN_BANNER` (`relic_effects.count_fury`,
+  every 3rd Furia), `TITAN_HEART`. Icons in `RELIC_SPRITE_PATHS`.
+- **Starter decks**: `_warrior_starter` (5 Espadazo, 4 Bloqueo, Guardia Férrea with Aguante)
+  and `_mage_starter`; all class-stamped, common.
+- Tests: `tests/application/test_warrior.py`.
+

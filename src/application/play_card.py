@@ -25,6 +25,8 @@ class PlayResult:
     void: bool = False      # a Vacío layer resolved
     spoil: bool = False     # a Despojo layer resolved
     reaction: bool = False  # a Reacción layer resolved
+    fury: bool = False      # a Furia layer resolved
+    endure: bool = False    # an Aguante layer resolved
     reactions: list[str] = field(default_factory=list)   # elemental reactions caused (Spanish names)
     casts: int = 1          # times the card resolved (golden: 2)
     cast_hits: list[list[int]] = field(default_factory=list)   # per cast, HP lost by each enemy
@@ -44,16 +46,17 @@ class TargetKind(Enum):
 
 def requires_target(card: Card) -> bool:
     """True when the card must be played on one chosen enemy (combo layers included)."""
-    return (card.total_damage(combo=True, singular=True, void=True, spoil=True, reaction=True) > 0
+    return (card.total_damage(True, True, True, True, True, True, True) > 0
             or any(fx.needs_target or (fx.element is not None and fx.element_stacks > 0
                                        and not fx.element_all)
-                   for fx in card.active_effects(True, True, True, True, True)))
+                   for fx in card.active_effects(True, True, True, True, True, True, True)))
 
 
 def target_kind(card: Card) -> TargetKind:
     if requires_target(card):
         return TargetKind.ENEMY
-    if any(fx.hits_all_enemies or fx.element_all for fx in card.active_effects(True, True, True, True, True)):
+    if any(fx.hits_all_enemies or fx.element_all
+           for fx in card.active_effects(True, True, True, True, True, True, True)):
         return TargetKind.ALL_ENEMIES
     return TargetKind.SELF
 
@@ -83,6 +86,10 @@ def play_card(
     void = state.void_ready(card)
     # Keyword SPOIL ("Despojo"): its layers resolve if a card was discarded earlier this turn.
     spoil = state.spoil_ready(card)
+    # Keyword FURY ("Furia"): its layers resolve if the hero already lost HP this turn.
+    fury = state.fury_ready(card)
+    # Keyword ENDURE ("Aguante"): checked before the card's own block — the hero has block.
+    endure = state.endure_ready(card)
 
     # A card needs a target if it deals base damage OR any effect declares it.
     needs_target = requires_target(card)
@@ -104,7 +111,7 @@ def play_card(
     state.mana.spend(cost)
     state.next_card_discount = 0          # "the next card costs less" is used up by this card
     damage_bonus = 0
-    if card.total_damage(combo, singular, void, spoil, reaction) > 0:
+    if card.total_damage(combo, singular, void, spoil, reaction, fury, endure) > 0:
         damage_bonus, state.next_damage_bonus = state.next_damage_bonus, 0
     played = state.hand.cards.pop(card_index)
     if played.card_type == CardType.POWER:
@@ -137,13 +144,17 @@ def play_card(
         hand_before = Counter(id(c) for c in state.hand.cards)
         target = _cast_target(state, card, target_enemy_index, needs_target)
         _resolve_cast(state, card, combo, target, singular, void, damage_bonus, spoil,
-                      extra_combo, extra_spoil, reaction)
+                      extra_combo, extra_spoil, reaction, fury, endure)
         if is_attack:
             relic_effects.poison_on_attack(state, target, first_attack=state.attacks_this_turn == 0)
             if state.execute_threshold:
                 relic_effects.execute_wounded(state, before)
         if k == casts - 1:          # relic triggers once per play, shown with the last cast
             relic_effects.on_card_played(state, card, combo, spoil=spoil)
+            if is_attack and state.attacks_this_turn == 0:
+                relic_effects.iron_fang_heal(state)          # Colmillo de Hierro
+            if fury:
+                relic_effects.count_fury(state)              # Estandarte Desgarrado
             relic_effects.spread_poison(state)
         hand_after = Counter(id(c) for c in state.hand.cards)
         cast_drawn.append(sum((hand_after - hand_before).values()))
@@ -167,9 +178,10 @@ def play_card(
     message = (f"Jugaste {played.name}" + (f" x{casts}" if casts > 1 else "")
                + (" — ¡Combo!" if combo else "") + (" — ¡Singular!" if singular else "")
                + (" — ¡Vacío!" if void else "") + (" — ¡Despojo!" if spoil else "")
-               + (" — ¡Reacción!" if reaction else ""))
+               + (" — ¡Reacción!" if reaction else "") + (" — ¡Furia!" if fury else "")
+               + (" — ¡Aguante!" if endure else ""))
     return PlayResult(True, message, combo=combo, singular=singular, void=void, spoil=spoil,
-                      reaction=reaction, reactions=[ev.reaction.value for ev in state.reaction_log],
+                      reaction=reaction, fury=fury, endure=endure, reactions=[ev.reaction.value for ev in state.reaction_log],
                       casts=casts, cast_hits=cast_hits, cast_drawn=cast_drawn,
                       cast_enemy_hp=snap_hp, cast_enemy_block=snap_blk, cast_player_block=snap_player)
 
@@ -189,26 +201,27 @@ def _cast_target(state: CombatState, card: Card, target: int | None, needs_targe
 def _resolve_cast(state: CombatState, card: Card, combo: bool, target: int | None,
                   singular: bool = False, void: bool = False, damage_bonus: int = 0,
                   spoil: bool = False, extra_combo: int = 0, extra_spoil: int = 0,
-                  reaction: bool = False) -> None:
+                  reaction: bool = False, fury: bool = False, endure: bool = False) -> None:
     """One full cast: damage (+ bonuses), block (+ dexterity), mana, on_play effects, draws.
 
-    Damage = printed + relics + hero's attack bonus + ``damage_bonus`` (e.g. Afilar)
+    Damage = printed + relics + hero's attack bonus + Fuerza + ``damage_bonus`` (e.g. Afilar)
     (+ Pañuelo del Duelista when a Combo resolves), reduced by Débil if the hero has it.
     ``extra_combo`` / ``extra_spoil``: the Combo / Despojo layers resolve that many more
     times (Sombra Gemela / Daga Partida), with their raw printed values.
     Elements (Mage) are applied after damage/block/mana, layer by layer, before ``on_play``;
     a Vulnerable enemy takes 50 % more from the card's damage.
     """
-    flags = (combo, singular, void, spoil, reaction)
+    flags = (combo, singular, void, spoil, reaction, fury, endure)
     dmg = card.total_damage(*flags)
     blk = card.total_block(*flags)
     scarf = relic_effects.combo_scarf_bonus(state.relics) if combo else 0
+    state.last_hit = 0
     if dmg > 0 and target is not None and target < len(state.enemies) and state.enemies[target].is_alive:
         enemy = state.enemies[target]
         effective_dmg = weakened(dmg + relic_effects.extra_attack_damage(state.relics)
-                                 + state.player.attack_bonus + damage_bonus + scarf,
+                                 + state.player.attack_bonus + state.hero_strength + damage_bonus + scarf,
                                  state.player.status_effects)
-        deal_damage(enemy, vulnerable(effective_dmg, enemy.status_effects))
+        state.last_hit = deal_damage(enemy, vulnerable(effective_dmg, enemy.status_effects))
     if blk > 0:                           # Frágil: 25 % less block from cards
         state.player.block += frail(blk + state.player.dexterity + scarf, state.player.status_effects)
     mana_gain = card.total_mana_gain(*flags)

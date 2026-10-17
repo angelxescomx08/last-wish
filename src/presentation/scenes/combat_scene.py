@@ -769,6 +769,8 @@ class CombatScene:
                 void         = self._state.void_ready(card),
                 spoil        = self._state.spoil_ready(card),
                 reaction     = self._state.reaction_ready(card),
+                fury         = self._state.fury_ready(card),
+                endure       = self._state.endure_ready(card),
             )
 
         self._draw_dealt(surface, dealing)
@@ -848,16 +850,20 @@ class CombatScene:
         """Printed damage of ``card`` with every keyword layer that would resolve now."""
         return card.total_damage(self._combo_ready(card), self._state.singular_ready(card),
                                  self._state.void_ready(card), self._state.spoil_ready(card),
-                                 self._state.reaction_ready(card))
+                                 self._state.reaction_ready(card), self._state.fury_ready(card),
+                                 self._state.endure_ready(card))
 
     def _bonuses(self, card) -> tuple[int, int]:
         combo, singular = self._combo_ready(card), self._state.singular_ready(card)
         void, spoil = self._state.void_ready(card), self._state.spoil_ready(card)
         reaction = self._state.reaction_ready(card)
+        flags = (combo, singular, void, spoil, reaction, self._state.fury_ready(card),
+                 self._state.endure_ready(card))
         scarf = relic_effects.combo_scarf_bonus(self._state.relics) if combo else 0
         dmg = (relic_effects.extra_attack_damage(self._state.relics) + self._state.player.attack_bonus
-               + self._state.next_damage_bonus + scarf) if card.total_damage(combo, singular, void, spoil, reaction) > 0 else 0
-        blk = (self._state.player.dexterity + scarf) if card.total_block(combo, singular, void, spoil, reaction) > 0 else 0
+               + self._state.hero_strength + self._state.next_damage_bonus + scarf
+               ) if card.total_damage(*flags) > 0 else 0
+        blk = (self._state.player.dexterity + scarf) if card.total_block(*flags) > 0 else 0
         return dmg, blk
 
     def _held_index(self) -> int | None:
@@ -1008,6 +1014,7 @@ class CombatScene:
                             singular=self._state.singular_ready(card),
                             void=self._state.void_ready(card), spoil=self._state.spoil_ready(card),
                             reaction=self._state.reaction_ready(card, self._play.target),
+                            fury=self._state.fury_ready(card), endure=self._state.endure_ready(card),
                             cost=self._state.card_cost(card))
         if self._play.aiming:
             draw_arrow(surface, (rect.centerx, rect.top + 6), self._arrow_end(),
@@ -1065,7 +1072,9 @@ class CombatScene:
                                 singular_active=self._state.singular_ready(card),
                                 void_active=self._state.void_ready(card),
                                 spoil_active=self._state.spoil_ready(card),
-                                reaction_active=self._state.reaction_ready(card))
+                                reaction_active=self._state.reaction_ready(card),
+                                fury_active=self._state.fury_ready(card),
+                                endure_active=self._state.endure_ready(card))
 
         if self._hovered_enemy is not None and self._hovered_enemy < len(self._state.enemies):
             enemy = self._state.enemies[self._hovered_enemy]      # quick look; everything: inspect

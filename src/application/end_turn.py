@@ -48,6 +48,8 @@ def draw_opening_hand(state: CombatState) -> None:
         state.mana.maximum += bonus_mana
         state.mana.refill()
     state.turn_start_alive = len(state.living_enemies())
+    state.gain_strength(relic_effects.combat_start_strength(state.relics))    # Cicatriz
+    state.player.block += relic_effects.combat_start_block(state.relics)      # Brazal de Guerra
     draw_cards(state, cards_per_turn(state) + relic_effects.opening_extra_draw(state.relics))
     _after_hand_drawn(state)
 
@@ -60,6 +62,7 @@ def _discard_hand(state: CombatState) -> None:
     # Hilo de Araña: ending the turn with an empty hand gives block (it absorbs this enemy turn).
     if state.hand.count == 0:
         state.player.block += relic_effects.spider_thread_block(state.relics)
+    state.player.block += state.end_turn_block        # Piel de Acero
     relic_effects.settle_pickpocket(state)
     # Status cards still in hand act (Espora: Veneno); ethereal ones fade instead of discarding.
     for card in list(state.hand.cards):
@@ -196,6 +199,7 @@ def _enemy_attack(state: CombatState, enemy: Enemy, dmg: int) -> int:
     if not TUNING.invincible:          # Pruebas: invincible hero
         lost = min(state.player.current_hp, dmg - absorbed)
         state.player.current_hp -= lost
+        state.on_hp_lost(lost, own_turn=False)       # Segunda Piel, Berserker
     # Contraataque: a hit fully blocked deals damage back to the attacker.
     if dmg > 0 and absorbed == dmg and state.counter_damage:
         deal_damage(enemy, state.counter_damage)
@@ -254,7 +258,8 @@ def _begin_player_turn(state: CombatState) -> None:
     # Enredado: draw 1 card less per stack, this turn only.
     tangled = status_stacks(state.player.status_effects, ENTANGLED)
     state.player.status_effects = [se for se in state.player.status_effects if se.name != ENTANGLED]
-    draw_cards(state, cards_per_turn(state) - tangled)
+    extra, state.pending_draws = state.pending_draws, 0   # e.g. Venda Empapada after Veneno
+    draw_cards(state, cards_per_turn(state) - tangled + extra)
     _after_hand_drawn(state)
     relic_effects.spread_poison(state)
     enemy_roster.react_to_deaths(state.enemies, state.player)
@@ -266,7 +271,9 @@ def _poison_hero(state: CombatState) -> None:
     if stacks <= 0:
         return
     if not TUNING.invincible:
-        state.player.current_hp = max(0, state.player.current_hp - stacks)
+        lost = min(stacks, state.player.current_hp)
+        state.player.current_hp -= lost
+        state.on_hp_lost(lost, own_turn=True)        # counts for Furia this turn
         relic_effects.try_revive(state)
     state.player.status_effects = tick_status(state.player.status_effects, POISON)
 
@@ -284,6 +291,8 @@ def _reset_turn_counters(state: CombatState) -> None:
     state.lucky_coin_used = False
     state.reactions_this_turn = 0
     state.catalyst = 0                # Catalizador lasts this turn only
+    state.hp_lost_this_turn = 0       # Furia needs HP lost earlier this turn
+    state.hp_loss_draw_used = False   # Venda Empapada
     state.turn_start_alive = len(state.living_enemies())
 
 

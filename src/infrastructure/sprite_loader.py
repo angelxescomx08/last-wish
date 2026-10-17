@@ -269,6 +269,13 @@ RELIC_SPRITE_PATHS: dict[str, str] = {
     "Llave Maestra":         "item/misc/key.png",
     "Reloj Roto":            "item/misc/misc_lamp_old.png",
     "Interés Compuesto":     "item/gold/gold_pile_25.png",
+    "Cicatriz":              "item/amulet/stone_2_red.png",
+    "Brazal de Guerra":      "item/armor/hands/gauntlet_1.png",
+    "Colmillo de Hierro":    "item/misc/misc_horn.png",
+    "Venda Empapada":        "item/scroll/scroll-red.png",
+    "Copa de Sangre":        "item/potion/purple_red.png",
+    "Estandarte Desgarrado": "item/armor/back/cloak_4.png",
+    "Corazón de Titán":      "item/amulet/artefact/urand_bloodlust_new.png",
 }
 
 

@@ -89,6 +89,12 @@ class CardEffect:
     reaction: optional extra layer (keyword REACTION, "Reacción") that also
     resolves when playing the card causes an elemental reaction.
 
+    fury: optional extra layer (keyword FURY, "Furia") that also resolves when
+    the hero already lost HP this turn.
+
+    endure: optional extra layer (keyword ENDURE, "Aguante") that also resolves
+    when the hero has block when the card is played.
+
     element / element_stacks / element_all: Mage elements (``domain/elements.py``).
     The layer puts ``element_stacks`` of ``element`` on the target enemy (or on
     every enemy with ``element_all``) right after its damage, before ``on_play``.
@@ -113,6 +119,8 @@ class CardEffect:
     void: CardEffect | None = None
     spoil: CardEffect | None = None
     reaction: CardEffect | None = None
+    fury: CardEffect | None = None
+    endure: CardEffect | None = None
     element: Element | None = None
     element_stacks: int = 0
     element_all: bool = False
@@ -217,16 +225,27 @@ class Card:
         """Reacción layers of the chain (keyword REACTION)."""
         return [fx.reaction for fx in self.all_effects() if fx.reaction is not None]
 
+    def fury_effects(self) -> list[CardEffect]:
+        """Furia layers of the chain (keyword FURY)."""
+        return [fx.fury for fx in self.all_effects() if fx.fury is not None]
+
+    def endure_effects(self) -> list[CardEffect]:
+        """Aguante layers of the chain (keyword ENDURE)."""
+        return [fx.endure for fx in self.all_effects() if fx.endure is not None]
+
     def active_effects(self, combo: bool = False, singular: bool = False,
                        void: bool = False, spoil: bool = False,
-                       reaction: bool = False) -> list[CardEffect]:
+                       reaction: bool = False, fury: bool = False,
+                       endure: bool = False) -> list[CardEffect]:
         """Effects that resolve: the chain, plus its keyword layers that are on."""
         return (self.all_effects()
                 + (self.combo_effects() if combo else [])
                 + (self.singular_effects() if singular else [])
                 + (self.void_effects() if void else [])
                 + (self.spoil_effects() if spoil else [])
-                + (self.reaction_effects() if reaction else []))
+                + (self.reaction_effects() if reaction else [])
+                + (self.fury_effects() if fury else [])
+                + (self.endure_effects() if endure else []))
 
     def keywords(self) -> frozenset[Keyword]:
         out = set()
@@ -240,6 +259,10 @@ class Card:
             out.add(Keyword.SPOIL)
         if self.reaction_effects():
             out.add(Keyword.REACTION)
+        if self.fury_effects():
+            out.add(Keyword.FURY)
+        if self.endure_effects():
+            out.add(Keyword.ENDURE)
         return frozenset(out)
 
     def effect_multiplier(self) -> int:
@@ -254,31 +277,38 @@ class Card:
         return self.effect_multiplier()
 
     def total_damage(self, combo: bool = False, singular: bool = False, void: bool = False,
-                     spoil: bool = False, reaction: bool = False) -> int:
+                     spoil: bool = False, reaction: bool = False, fury: bool = False,
+                     endure: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo, singular, void, spoil, reaction):
+        for fx in self.active_effects(combo, singular, void, spoil, reaction, fury, endure):
             total = total.add_flat(fx.damage.resolve())
         return total.resolve()
 
     def total_block(self, combo: bool = False, singular: bool = False, void: bool = False,
-                     spoil: bool = False, reaction: bool = False) -> int:
+                    spoil: bool = False, reaction: bool = False, fury: bool = False,
+                    endure: bool = False) -> int:
         total = BigValue(0)
-        for fx in self.active_effects(combo, singular, void, spoil, reaction):
+        for fx in self.active_effects(combo, singular, void, spoil, reaction, fury, endure):
             total = total.add_flat(fx.block.resolve())
         return total.resolve()
 
     def total_draw(self, combo: bool = False, singular: bool = False, void: bool = False,
-                   spoil: bool = False, reaction: bool = False) -> int:
-        return sum(fx.draw for fx in self.active_effects(combo, singular, void, spoil, reaction))
+                   spoil: bool = False, reaction: bool = False, fury: bool = False,
+                   endure: bool = False) -> int:
+        return sum(fx.draw for fx in self.active_effects(combo, singular, void, spoil, reaction,
+                                                         fury, endure))
 
     def total_mana_gain(self, combo: bool = False, singular: bool = False, void: bool = False,
-                        spoil: bool = False, reaction: bool = False) -> int:
-        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void, spoil, reaction))
+                        spoil: bool = False, reaction: bool = False, fury: bool = False,
+                        endure: bool = False) -> int:
+        return sum(fx.mana_gain for fx in self.active_effects(combo, singular, void, spoil, reaction,
+                                                              fury, endure))
 
     def element_badges(self) -> list:
         """Elements this card applies or uses (chain + keyword layers), in order, no repeats."""
         layers = (self.all_effects() + self.combo_effects() + self.singular_effects()
-                  + self.void_effects() + self.spoil_effects() + self.reaction_effects())
+                  + self.void_effects() + self.spoil_effects() + self.reaction_effects()
+                  + self.fury_effects() + self.endure_effects())
         out: list = []
         for fx in layers:
             for el in ((fx.element,) if fx.element is not None and fx.element_stacks > 0 else ()) + tuple(fx.element_hint):

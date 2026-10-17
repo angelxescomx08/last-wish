@@ -63,11 +63,16 @@ class TestRogueStarter:
 
 
 class TestOtherClasses:
-    def test_warrior_mage_and_default_keep_shared_deck(self):
+    def test_default_keeps_shared_deck(self):
         shared = [c.id for c in starter_deck()]
         assert len(shared) == 10
-        assert [c.id for c in _deck(CharacterId.WARRIOR)] == shared
-        assert [c.id for c in _deck(CharacterId.MAGE)] == shared
+        assert shared.count("golpe_base") == 4
+
+    def test_warrior_and_mage_have_their_own_decks(self):
+        # 2026-10-17: 10 class cards each (see tests/application/test_warrior.py)
+        shared = [c.id for c in starter_deck()]
+        assert [c.id for c in _deck(CharacterId.WARRIOR)] != shared
+        assert [c.id for c in _deck(CharacterId.MAGE)] != shared
 
     def test_runs_start_with_their_class_deck(self):
         for ch in ALL_CHARACTERS:

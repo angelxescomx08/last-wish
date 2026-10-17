@@ -185,6 +185,35 @@ def settle_pickpocket(state: CombatState) -> int:
 
 
 # ---------------------------------------------------------------------------
+# La Guerrera: losing HP, healing, Fuerza
+# ---------------------------------------------------------------------------
+
+FURIES_PER_BANNER: int = 3     # Estandarte Desgarrado: Furias needed for each +1 Fuerza
+
+
+def iron_fang_heal(state: CombatState) -> int:
+    """Colmillo de Hierro: your first attack of each turn heals 2 (golden: 4)."""
+    return state.heal_hero(_sum(state.relics, RelicTag.IRON_FANG, 2))
+
+
+def count_fury(state: CombatState) -> None:
+    """A Furia layer resolved. Estandarte Desgarrado: every 3rd one gives +1 Fuerza (golden: +2)."""
+    state.furies += 1
+    if state.furies % FURIES_PER_BANNER == 0:
+        state.gain_strength(_sum(state.relics, RelicTag.TORN_BANNER, 1))
+
+
+def combat_start_strength(relics: list[Relic]) -> int:
+    """Cicatriz: Fuerza the hero starts every combat with."""
+    return _sum(relics, RelicTag.SCAR, 1)
+
+
+def combat_start_block(relics: list[Relic]) -> int:
+    """Brazal de Guerra: block the hero starts every combat with."""
+    return _sum(relics, RelicTag.WAR_BRACER, 8)
+
+
+# ---------------------------------------------------------------------------
 # Neutral relics
 # ---------------------------------------------------------------------------
 

@@ -46,6 +46,14 @@ class RelicTag(Enum):
     MASTER_KEY      = "master_key"       # los tesoros ofrecen 2 reliquias a elegir
     BROKEN_CLOCK    = "broken_clock"     # 1 vez por combate: a 0 de maná con cartas en mano, recupéralo
     COMPOUND_INTEREST = "compound_interest"  # cada vez que ganas oro, +10 % de tu oro total
+    SCAR            = "scar"             # empiezas cada combate con +1 de Fuerza
+    WAR_BRACER      = "war_bracer"       # al empezar cada combate, 8 de escudo
+    # La Guerrera — vida, curación, escudo y Fuerza
+    IRON_FANG       = "iron_fang"        # Guerrera: tu primer ataque de cada turno te cura 2
+    SOAKED_BANDAGE  = "soaked_bandage"   # Guerrera: la primera vez que pierdes vida en tu turno, roba 1
+    BLOOD_CUP       = "blood_cup"        # Guerrera: tus curaciones en combate curan +2
+    TORN_BANNER     = "torn_banner"      # Guerrera: cada 3 Furias activadas, +1 de Fuerza
+    TITAN_HEART     = "titan_heart"      # Guerrera: la curación sobrante da el doble de escudo
 
 
 # Tier of each relic (same five tiers as cards). Luck makes higher tiers likelier.
@@ -85,6 +93,13 @@ RELIC_RARITY: dict[RelicTag, Rarity] = {
     RelicTag.MASTER_KEY:      Rarity.EPIC,
     RelicTag.BROKEN_CLOCK:    Rarity.LEGENDARY,
     RelicTag.COMPOUND_INTEREST: Rarity.EPIC,
+    RelicTag.SCAR:            Rarity.COMMON,
+    RelicTag.WAR_BRACER:      Rarity.COMMON,
+    RelicTag.IRON_FANG:       Rarity.UNCOMMON,
+    RelicTag.SOAKED_BANDAGE:  Rarity.UNCOMMON,
+    RelicTag.BLOOD_CUP:       Rarity.RARE,
+    RelicTag.TORN_BANNER:     Rarity.EPIC,
+    RelicTag.TITAN_HEART:     Rarity.LEGENDARY,
 }
 
 

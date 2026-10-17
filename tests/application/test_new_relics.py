@@ -104,10 +104,11 @@ class TestClassFilter:
 
     def test_owning_everything_still_offers_only_allowed(self):
         run = create_run(_char(CharacterId.WARRIOR), 1)
-        run.relics = [r for r in _all_relic_defs() if r.relic_class is CardClass.NEUTRAL]
+        allowed = {CardClass.NEUTRAL, CardClass.WARRIOR}       # La Guerrera has class relics too
+        run.relics = [r for r in _all_relic_defs() if r.relic_class in allowed]
         offered = pick_boss_relics(run, 3)
         assert len(offered) == 3
-        assert all(r.relic_class is CardClass.NEUTRAL for r in offered)
+        assert all(r.relic_class in allowed for r in offered)
 
 
 # --- Amuleto de Vitalidad ------------------------------------------------------

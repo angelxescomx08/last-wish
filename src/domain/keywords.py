@@ -21,6 +21,13 @@ its rule. Current keywords:
   resolves when playing the card causes an elemental reaction: an element the card
   applies meets a different element already on that enemy (``domain/elements.py``,
   ``CombatState.reaction_ready``). Mage cards only.
+* FURY ("Furia") — an extra effect layer (``CardEffect.fury``) that also resolves
+  when you already lost HP this turn before playing the card
+  (``CombatState.hp_lost_this_turn``; HP the card itself costs does not count).
+  Warrior cards only.
+* ENDURE ("Aguante") — an extra effect layer (``CardEffect.endure``) that also
+  resolves when you have block when you play the card (checked before the card's
+  own block). Warrior cards only.
 
 Design rule: the keyword *is* the condition. A keyword layer never adds a second
 condition of its own ("Combo: si además…" is not allowed).
@@ -41,6 +48,8 @@ class Keyword(Enum):
     VOID = "void"
     SPOIL = "spoil"
     REACTION = "reaction"
+    FURY = "fury"
+    ENDURE = "endure"
 
 
 @dataclass(frozen=True)
@@ -70,6 +79,14 @@ KEYWORD_DEFS: dict[Keyword, KeywordDef] = {
     Keyword.REACTION: KeywordDef(
         Keyword.REACTION, "Reacción",
         "Reacción: efecto extra si al jugarla provocas una reacción elemental.",
+    ),
+    Keyword.FURY: KeywordDef(
+        Keyword.FURY, "Furia",
+        "Furia: efecto extra si ya perdiste vida este turno.",
+    ),
+    Keyword.ENDURE: KeywordDef(
+        Keyword.ENDURE, "Aguante",
+        "Aguante: efecto extra si tienes escudo al jugarla.",
     ),
 }
 
@@ -107,6 +124,16 @@ def spoil_text(card: "Card") -> str:
 def reaction_text(card: "Card") -> str:
     """Spanish summary of a card's Reacción layers as printed."""
     return layer_text(card.reaction_effects())
+
+
+def fury_text(card: "Card") -> str:
+    """Spanish summary of a card's Furia layers as printed."""
+    return layer_text(card.fury_effects())
+
+
+def endure_text(card: "Card") -> str:
+    """Spanish summary of a card's Aguante layers as printed."""
+    return layer_text(card.endure_effects())
 
 
 def void_triggers(cost: int, mana_before: int) -> bool:
