@@ -284,6 +284,18 @@ Relics are stored in `CombatState.relics: list[Relic]`. Each `Relic` carries a `
 4. Pass any UI hint (`bonus_damage`, etc.) from the scene to the widget/tooltip.
 5. Add the relic to `create_sample_combat()` in `combat_manager.py`.
 6. Write tests in `tests/test_relic.py`, `tests/test_relic_effects.py`, and the relevant use-case test file.
+7. Draw its sprite: add an `@art("Nombre")` function to `scripts/relic_art.py`, run `python scripts/generate_relic_sprites.py "Nombre"` and `python scripts/relic_sprite_sheet.py` (marks the "Sprite propio" column of `docs/reliquias.xlsx`).
+
+### Relic sprites (own pixel art)
+
+Every relic has its own 32×32 sprite drawn in code (stdlib only, no image editor):
+
+- `scripts/relic_kit.py` — palettes (5-step ramps: `GOLD`, `STEEL`, `BLOOD`…), shape helpers (`circle`, `ellipse`, `rect`, `ring`, `poly`, `capsule`, `union`, `minus`, `rotate`) and painters (`fill` with upper-left light + dither + rim, `flat`, `line`, `sparkle`, `shine`, `finish` = dark `INK` outline).
+- `scripts/relic_art.py` — `ART` registry, one `@art("Nombre en español")` function per relic.
+- `scripts/generate_relic_sprites.py [names…]` — writes `assets/relics/<slug>.png` and merges `assets/relics/relics.json` (`{name: file}`).
+- `scripts/relic_sprite_sheet.py` — dev tool (openpyxl): "Sprite propio" column (Sí/No) in `docs/reliquias.xlsx`.
+- `SpriteLoader.get_relic_sprite` prefers `assets/relics/` (`own_relic_sprites()`) and falls back to `RELIC_SPRITE_PATHS` (DCSS tiles).
+- `tests/test_relic_sprites.py` — every entry is a real relic, PNGs are 32×32 with transparent corners, `relic_art.ART` matches `relics.json` pixel for pixel, loader prefers the own sprite.
 
 ---
 

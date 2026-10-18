@@ -393,6 +393,21 @@ RELIC_SPRITE_PATHS: dict[str, str] = {
 }
 
 
+RELIC_OWN_DIR = _ASSETS.parent / "relics"
+_own_relics: dict[str, str] | None = None
+
+
+def own_relic_sprites() -> dict[str, str]:
+    """Relic name → file of its own sprite in ``assets/relics`` (``relics.json``; cached)."""
+    global _own_relics
+    if _own_relics is None:
+        try:
+            _own_relics = json.loads((RELIC_OWN_DIR / "relics.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _own_relics = {}
+    return _own_relics
+
+
 # ---------------------------------------------------------------------------
 # Loader
 # ---------------------------------------------------------------------------
@@ -471,7 +486,14 @@ class SpriteLoader:
         return self._load(rel, size) if rel else None
 
     def get_relic_sprite(self, relic_name: str, size: int = 32) -> pygame.Surface | None:
-        """Return a scaled surface for the named relic icon, or None."""
+        """Return a scaled surface for the named relic icon, or None.
+
+        The relic's own code-drawn sprite (``assets/relics``, ``scripts/generate_relic_sprites.py``)
+        wins over the borrowed Dungeon Crawl item.
+        """
+        own = own_relic_sprites().get(relic_name)
+        if own:
+            return self._load(f"../relics/{own}", size)
         rel = RELIC_SPRITE_PATHS.get(relic_name)
         return self._load(rel, size) if rel else None
 
