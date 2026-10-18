@@ -46,6 +46,11 @@ STYLES: dict[Chroma, ChromaStyle] = {
         frame_mult=(255, 214, 122), frame_add=(52, 32, 0),
         sheen=(255, 232, 160), glow=(255, 168, 36),
     ),
+    Chroma.DIAMOND: ChromaStyle(
+        bright=(240, 254, 255), main=(140, 230, 255), dark=(30, 80, 120),
+        frame_mult=(190, 240, 255), frame_add=(10, 30, 50),
+        sheen=(225, 250, 255), glow=(90, 210, 255),
+    ),
 }
 
 SHEEN_CYCLE = 3.2      # seconds between sweeps

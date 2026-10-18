@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from src.application import enemy_roster
-from src.application import relic_effects
+from src.application import relic_effects, relic_triggers
 from src.application.drawing import draw_cards
 from src.domain.card import Card, CardEffect, CardType
 from src.domain.chroma import chroma_def
@@ -155,7 +155,12 @@ def play_card(
                 relic_effects.iron_fang_heal(state)          # Colmillo de Hierro
             if fury:
                 relic_effects.count_fury(state)              # Estandarte Desgarrado
+            relic_triggers.check_deaths(state)               # before Colmillo de Víbora moves Veneno
             relic_effects.spread_poison(state)
+            relic_triggers.after_play(state, card, cost, combo=combo, void=void, fury=fury,
+                                      endure=endure, spoil=spoil, target=target)
+            draws, state.pending_draws = state.pending_draws, 0
+            draw_cards(state, draws)
         hand_after = Counter(id(c) for c in state.hand.cards)
         cast_drawn.append(sum((hand_after - hand_before).values()))
         cast_hits.append([b - e.current_hp for b, e in zip(before, state.enemies)])
@@ -172,6 +177,7 @@ def play_card(
         state.attacks_this_turn += 1
     if spoil:
         state.spoils_this_turn += 1
+    relic_triggers.check_deaths(state)
     relic_effects.settle_pickpocket(state)
     relic_effects.try_broken_clock(state)
     enemy_roster.react_to_deaths(state.enemies, state.player)   # a partner fell: Venganza
@@ -218,16 +224,18 @@ def _resolve_cast(state: CombatState, card: Card, combo: bool, target: int | Non
     state.last_hit = 0
     if dmg > 0 and target is not None and target < len(state.enemies) and state.enemies[target].is_alive:
         enemy = state.enemies[target]
+        relics = relic_triggers.extra_damage(state, card, enemy, fury=fury, combo=combo)
         effective_dmg = weakened(dmg + relic_effects.extra_attack_damage(state.relics)
-                                 + state.player.attack_bonus + state.hero_strength + damage_bonus + scarf,
-                                 state.player.status_effects)
+                                 + state.player.attack_bonus + state.hero_strength + damage_bonus + scarf
+                                 + relics, state.player.status_effects)
         state.last_hit = deal_damage(enemy, vulnerable(effective_dmg, enemy.status_effects))
     if blk > 0:                           # Frágil: 25 % less block from cards
-        state.player.block += frail(blk + state.player.dexterity + scarf, state.player.status_effects)
+        state.player.block += frail(blk + state.player.dexterity + scarf
+                                    + relic_triggers.extra_block(state, card), state.player.status_effects)
     mana_gain = card.total_mana_gain(*flags)
     if mana_gain > 0:
         state.mana.gain(mana_gain)
-    _apply_elements(state, card.active_effects(*flags), target)
+    _apply_elements(state, card.active_effects(*flags), target, card)
     # on_play runs with the card out of hand and this cast's damage/block applied;
     # targeted_enemy_index is set so callbacks can read it.
     state.targeted_enemy_index = target
@@ -243,16 +251,22 @@ def _resolve_cast(state: CombatState, card: Card, combo: bool, target: int | Non
         _resolve_layers(state, card.spoil_effects(), target)
 
 
-def _apply_elements(state: CombatState, effects: list[CardEffect], target: int | None) -> None:
-    """Put each layer's element on the target (or every enemy), in chain order."""
+def _apply_elements(state: CombatState, effects: list[CardEffect], target: int | None,
+                    card: Card | None = None) -> None:
+    """Put each layer's element on the target (or every enemy), in chain order.
+
+    Element relics (Yesca, Concha Marina…) add their stacks; Anillo de los Cuatro notes it.
+    """
     for fx in effects:
         if fx.element is None or fx.element_stacks <= 0:
             continue
+        stacks = fx.element_stacks + relic_triggers.element_bonus(state, card, fx.element)
+        relic_triggers.note_element(state, fx.element)
         if fx.element_all:
             for enemy in [e for e in state.enemies if e.is_alive]:
-                apply_element(state, enemy, fx.element, fx.element_stacks)
+                apply_element(state, enemy, fx.element, stacks)
         elif target is not None and target < len(state.enemies):
-            apply_element(state, state.enemies[target], fx.element, fx.element_stacks)
+            apply_element(state, state.enemies[target], fx.element, stacks)
 
 
 def _resolve_layers(state: CombatState, layers: list[CardEffect], target: int | None) -> None:

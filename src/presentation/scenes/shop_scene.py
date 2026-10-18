@@ -4,7 +4,7 @@ from __future__ import annotations
 import pygame
 
 from src.presentation.ui.text_fit import fit
-from src.application.run_manager import acquire_relic, pick_shop_stock, shop_price
+from src.application.run_manager import acquire_relic, pick_shop_stock, shop_offer_price, use_voucher
 from src.domain.card_pool import PackTheme
 from src.domain.chroma import chroma_def, chroma_title
 from src.domain.run import Run
@@ -33,6 +33,7 @@ class ShopScene:
         self._packs, self._relics = pick_shop_stock(run)
         self._sold_packs: set[int] = set()
         self._sold_relics: set[int] = set()
+        self._purchases = 0                       # Tarjeta de Socio: the first one is half price
         self._pack_rects: list[pygame.Rect] = []
         self._relic_rects: list[pygame.Rect] = []
         self._hovered: tuple[str, int] | None = None
@@ -70,7 +71,7 @@ class ShopScene:
                 rect = pygame.Rect(start_x + i * (_TILE_W + _GAP), top, _TILE_W, _TILE_H)
                 rects.append(rect)
                 is_pack = kind == 'Sobres'
-                cost = shop_price(self._run, item.cost if is_pack else _RELIC_COST)
+                cost = self._price(item.cost if is_pack else _RELIC_COST, relic=not is_pack)
                 sprite = (pack_art(item.theme.value, 150) if is_pack
                           else self._sprites.get_relic_sprite(item.name, 64))
                 if is_pack and item.chroma is not None and sprite is not None:
@@ -121,7 +122,7 @@ class ShopScene:
             lines[-1] = fit(self._fonts.get(13), lines[-1] + "…", 205)
         for i, line in enumerate(lines):
             self._label(surface, line, (text_x, rect.y + 65 + i * 19), 13, color)
-        label = 'Agotado' if sold else f'{cost} oro'
+        label = 'Agotado' if sold else ('¡Gratis!' if cost == 0 else f'{cost} oro')
         self._label(surface, label, (rect.centerx, rect.bottom - 40), 16,
                     colors.TEXT_SECONDARY if sold else colors.TEXT_ACCENT)
         if not sold and not available:
@@ -145,10 +146,11 @@ class ShopScene:
         for i, rect in enumerate(self._pack_rects):
             if rect.collidepoint(pos):
                 pack = self._packs[i]
-                price = shop_price(self._run, pack.cost)
+                price = self._price(pack.cost, relic=False)
                 if not self._purchase_allowed(i in self._sold_packs, price):
                     return
                 self._run.gold -= price
+                self._purchases += 1
                 self._sold_packs.add(i)
                 self.selected_pack = pack.theme
                 self.selected_pack_chroma = pack.chroma
@@ -157,10 +159,13 @@ class ShopScene:
                 return
         for i, rect in enumerate(self._relic_rects):
             if rect.collidepoint(pos):
-                price = shop_price(self._run, _RELIC_COST)
+                price = self._price(_RELIC_COST, relic=True)
                 if not self._purchase_allowed(i in self._sold_relics, price):
                     return
+                if price == 0:
+                    use_voucher(self._run)                # Vale de Descuento: this one was free
                 self._run.gold -= price
+                self._purchases += 1
                 self._sold_relics.add(i)
                 acquire_relic(self._run, self._relics[i])
                 self._sound.play_purchase()
@@ -169,6 +174,10 @@ class ShopScene:
         if self._exit_rect and self._exit_rect.collidepoint(pos):
             self.cleared = True
             self._sound.play_cancel()
+
+    def _price(self, base: int, *, relic: bool) -> int:
+        """Máscara del Ladrón, Tarjeta de Socio (first purchase half) and Vale de Descuento."""
+        return shop_offer_price(self._run, base, relic=relic, purchases=self._purchases)
 
     def _show_feedback(self, text: str, *, error: bool = False) -> None:
         self._feedback_text = text

@@ -20,6 +20,8 @@ def draw_one(state: CombatState) -> Card | None:
         state.draw_pile.cards = list(state.discard_pile.cards)
         random.shuffle(state.draw_pile.cards)
         state.discard_pile.cards.clear()
+        from src.application.relic_triggers import on_reshuffle   # local: avoids an import cycle
+        state.pending_draws += on_reshuffle(state)     # Pila Ordenada block, Baraja Mágica draw
     if state.draw_pile.count == 0 or state.hand.is_full:
         return None
     card = state.draw_pile.cards.pop()
@@ -33,9 +35,17 @@ def draw_one(state: CombatState) -> Card | None:
 
 
 def draw_cards(state: CombatState, count: int) -> None:
+    """Draw ``count`` cards. Baraja Mágica's extra card (asked while reshuffling) comes after."""
+    pending = state.pending_draws
     for _ in range(max(0, count)):
         if draw_one(state) is None:
             break
+    extra = state.pending_draws - pending
+    if extra > 0:
+        state.pending_draws = pending
+        for _ in range(extra):
+            if draw_one(state) is None:
+                break
 
 
 def _play_on_draw(state: CombatState, card: Card) -> None:

@@ -7,7 +7,10 @@ import pygame
 
 from src.application.card_rewards import pick_pack_cards, pick_reward_cards
 from src.application.combat_factory import create_combat_from_run
+from src.application.relic_effects import has_tag
+from src.domain.relic import RelicTag
 from src.application.run_manager import (
+    enter_room, pack_picks,
     acquire_relic,
     advance_floor,
     apply_combat_victory,
@@ -49,6 +52,8 @@ from src.presentation.ui.gold_hud import DEFAULT_POS as GOLD_HUD_POS
 from src.presentation.ui.gold_hud import GoldHud
 from src.presentation.scenes.warlock_scene import WarlockScene
 from src.presentation.scenes.purge_scene import PurgeScene
+from src.presentation.scenes.deck_choice_scene import DeckChoiceScene
+from src.application.deck_choice import next_choice
 from src.application.card_preview import run_card_bonus
 from src.application.luck import luck_report
 from src.application.hero_stats import hero_sheet
@@ -227,7 +232,21 @@ class SceneManager:
         top = self._top()
         top.update(dt)
         self._handle_transitions(top)
+        self._open_deck_choice()
         self._update_gold(dt)
+
+    def _open_deck_choice(self) -> None:
+        """A relic asked for a deck choice (Tijeras del Sastre, Cartas Marcadas): show it as
+        soon as no fight or pack is on top."""
+        run = self._run
+        if run is None or not run.pending_choices:
+            return
+        if isinstance(self._top(), (DeckChoiceScene, CombatScene, PackOpeningScene, MainMenuScene,
+                                    CharacterSelectScene, DeathScene)):
+            return
+        choice = next_choice(run)
+        if choice is not None:
+            self.push(DeckChoiceScene(run, choice[0], choice[1], self._fonts, sound=self._sound))
 
     def _update_gold(self, dt: float) -> None:
         run = self._run
@@ -299,6 +318,10 @@ class SceneManager:
             if top.cleared:
                 top.cleared = False
                 self.pop()
+        elif isinstance(top, DeckChoiceScene):
+            if top.cleared:
+                top.cleared = False
+                self.pop()
         elif isinstance(top, SettingsScene):
             self._t_settings(top)
         elif isinstance(top, DevSettingsScene):
@@ -349,6 +372,7 @@ class SceneManager:
         if run.current_map:
             run.current_map.mark_visited(node.id)
         run.current_room_id = node.id
+        enter_room(run, node.room_type)     # Bolsa Agujereada, Hucha, Pico de Minero, Ganzúa
 
         if node.room_type == RoomType.COMBAT and TUNING.gacha_rooms:   # Pruebas: test the machine
             self.push(GachaScene(run, self._fonts, sound=self._sound))
@@ -396,22 +420,25 @@ class SceneManager:
             scene._victory_acknowledged = True
             self._sound.play_win()
             enemies = scene.state.enemies   # already-dead list for gold calc
+            won = dict(hp_lost=scene.state.hp_lost_combat, turns=scene.state.turn)
             if scene.is_boss:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
-                                                scene.state.enemies, scene.state.gold_earned)
+                                                scene.state.enemies, scene.state.gold_earned,
+                                                boss=True, **won)
                 relics   = pick_boss_relics(run)
                 self.push(BossRewardScene(run, gold, relics, self._fonts, sound=self._sound))
             elif scene.is_elite:
                 room     = run.current_room_id or "unknown"
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
-                                                scene.state.enemies, scene.state.gold_earned)
+                                                scene.state.enemies, scene.state.gold_earned,
+                                                elite=True, **won)
                 relic    = pick_elite_relic(run, room)
                 cards    = pick_reward_cards(run, room, luck_bonus=ELITE_CARD_LUCK)
                 self.push(CombatRewardScene(run, gold, cards, self._fonts, sound=self._sound,
                                             relic=relic))
             else:
                 gold     = apply_combat_victory(run, scene.state.player.current_hp,
-                                                scene.state.enemies, scene.state.gold_earned)
+                                                scene.state.enemies, scene.state.gold_earned, **won)
                 cards    = pick_reward_cards(run, run.current_room_id or "unknown")
                 self.push(CombatRewardScene(run, gold, cards, self._fonts, sound=self._sound))
 
@@ -455,11 +482,19 @@ class SceneManager:
             pack_name        = chroma_title(pack_def_for_theme(theme).name, chroma, masculine=True)
             self.push(PackOpeningScene(cards, pack_name, self._fonts, sound=self._sound,
                                        theme=theme.value, seed=run.floor, chroma=chroma,
-                                       bonus=run_card_bonus(run), luck=luck_report(run)))
+                                       bonus=run_card_bonus(run), luck=luck_report(run),
+                                       picks=pack_picks(run, chroma), reroll=self._pack_reroll(theme)))
 
         elif scene.cleared:
             scene.cleared = False
             self.pop()
+
+    def _pack_reroll(self, theme: PackTheme):
+        """Dado Cargado: a callable that rolls the pack again (None without the relic)."""
+        run = self._run
+        if run is None or not has_tag(run.relics, RelicTag.LOADED_DIE):
+            return None
+        return lambda: pick_pack_cards(run, theme, reroll=1)
 
     def _t_pack(self, scene: PackOpeningScene) -> None:
         if not scene.cleared:
@@ -491,7 +526,8 @@ class SceneManager:
             name   = pack_def_for_theme(PackTheme.EPICO).name
             self.push(PackOpeningScene(cards, name, self._fonts, sound=self._sound,
                                        theme=PackTheme.EPICO.value, seed=run.floor,
-                                       bonus=run_card_bonus(run), luck=luck_report(run)))
+                                       bonus=run_card_bonus(run), luck=luck_report(run),
+                                       reroll=self._pack_reroll(PackTheme.EPICO)))
 
         elif scene.cleared:
             scene.cleared = False

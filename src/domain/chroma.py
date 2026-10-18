@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 class Chroma(Enum):
     GOLDEN = "golden"
+    DIAMOND = "diamond"      # Cartas de Diamante: golden cards become diamond (never drops)
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class ChromaDef:
     card_drop_chance: float = 0.0  # chance a generated card gets this chroma
     relic_drop_chance: float = 0.0
     pack_drop_chance: float = 0.0
+    droppable: bool = True         # False: never rolled (only made by a relic), no Pruebas row
     on_card_played: Callable[["CombatState", "Card"], None] | None = None
 
 
@@ -64,6 +66,17 @@ CHROMA_DEFS: dict[Chroma, ChromaDef] = {
         card_drop_chance=0.05,
         relic_drop_chance=0.08,
         pack_drop_chance=0.06,
+    ),
+    Chroma.DIAMOND: ChromaDef(
+        chroma=Chroma.DIAMOND,
+        name="Diamante",
+        card_note="Diamante: al jugarla se lanza 3 veces (su efecto completo x3).",
+        relic_note="Diamante: sus efectos son x3.",
+        short_note="Diamante: efectos x3",
+        pack_note="Diamante: eliges 3 cartas (x3).",
+        name_masc="Diamante",
+        effect_multiplier=3,
+        droppable=False,
     ),
 }
 
@@ -98,7 +111,9 @@ def roll_chroma(
     boost = luck_chroma_multiplier(luck)
     roll = rng.random()
     acc = 0.0
-    for chroma in CHROMA_DEFS:
+    for chroma, d in CHROMA_DEFS.items():
+        if not d.droppable:
+            continue
         acc += min(1.0, chroma_chance(chroma, kind) * boost)
         if roll < acc:
             return chroma

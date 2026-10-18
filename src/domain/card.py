@@ -181,6 +181,8 @@ class Card:
     play_on_draw: bool = False
     # Offered as a "Carta de la suerte" (extra card a pack/reward got thanks to luck; display only).
     lucky_drop: bool = False
+    # Cartas Marcadas: always in the opening hand (put on top of the draw pile at combat start).
+    innate: bool = False
     # Status-card rules (cards enemies put in your deck, see ``domain/status_cards.py``):
     unplayable: bool = False          # "Injugable": cannot be played
     exhaust: bool = False             # "Agotar": leaves the combat after being played

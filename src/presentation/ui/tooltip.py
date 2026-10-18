@@ -202,6 +202,8 @@ def card_tooltip(
             lines.append(_sentence(fx.text))
     if card.play_on_draw:
         lines.append("Se juega sola al robarla y desaparece.")
+    if card.innate:
+        lines.append("Marcada: empieza cada combate en tu mano.")
     if not (dmg or blk or base_draw or any(fx.text or fx.element_stacks for fx in card.all_effects())):
         lines.append("Poder permanente: efecto especial." if card.card_type == CardType.POWER
                      else "Efecto especial.")
@@ -542,17 +544,20 @@ def relic_tooltip(relic: Relic) -> TooltipContent:
     return content
 
 
-def pile_tooltip(pile_label: str, count: int, *, is_draw: bool) -> TooltipContent:
+def pile_tooltip(pile_label: str, count: int, *, is_draw: bool,
+                 next_cards: list[str] | None = None) -> TooltipContent:
+    """``next_cards`` (Catalejo): names of the next cards of the draw pile, the first one first."""
     if is_draw:
-        return TooltipContent(
-            title="Pila de Robo", icon="draw",
-            lines=[
-                f"{count} carta(s) restantes.",
-                "Haz clic para ver las cartas.",
-                "",
-                "Cuando se agota se baraja la pila de descarte y se convierte en la nueva pila.",
-            ],
-        )
+        lines = [
+            f"{count} carta(s) restantes.",
+            "Haz clic para ver las cartas.",
+            "",
+            "Cuando se agota se baraja la pila de descarte y se convierte en la nueva pila.",
+        ]
+        if next_cards:
+            lines += ["", "Catalejo · próximas cartas:"]
+            lines += [f"  {i}. {name}" for i, name in enumerate(next_cards, 1)]
+        return TooltipContent(title="Pila de Robo", icon="draw", lines=lines)
     return TooltipContent(
         title="Pila de Descarte", icon="spoil",
         lines=[

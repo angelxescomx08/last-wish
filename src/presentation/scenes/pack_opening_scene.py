@@ -29,6 +29,8 @@ Public flag consumed by SceneManager:
 """
 from __future__ import annotations
 
+from typing import Callable
+
 import math
 import random
 
@@ -140,6 +142,8 @@ class PackOpeningScene:
         chroma: Chroma | None = None,
         bonus: CardBonus = NO_BONUS,
         luck: LuckReport | None = None,
+        picks: int | None = None,
+        reroll: Callable[[], list[Card]] | None = None,
     ) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
         self._bonus = bonus          # the hero's stats, so numbers match the hand
@@ -157,8 +161,11 @@ class PackOpeningScene:
         self.chosen_card: Card | None = None
         self.chosen_cards: list[Card] = []
         self._pack_chroma = chroma
-        self._picks = max(1, min(effect_multiplier(chroma), len(cards))) if cards else 1
+        keep = effect_multiplier(chroma) if picks is None else picks   # Bolsa sin Fondo: 3
+        self._picks = max(1, min(keep, len(cards))) if cards else 1
         self._chosen: list[int] = []
+        self._reroll = reroll                  # Dado Cargado: one new roll of this pack
+        self._reroll_rect: pygame.Rect | None = None
 
         # --- theme and art -------------------------------------------------
         self._theme = theme if theme in THEMES else _DEFAULT_THEME
@@ -797,6 +804,14 @@ class PackOpeningScene:
             pygame.draw.rect(surface, colors.BG_PANEL,     self._skip_rect, border_radius=5)
             pygame.draw.rect(surface, colors.PANEL_BORDER, self._skip_rect, 1, border_radius=5)
             surface.blit(ss, sr)
+            self._reroll_rect = None
+            if self.can_reroll:                    # Dado Cargado
+                rs = self._fonts.get(14).render("Volver a tirar (Dado Cargado)", True, colors.TEXT_ACCENT)
+                rr = rs.get_rect(centerx=cx, centery=_CARD_Y + CARD_H + 84)
+                self._reroll_rect = pygame.Rect(rr.x - 10, rr.y - 6, rr.width + 20, rr.height + 12)
+                pygame.draw.rect(surface, colors.BG_PANEL, self._reroll_rect, border_radius=5)
+                pygame.draw.rect(surface, colors.TEXT_ACCENT, self._reroll_rect, 1, border_radius=5)
+                surface.blit(rs, rr)
 
             if self._hovered is not None and self._hovered < len(self._cards):
                 dmg, blk = self._bonus.for_card(self._cards[self._hovered])
@@ -827,10 +842,40 @@ class PackOpeningScene:
             if rect.collidepoint(pos):
                 self.choose(i)
                 return
+        if self._reroll_rect and self._reroll_rect.collidepoint(pos):
+            self.reroll()
+            return
         if self._skip_rect and self._skip_rect.collidepoint(pos):
             self._sound.play_cancel()
             self.chosen_card = self.chosen_cards[0] if self.chosen_cards else None
             self.cleared     = True
+
+    @property
+    def can_reroll(self) -> bool:
+        """Dado Cargado: one new roll, before any card was kept."""
+        return self._reroll is not None and self.phase == "pick" and not self._chosen
+
+    def reroll(self) -> bool:
+        """Replace the offered cards with a new roll (once). True when it happened."""
+        if not self.can_reroll:
+            return False
+        cards = self._reroll()
+        self._reroll = None
+        if not cards:
+            return False
+        self._sound.play_reward()
+        self._cards = cards
+        n = len(cards)
+        self._landed = [True] * n
+        self._flipped = [True] * n
+        self._deal_angle = [0.0] * n
+        self._flip_start = [0.0] * n
+        self._sparkle_acc = [0.0] * n
+        self._picks = max(1, min(self._picks, n))
+        self._hovered = None
+        for i in range(n):
+            self._flip_burst(i)
+        return True
 
     def choose(self, i: int) -> None:
         """Keep card ``i``; after the last allowed pick plays the outro, then sets ``cleared``."""

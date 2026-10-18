@@ -44,8 +44,17 @@ class PullResult:
         return self.relic.rarity if self.relic is not None else None
 
 
+def free_pull_ready(run: Run, kind: PullKind) -> bool:
+    """Moneda de Dos Caras: the first normal pull of each floor is free."""
+    from src.domain.relic import RelicTag, relic_total
+    return (kind is PullKind.NORMAL and run.free_gacha_floor != run.floor
+            and relic_total(run.relics, RelicTag.TWO_FACED_COIN) > 0)
+
+
 def gacha_price(run: Run, kind: PullKind) -> int:
     """Gold the next ``kind`` pull costs in this run (rises with every pull, any kind)."""
+    if free_pull_ready(run, kind):
+        return 0
     return shop_price(run, pull_price(kind, run.gacha_pulls))
 
 
@@ -74,6 +83,8 @@ def pull(run: Run, kind: PullKind, rng: random.Random | None = None) -> PullResu
     relic = roll_pull(pool, kind, rng, rarity_of=lambda r: r.rarity, luck=luck)
     if relic is None:
         return PullResult(False, "La máquina está vacía.", kind=kind, price=price)
+    if free_pull_ready(run, kind):
+        run.free_gacha_floor = run.floor          # Moneda de Dos Caras spent for this floor
     run.gold -= price
     run.gacha_pulls += 1
     relic.chroma = roll_chroma(rng, for_relic=True,

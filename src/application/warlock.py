@@ -20,13 +20,18 @@ UPGRADE_PRICE: dict[Rarity, int] = {
 }
 
 
-def upgrade_price(card: Card) -> int:
+def upgrade_price(card: Card, relics=()) -> int:
+    """Price of the next upgrade; Martillo del Herrero halves it (rounded up)."""
+    from src.domain.relic import RelicTag, relic_total
     base = UPGRADE_PRICE[card.rarity or Rarity.COMMON]
-    return base * (card.upgrade_level + 1)
+    price = base * (card.upgrade_level + 1)
+    if relic_total(list(relics), RelicTag.SMITH_HAMMER):
+        price = (price + 1) // 2
+    return price
 
 
 def can_buy_upgrade(run: Run, card: Card) -> bool:
-    return can_upgrade(card) and run.gold >= upgrade_price(card)
+    return can_upgrade(card) and run.gold >= upgrade_price(card, run.relics)
 
 
 def buy_upgrade(run: Run, index: int) -> bool:
@@ -36,6 +41,6 @@ def buy_upgrade(run: Run, index: int) -> bool:
     card = run.deck[index]
     if not can_buy_upgrade(run, card):
         return False
-    run.gold -= upgrade_price(card)
+    run.gold -= upgrade_price(card, run.relics)
     apply_upgrade(card)
     return True

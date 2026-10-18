@@ -67,6 +67,8 @@ _ELITE_LABELS = tuple(elite_label(i) for i in range(len(ELITE_ORDER) + 1))
 def _rows() -> list[_Row]:
     rows: list[_Row] = []
     for chroma, d in CHROMA_DEFS.items():
+        if not d.droppable:
+            continue
         for kind in CHROMA_KINDS:
             adj = d.name_masc if kind == "pack" and d.name_masc else d.name
             rows.append(_Row(f"Probabilidad {_KIND_LABEL[kind]} {adj.lower()}s", _Kind.PERCENT,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from src.application import relic_effects
+from src.application import relic_effects, relic_triggers
 from src.application.drawing import draw_cards
 from src.domain.card_pool import hidden_dagger
 from src.application import enemy_ai, enemy_roster
@@ -50,7 +50,9 @@ def draw_opening_hand(state: CombatState) -> None:
     state.turn_start_alive = len(state.living_enemies())
     state.gain_strength(relic_effects.combat_start_strength(state.relics))    # Cicatriz
     state.player.block += relic_effects.combat_start_block(state.relics)      # Brazal de Guerra
+    relic_triggers.combat_start(state)          # 2026-10-17 relics (Corazón Desbocado after Cicatriz)
     draw_cards(state, cards_per_turn(state) + relic_effects.opening_extra_draw(state.relics))
+    relic_triggers.opening_hand_drawn(state)
     _after_hand_drawn(state)
 
 
@@ -63,6 +65,7 @@ def _discard_hand(state: CombatState) -> None:
     if state.hand.count == 0:
         state.player.block += relic_effects.spider_thread_block(state.relics)
     state.player.block += state.end_turn_block        # Piel de Acero
+    relic_triggers.turn_end(state)                    # Saco de Arena, Cuenco Vacío, Capa Raída…
     relic_effects.settle_pickpocket(state)
     # Status cards still in hand act (Espora: Veneno); ethereal ones fade instead of discarding.
     for card in list(state.hand.cards):
@@ -78,12 +81,14 @@ def _discard_hand(state: CombatState) -> None:
     state.next_card_discount = 0
     state.next_damage_bonus = 0
     state.pickpocket_gold = 0
-    for enemy in state.enemies:                     # Marcado lasts only your turn
-        enemy.status_effects = [se for se in enemy.status_effects if se.name != MARKED]
+    for enemy in state.enemies:                     # Marcado lasts only your turn (Hilo de Seda Negra: 2)
+        if relic_triggers.marked_wears_off(state, enemy):
+            enemy.status_effects = [se for se in enemy.status_effects if se.name != MARKED]
 
 
 def _run_enemy_turn(state: CombatState) -> None:
     state.enemy_log = []
+    state.hit_last_enemy_turn = False
     for enemy in state.enemies:          # block lasts until the enemies act again; reset all
         enemy.block = 0                  # first, so block an ally gives this turn is kept
     for index, enemy in enumerate(state.enemies):
@@ -103,6 +108,7 @@ def _run_enemy_turn(state: CombatState) -> None:
             enemy_roster.after_action(enemy)
             burn(enemy)                   # Fuego: HP lost at the end of its turn
 
+    relic_triggers.check_deaths(state)          # Diente de León, Collar, Corona del Rey Ladrón
     # Remove defeated enemies before rolling new intents
     state.enemies = [e for e in state.enemies if e.is_alive]
 
@@ -140,7 +146,8 @@ def _execute_intent(state: CombatState, enemy: Enemy, index: int = 0) -> EnemyAc
 
         case IntentType.DEBUFF if not named:
             # The hero is weakened for their next 2 turns (Panacea: immune).
-            if not relic_effects.immune_to_debuffs(state.relics):
+            if (not relic_effects.immune_to_debuffs(state.relics)
+                    and not relic_triggers.blocks_debuff(state, WEAK)):
                 add_status(state.player.status_effects, WEAK, ENEMY_DEBUFF_TURNS, is_buff=False)
                 action.debuffs.append((WEAK, ENEMY_DEBUFF_TURNS))
 
@@ -154,7 +161,7 @@ def _execute_intent(state: CombatState, enemy: Enemy, index: int = 0) -> EnemyAc
             add_status(enemy.status_effects, name, stacks, is_buff=True)
     if intent.debuffs and not relic_effects.immune_to_debuffs(state.relics):   # Panacea
         for name, stacks in intent.debuffs:
-            if stacks > 0:
+            if stacks > 0 and not relic_triggers.blocks_debuff(state, name):   # Antídoto, Vendas
                 add_status(state.player.status_effects, name, stacks, is_buff=False)
                 action.debuffs.append((name, stacks))
     for card_id, count, pile in intent.cards:
@@ -193,6 +200,8 @@ def _enemy_attack(state: CombatState, enemy: Enemy, dmg: int) -> int:
     """One hit on the hero (block, Señuelo, Contraataque, death saves). Returns HP lost."""
     if _redirect_to_decoy(state, enemy, dmg):
         return 0
+    dmg = relic_triggers.enemy_hit(state, dmg)          # Bandera Blanca, Capucha de Sombras
+    relic_triggers.after_enemy_hit(state, enemy)         # Corona de Espinas
     absorbed = min(state.player.block, dmg)
     state.player.block = max(0, state.player.block - absorbed)
     lost = 0
@@ -200,6 +209,8 @@ def _enemy_attack(state: CombatState, enemy: Enemy, dmg: int) -> int:
         lost = min(state.player.current_hp, dmg - absorbed)
         state.player.current_hp -= lost
         state.on_hp_lost(lost, own_turn=False)       # Segunda Piel, Berserker
+        if lost > 0:
+            state.hit_last_enemy_turn = True         # Runa de Sangre
     # Contraataque: a hit fully blocked deals damage back to the attacker.
     if dmg > 0 and absorbed == dmg and state.counter_damage:
         deal_damage(enemy, state.counter_damage)
@@ -244,12 +255,13 @@ def _roll_intent(enemy: Enemy) -> Intent:
 def _begin_player_turn(state: CombatState) -> None:
     if state.retain_block:           # Capa de Sombras: this turn the block is kept
         state.retain_block = False
-    else:
-        state.player.block = 0       # block resets at the START of the new turn
+    elif not relic_triggers.keeps_block(state):          # Ancla: turn 1 block survives
+        state.player.block = relic_triggers.block_kept_at_turn_start(state)   # 0 (Rodela: half)
     state.turn += 1
     _reset_turn_counters(state)
     state.mana.maximum += relic_effects.max_mana_per_turn(state.relics)   # Fuente Eterna
     state.mana.refill()
+    relic_extra = relic_triggers.turn_start(state)       # Batería Arcana, Brasero, Reloj de Arena…
     state.selected_card_index = None
     state.targeted_enemy_index = None
     state.reaction_log.clear()       # reactions of this turn start (Corazón Ígneo…)
@@ -259,7 +271,7 @@ def _begin_player_turn(state: CombatState) -> None:
     tangled = status_stacks(state.player.status_effects, ENTANGLED)
     state.player.status_effects = [se for se in state.player.status_effects if se.name != ENTANGLED]
     extra, state.pending_draws = state.pending_draws, 0   # e.g. Venda Empapada after Veneno
-    draw_cards(state, cards_per_turn(state) - tangled + extra)
+    draw_cards(state, cards_per_turn(state) - tangled + extra + relic_extra)
     _after_hand_drawn(state)
     relic_effects.spread_poison(state)
     enemy_roster.react_to_deaths(state.enemies, state.player)
@@ -293,6 +305,7 @@ def _reset_turn_counters(state: CombatState) -> None:
     state.catalyst = 0                # Catalizador lasts this turn only
     state.hp_lost_this_turn = 0       # Furia needs HP lost earlier this turn
     state.hp_loss_draw_used = False   # Venda Empapada
+    relic_triggers.reset_turn(state)
     state.turn_start_alive = len(state.living_enemies())
 
 

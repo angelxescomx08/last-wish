@@ -128,14 +128,14 @@ def create_combat_from_run(run: Run, enemies: list[Enemy]) -> CombatState:
     """
     from src.application import relic_effects  # local import to avoid cycle
 
-    base_max_hp = run.character.stats.max_hp + relic_effects.max_hp_bonus(run.relics)
+    base_max_hp = run.character.stats.max_hp + relic_effects.max_hp_bonus(run.relics) + run.bonus_max_hp
     player = Player(
         name=run.character.name,
         max_hp=base_max_hp,
         current_hp=min(run.player_current_hp, base_max_hp),
         dexterity=run.character.stats.dexterity + TUNING.extra_dexterity,
         attack_bonus=run.character.stats.damage + TUNING.extra_damage,
-        luck=hero_luck(run.character.stats.luck) + relic_effects.luck_bonus(run.relics),
+        luck=hero_luck(run.character.stats.luck) + relic_effects.luck_bonus(run.relics) + run.bonus_luck,
     )
 
     mana = Mana(

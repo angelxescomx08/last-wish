@@ -47,6 +47,8 @@ def max_hp_bonus(relics: list[Relic]) -> int:
     """Permanent max-HP increase from relics (Corazón de Hierro: +15 each)."""
     return (_sum(relics, RelicTag.IRON_HEART, 15)
             + _sum(relics, RelicTag.VITALITY_AMULET, 10)
+            + _sum(relics, RelicTag.WILD_FRUIT, 7)
+            + _sum(relics, RelicTag.STONE_HEART, 30)
             + TUNING.extra_max_hp)                    # + Pruebas
 
 
@@ -58,6 +60,11 @@ def remove_duplicate_cards(deck: list[Card]) -> list[Card]:
         if best is None or (best.chroma is None and card.chroma is not None):
             kept[card.id] = card
     return list(kept.values())
+
+
+def has_tag(relics: list[Relic], tag: RelicTag) -> bool:
+    """True when an active relic with ``tag`` is owned."""
+    return relic_total(relics, tag) > 0
 
 
 def immune_to_debuffs(relics: list[Relic]) -> bool:
@@ -78,7 +85,8 @@ def compound_interest_percent(relics: list[Relic]) -> int:
 def luck_bonus(relics: list[Relic]) -> int:
     """Extra luck from relics (Trébol de Siete Hojas: +100, Herradura de Plata: +30)."""
     return (_sum(relics, RelicTag.SEVEN_LEAF_CLOVER, 100)
-            + _sum(relics, RelicTag.SILVER_HORSESHOE, 30))
+            + _sum(relics, RelicTag.SILVER_HORSESHOE, 30)
+            + _sum(relics, RelicTag.RABBIT_FOOT, 15))
 
 
 def on_card_played(state: CombatState, card: Card, combo: bool,
@@ -148,8 +156,7 @@ def poison_on_attack(state: CombatState, target: int | None, *, first_attack: bo
         enemy = (rng or random).choice(alive) if alive else None
     if enemy is None:
         return 0
-    add_status(enemy.status_effects, POISON, stacks, is_buff=False)
-    return stacks
+    return state.poison_enemy(enemy, stacks)          # Veneno de Escorpión doubles it on Marcado
 
 
 def spread_poison(state: CombatState, rng: random.Random | None = None) -> None:

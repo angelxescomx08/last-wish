@@ -95,7 +95,7 @@ def _pruebas(amount: int) -> list[StatSource]:
 
 def _golden_chance(kind: str, luck: int) -> float:
     boost = luck_chroma_multiplier(luck)
-    return min(1.0, sum(min(1.0, chroma_chance(c, kind) * boost) for c in CHROMA_DEFS))
+    return min(1.0, sum(min(1.0, chroma_chance(c, kind) * boost) for c in CHROMA_DEFS if CHROMA_DEFS[c].droppable))
 
 
 _TYPE_LABEL = {CardType.ATTACK: "Ataques", CardType.SKILL: "Habilidades",

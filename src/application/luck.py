@@ -27,7 +27,7 @@ KINDS = ("card", "relic", "pack")
 def golden_chance(kind: str, luck: int) -> float:
     """Chance that one card / relic / pack comes out with a chroma (golden), 0..1."""
     boost = luck_chroma_multiplier(luck)
-    return min(1.0, sum(min(1.0, chroma_chance(c, kind) * boost) for c in CHROMA_DEFS))
+    return min(1.0, sum(min(1.0, chroma_chance(c, kind) * boost) for c in CHROMA_DEFS if CHROMA_DEFS[c].droppable))
 
 
 def at_least(odds: dict[Rarity, float], tier: Rarity) -> float:

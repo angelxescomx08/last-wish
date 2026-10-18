@@ -109,7 +109,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 |---|---|---|
 | `numbers.py` | `BigValue`, `Operation` | Arbitrary-precision arithmetic: base + flat additions + multipliers |
 | `card.py` | `Card`, `CardEffect`, `CardModifier`, `CardType`, `ModifierTag` | A card with stacked effect chain and modifier list. `CardEffect.needs_target` forces an enemy target; `CardEffect.hits_all_enemies` marks area effects (UI hint only) |
-| `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY`, `relic_total(relics, tag, amount)` | Passive items with a tag identifying their mechanic (34 tags). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged). `relic_total` = amount × chroma per active relic with that tag (domain code uses it directly) |
+| `relic.py` | `Relic`, `RelicTag`, `RELIC_RARITY`, `relic_total(relics, tag, amount)` | Passive items with a tag identifying their mechanic (156 tags). `Relic.rarity` defaults to `RELIC_RARITY[tag]` (Common if untagged). `relic_total` = amount × chroma per active relic with that tag (domain code uses it directly) |
 | `rarity.py` | `Rarity`, `RARITY_LABEL`, `rarity_weight`, `rarity_odds`, `luck_chroma_multiplier`, `weighted_sample` | Five tiers shared by cards and relics (`CardRarity` is an alias). Luck-weighted tier odds and chroma boost |
 | `character.py` | `Character`, `CharacterStats`, `CharacterId`, `ALL_CHARACTERS` | Three playable characters with stat profiles (damage, max_hp, luck, max_mana, dexterity) |
 | `entities.py` | `Player`, `Enemy`, `Intent`, `IntentType`, `StatusEffect`, `deal_damage`, `status_stacks`, `enemy_hit_damage`, `vulnerable`, `frail`, `POISON`, `MARKED`, `WEAK`, `VULNERABLE`, `FRAIL`, `ENTANGLED`, `STRENGTH`, `BLADES`, `FUSE`, `STATUS_TEXT` | Combat participants and their intents. `Player` carries `dexterity`, `attack_bonus`, `luck`. **Every hit on an enemy goes through `deal_damage(enemy, amount)`** (Marcado bonus, then block absorbs; returns HP lost) |
@@ -499,6 +499,16 @@ A pool-mixing relic is just a `Relic(..., card_classes=frozenset({CardClass.MAGE
 (or all three classes). The card tooltip shows "Clase: …".
 
 ---
+
+### Balance rule: draw, mana, discounts and card removal
+
+User rule (2026-10-17): drawing cards, gaining mana, cost discounts and removing cards from
+the deck are very strong. New cards draw 1 (at most 2) and give at most +1 mana / 1 discount;
+relics give 1, once per turn or per combat, behind a hard condition or with a clear drawback;
+removing more than 1 card is Legendaria-only. Harder conditions may give more. Existing
+content was not changed (Fuente Eterna, Tótem Roto, Piedra de Energía exceed it; noted for a
+later review). Details: `docs/game_design.md` → *Equilibrio*; relic proposals and their review
+status: `docs/reliquias.xlsx`.
 
 ## Playing Cards (Slay the Spire style)
 
@@ -1460,3 +1470,49 @@ cards (ids `wr_*`), relics and starter decks in `docs/game_design.md` → *Guerr
   and `_mage_starter`; all class-stamped, common.
 - Tests: `tests/application/test_warrior.py`.
 
+## 114 relics from `docs/reliquias.xlsx` (2026-10-17)
+
+User: ~100 varied relics (plus five of his own ideas), reviewed one by one in
+`docs/reliquias.xlsx`; all approved, with comments applied (Antídoto = poison immunity, Vale de
+Descuento = one free shop relic, Ampolla de Maná once per turn, Sello del Anticuario = the relic
+version of Sello del Coleccionista). Names, rarities and texts: `docs/game_design.md` →
+*Reliquias nuevas*. Balance rule (draw / mana / removal stay small): *Balance rule* above.
+
+- **Data**: tags and `RELIC_RARITY` in `domain/relic.py` (after `TITAN_HEART`), definitions in
+  `run_manager._all_relic_defs`, icons in `sprite_loader.RELIC_SPRITE_PATHS` (one item sprite
+  each). `relic_effects.has_tag(relics, tag)`.
+- **Combat** (`application/relic_triggers.py`, one function per moment): `combat_start` /
+  `opening_hand_drawn` (`draw_opening_hand`), `turn_start` / `turn_end` / `reset_turn` /
+  `keeps_block` / `block_kept_at_turn_start` / `marked_wears_off` (`end_turn`), `extra_damage` /
+  `extra_block` (`play_card._resolve_cast`; the combat screen adds them to the shown numbers),
+  `after_play` (counters, Escalera, Ampolla, Reloj Robado, Anillo de los Cuatro), `check_deaths`
+  (once per enemy, `CombatState.dead_ids`), `enemy_hit` / `after_enemy_hit` / `blocks_debuff`,
+  `element_bonus` / `note_element` (`play_card._apply_elements`), `on_reshuffle`
+  (`drawing.draw_one`; `draw_cards` draws the extra card it asks for), `spyglass_cards`
+  (draw-pile tooltip). Domain hooks: `CombatState.card_cost` (Pergamino Viejo, Pieza Única,
+  Prisma), `lose_hp` (Guantelete de Púas, Escudo del Mártir), `on_hp_lost` (Talismán, counts
+  `hp_lost_combat`), `heal_hero` (Corazón de Piedra, Cáliz Carmesí, Gema de Sangre),
+  `poison_enemy` (Veneno de Escorpión — every hero poison goes through it), `poison_hero`
+  (Antídoto), `discard_from_hand` (Guante de Ladrón), `add_status_cards` (Cadena Rota),
+  `fury_ready` (Runa de Sangre). Reactions in `domain/elements.py` read relics with `_relic`
+  (Caldero, Ascua, Piedra de Lava, Escoba, Orbe de Tormenta, Cristal de Escarcha — Congelado now
+  has stacks and `thaw` removes one —, Lente Prismática). Daggers / luck rolls in `card_pool`
+  (`_on_dagger`, `_luck_rolls`), Capa del Archimago in `_on_all_hit`. Status card `status_herida`
+  (Contrato Maldito). `Card.innate` (Cartas Marcadas: on top of the draw pile every combat).
+- **Run**: `Run.bonus_max_hp` / `bonus_luck` / `free_gacha_floor` / `pending_choices`;
+  `run_manager.max_hp(run)`, `enter_room(run, room_type)` (called by `main._t_map`),
+  `apply_combat_victory(..., hp_lost=, turns=, elite=, boss=)`, `shop_offer_price` /
+  `use_voucher` (shop), `pack_picks` (Bolsa sin Fondo); `acquire_relic` pickup effects (Diamante,
+  Yunque Portátil, Lima de Hierro, Tijeras / Cartas Marcadas → `pending_choices`);
+  `card_rewards._pick(..., run)` (Sello del Coleccionista), `reward_count` (Lupa del Tasador),
+  `pick_pack_cards(..., reroll=)`; `_relic_pool` (Sello del Anticuario); `gacha.free_pull_ready`
+  (Moneda de Dos Caras); `warlock.upgrade_price(card, relics)` (Martillo del Herrero).
+- **Chroma DIAMOND** (`droppable=False`: never rolled, no Pruebas row): ×3 casts; `Run.add_card`
+  turns golden cards into diamond while Cartas de Diamante is owned; style in `chroma_fx`.
+- **Screens**: `scenes/deck_choice_scene.DeckChoiceScene` + `application/deck_choice`
+  (`choice_limit`, `apply_choice`, `next_choice`), opened by `SceneManager._open_deck_choice`
+  whenever `pending_choices` is not empty and no fight/pack is on top; `PackOpeningScene(picks=,
+  reroll=)` ("Volver a tirar (Dado Cargado)", once, before keeping a card); the shop shows
+  "¡Gratis!" and half prices; tooltip "Marcada: …" for innate cards.
+- Tests: `tests/application/test_relics_2026_10_17.py`,
+  `tests/presentation/scenes/test_relic_scenes_2026_10_17.py`.

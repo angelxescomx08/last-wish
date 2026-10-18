@@ -25,8 +25,19 @@ class Run:
     cards_removed: int = 0        # cards removed at an Altar de Purga (every one raises the next price)
     interest_earned: int = 0      # gold paid by Interés Compuesto this run (total)
     last_interest: int = 0        # interest paid on the latest gold gain
+    bonus_max_hp: int = 0         # max HP won during the run (Medalla del Veterano)
+    bonus_luck: int = 0           # luck won during the run (Botas de Ratero)
+    free_gacha_floor: int = 0     # floor whose free gachapón pull was used (Moneda de Dos Caras)
+    # Deck choices a relic asked for and the screen still has to show:
+    # ("remove", n) = Tijeras del Sastre, ("innate", n) = Cartas Marcadas.
+    pending_choices: list[tuple[str, int]] = field(default_factory=list)
 
     def add_card(self, card: Card) -> None:
+        """Add a card to the deck. Cartas de Diamante: a golden card becomes diamond."""
+        from src.domain.chroma import Chroma
+        from src.domain.relic import RelicTag, relic_total
+        if card.chroma is Chroma.GOLDEN and relic_total(self.relics, RelicTag.DIAMOND_CARDS):
+            card.chroma = Chroma.DIAMOND
         self.deck.append(card)
 
     def add_relic(self, relic: Relic) -> None:

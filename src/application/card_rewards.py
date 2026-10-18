@@ -31,6 +31,7 @@ from src.domain.card_pool import (
     card_factories_for_theme,
     class_for_character,
 )
+from src.domain.relic import RelicTag, relic_total
 from src.domain.run import Run
 from src.domain.tuning import TUNING
 
@@ -57,9 +58,20 @@ def _luck(run: Run) -> int:
     return run_luck(run)
 
 
-def _pick(pool, count: int, rng: random.Random, luck: int):
-    """Distinct card factories, tier first (luck-weighted, ``rarity.weighted_sample``)."""
+def _pick(pool, count: int, rng: random.Random, luck: int, run: Run | None = None):
+    """Distinct card factories, tier first (luck-weighted, ``rarity.weighted_sample``).
+
+    Sello del Coleccionista: only Rara or better (the whole pool if there is none).
+    """
+    if run is not None and relic_effects.has_tag(run.relics, RelicTag.COLLECTOR_SEAL):
+        high = [f for f in pool if f.rarity.value >= Rarity.RARE.value]
+        pool = high or pool
     return weighted_sample(pool, count, rng, rarity_of=lambda f: f.rarity, luck=luck)
+
+
+def reward_count(run: Run, count: int = 3) -> int:
+    """Cards a combat reward offers: 3, +1 per Lupa del Tasador."""
+    return count + relic_total(run.relics, RelicTag.APPRAISER_LENS)
 
 
 def allowed_card_classes(run: Run) -> frozenset[CardClass]:
@@ -79,25 +91,27 @@ def pick_reward_cards(run: Run, room_id: str, count: int = 3, *, luck_bonus: int
     seed = _reward_seed(run, room_id)
     rng = random.Random(seed)
     pool = card_factories_for_classes(allowed_card_classes(run))
-    chosen = _pick(pool, count, rng, _luck(run) + max(0, luck_bonus))
+    chosen = _pick(pool, reward_count(run, count), rng, _luck(run) + max(0, luck_bonus), run)
     cards = _with_chromas([factory() for factory in chosen], seed, _luck(run))
     return cards + lucky_cards(run, seed, {c.id for c in cards})
 
 
-def pick_pack_cards(run: Run, theme: PackTheme, count: int = 5) -> list[Card]:
+def pick_pack_cards(run: Run, theme: PackTheme, count: int = 5, *, reroll: int = 0) -> list[Card]:
     """Return `count` distinct cards from the given theme (pack opening).
 
     If the theme has fewer allowed cards than ``count`` the pack is topped up
-    with allowed cards from other themes, so it is never short.
+    with allowed cards from other themes, so it is never short. ``reroll`` (Dado Cargado)
+    gives the same pack a different, still seeded, roll.
     """
-    seed    = _reward_seed(run, f"pack_{theme.value}_{run.floor}")
+    seed    = _reward_seed(run, f"pack_{theme.value}_{run.floor}" + (f"_r{reroll}" if reroll else ""))
     rng     = random.Random(seed)
     allowed = allowed_card_classes(run)
     pool    = card_factories_for_theme(theme, allowed)
-    chosen  = _pick(pool, count, rng, _luck(run))
+    chosen  = _pick(pool, count, rng, _luck(run), run)
     if len(chosen) < count:
-        extra = [f for f in card_factories_for_classes(allowed) if f.theme is not theme]
-        chosen += _pick(extra, count - len(chosen), rng, _luck(run))
+        extra = [f for f in card_factories_for_classes(allowed)
+                 if f.theme is not theme and f not in chosen]
+        chosen += _pick(extra, count - len(chosen), rng, _luck(run), run)
     cards = _with_chromas([factory() for factory in chosen], seed, _luck(run))
     return cards + lucky_cards(run, seed, {c.id for c in cards})
 
@@ -111,7 +125,7 @@ def lucky_cards(run: Run, seed: int, exclude: set[str]) -> list[Card]:
         return []
     pool = [f for f in card_factories_for_classes(allowed_card_classes(run)) if f.card_id not in exclude]
     rare = [f for f in pool if f.rarity.value >= Rarity.RARE.value]
-    chosen = _pick(rare if len(rare) >= n else pool, n, rng, luck)
+    chosen = _pick(rare if len(rare) >= n else pool, n, rng, luck, run)
     cards = _with_chromas([factory() for factory in chosen], seed ^ _LUCKY_SALT, luck)
     for card in cards:
         card.lucky_drop = True

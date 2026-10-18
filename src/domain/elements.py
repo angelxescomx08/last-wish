@@ -169,9 +169,21 @@ def apply_element(state, enemy: Enemy, element: Element, stacks: int, *,
     if getattr(state, "catalyst", 0) > 0:          # Catalizador: this reaction resolves twice
         state.catalyst -= 1
         times = 2
+    if not getattr(state, "lens_used", True) and _relic(state, "PRISMATIC_LENS"):
+        state.lens_used = True                     # Lente Prismática: first reaction of the combat
+        times += 1
     for _ in range(times):
         _resolve(state, enemy, reaction, total, spread, current, element)
     return [reaction]
+
+
+def _relic(state, tag_name: str, amount: int = 1) -> int:
+    """``amount`` × the hero's relics with that tag (golden x2); 0 without relics."""
+    relics = getattr(state, "relics", None)
+    if not relics:
+        return 0
+    from src.domain.relic import RelicTag, relic_total   # local: relic imports card → keep leaf order
+    return relic_total(relics, RelicTag[tag_name], amount)
 
 
 def _targets(state, enemy: Enemy) -> list[Enemy]:
@@ -186,27 +198,36 @@ def _resolve(state, enemy: Enemy, reaction: Reaction, stacks: int, spread: bool,
     if reaction is Reaction.STEAM:
         for e in _targets(state, enemy):
             deal_damage(e, STEAM_MULT * stacks)
+            if _relic(state, "CAULDRON"):                       # Caldero: Vapor also weakens
+                add_status(e.status_effects, WEAK, _relic(state, "CAULDRON"), is_buff=False)
     elif reaction is Reaction.MAGMA:
         for e in _targets(state, enemy):
             e.block = 0
             add_status(e.status_effects, VULNERABLE, MAGMA_VULNERABLE, is_buff=False)
+            deal_damage(e, _relic(state, "VOLCANO_EMBER", 5))   # Ascua de Volcán
     elif reaction is Reaction.WILDFIRE:
         add_status(enemy.status_effects, Element.FIRE.value, stacks, is_buff=False)
         if spread:
+            spread_stacks = stacks + _relic(state, "LAVA_STONE")  # Piedra de Lava
             for e in [x for x in state.enemies if x.is_alive and x is not enemy]:
-                apply_element(state, e, Element.FIRE, stacks, spread=False)
+                apply_element(state, e, Element.FIRE, spread_stacks, spread=False)
     elif reaction is Reaction.MUD:
         state.player.block += MUD_BLOCK_MULT * stacks
     elif reaction is Reaction.FREEZE:
         for e in _targets(state, enemy):
             if status_stacks(e.status_effects, FROZEN) == 0:
-                e.status_effects.append(StatusEffect(FROZEN, 1, False))
+                turns = 1 if (e.is_boss or e.is_elite) else 1 + _relic(state, "FROST_CRYSTAL")
+                e.status_effects.append(StatusEffect(FROZEN, turns, False))   # Cristal de Escarcha
     elif reaction is Reaction.SANDSTORM:
+        weak = SANDSTORM_WEAK + _relic(state, "WITCH_BROOM")   # Escoba de Brujo
         for e in [x for x in state.enemies if x.is_alive]:
-            add_status(e.status_effects, WEAK, SANDSTORM_WEAK, is_buff=False)
+            add_status(e.status_effects, WEAK, weak, is_buff=False)
     # Every reaction: Piel de Granito block, Ojo del Huracán draws, counter and log.
     state.player.block += getattr(state, "reaction_block", 0)
     state.pending_draws += getattr(state, "reaction_draw", 0)
+    storm = _relic(state, "STORM_ORB", 3)                      # Orbe de Tormenta
+    if storm and hasattr(state, "hit_random_enemy"):
+        state.hit_random_enemy(storm)
     state.reactions_this_turn = getattr(state, "reactions_this_turn", 0) + 1
     log = getattr(state, "reaction_log", None)
     if log is not None:
@@ -236,7 +257,11 @@ def is_frozen(enemy: Enemy) -> bool:
 
 
 def thaw(enemy: Enemy) -> None:
-    enemy.status_effects = [se for se in enemy.status_effects if se.name != FROZEN]
+    """One turn of Congelado is over (Cristal de Escarcha freezes regular enemies for 2)."""
+    for se in enemy.status_effects:
+        if se.name == FROZEN:
+            se.stacks -= 1
+    enemy.status_effects = [se for se in enemy.status_effects if se.name != FROZEN or se.stacks > 0]
 
 
 def card_elements(card) -> list[tuple[Element, bool]]:

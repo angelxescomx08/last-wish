@@ -209,7 +209,7 @@ class TestPull:
     def test_duplicates_after_pool_is_empty(self):
         run = _run(gold=10 ** 200)
         results = []
-        for _ in range(60):
+        for _ in range(200):                     # more pulls than relics in the pool
             res = pull(run, PullKind.NORMAL)
             accept(run, res)
             results.append(res)

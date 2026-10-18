@@ -10,7 +10,8 @@ from src.presentation.fx.card_deal import (DEAL_STAGGER, FLIP_END, START_ANGLE, 
                                           TRAIL_GOLD, Deal, deal_pose, draw_dealt_card)
 from src.application.enemy_roster import PAIRS, VENGEANCE_ID
 from src.application.elites import ELITES
-from src.application import relic_effects
+from src.application import relic_effects, relic_triggers
+from src.application.relic_triggers import spyglass_cards
 from src.application.end_turn import cards_per_turn, end_player_turn
 from src.application.play_card import TargetKind, play_card, target_kind
 from src.domain.combat import CombatState
@@ -862,8 +863,10 @@ class CombatScene:
         scarf = relic_effects.combo_scarf_bonus(self._state.relics) if combo else 0
         dmg = (relic_effects.extra_attack_damage(self._state.relics) + self._state.player.attack_bonus
                + self._state.hero_strength + self._state.next_damage_bonus + scarf
+               + relic_triggers.extra_damage(self._state, card, None, fury=flags[5], combo=combo)
                ) if card.total_damage(*flags) > 0 else 0
-        blk = (self._state.player.dexterity + scarf) if card.total_block(*flags) > 0 else 0
+        blk = (self._state.player.dexterity + scarf + relic_triggers.extra_block(self._state, card)
+               ) if card.total_block(*flags) > 0 else 0
         return dmg, blk
 
     def _held_index(self) -> int | None:
@@ -1097,7 +1100,8 @@ class CombatScene:
             return mana_tooltip(self._state.mana)
 
         if self._hovered_draw_pile:
-            return pile_tooltip("ROBO", self._state.draw_pile.count, is_draw=True)
+            return pile_tooltip("ROBO", self._state.draw_pile.count, is_draw=True,
+                                next_cards=spyglass_cards(self._state))
 
         if self._hovered_disc_pile:
             return pile_tooltip("DESCARTE", self._state.discard_pile.count, is_draw=False)

@@ -21,12 +21,13 @@ if TYPE_CHECKING:
 
 SPORE_ID = "status_espora"
 MOLD_ID = "status_moho"
+WOUND_ID = "status_herida"   # Contrato Maldito puts one in the draw pile every combat
 SPORE_POISON = 3        # Veneno taken when an Espora is still in hand at the end of the turn
 MOLD_MANA_DRAIN = 1     # mana lost when a Moho is drawn
 
 
 def _spore_poison(state: CombatState) -> None:
-    add_status(state.player.status_effects, POISON, SPORE_POISON, is_buff=False)
+    state.poison_hero(SPORE_POISON)                  # Antídoto: immune
 
 
 def _mold_drain(state: CombatState) -> None:
@@ -53,9 +54,19 @@ def mold() -> Card:
     )
 
 
+def wound() -> Card:
+    """Herida (Contrato Maldito): unplayable, it just takes a place in your hand."""
+    return Card(
+        id=WOUND_ID, name="Herida", card_type=CardType.STATUS, cost=0,
+        base_effect=CardEffect(name="Herida", text="Injugable. Solo ocupa sitio en tu mano"),
+        unplayable=True, max_upgrades=0,
+    )
+
+
 STATUS_CARD_FACTORIES: dict[str, Callable[[], Card]] = {
     SPORE_ID: spore,
     MOLD_ID: mold,
+    WOUND_ID: wound,
 }
 
 

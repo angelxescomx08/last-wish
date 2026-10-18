@@ -23,7 +23,7 @@ from typing import Callable, Iterable
 from src.domain.card import Card, CardClass, CardEffect, CardRarity, CardType
 from src.domain.chroma import Chroma
 from src.domain.elements import Element, apply_element, apply_to_all, element_stacks
-from src.domain.entities import MARKED, POISON, WEAK, add_status, deal_damage
+from src.domain.entities import MARKED, POISON, WEAK, add_status, deal_damage, status_stacks
 from src.domain.numbers import BigValue
 
 
@@ -516,7 +516,7 @@ def _on_veneno(state) -> None:
     """Apply 3 stacks of POISON to the targeted enemy."""
     idx = state.targeted_enemy_index
     if idx is not None and idx < len(state.enemies) and state.enemies[idx].is_alive:
-        add_status(state.enemies[idx].status_effects, POISON, 3, is_buff=False)
+        state.poison_enemy(state.enemies[idx], 3)
 
 
 def _on_vision_del_caos(state) -> None:
@@ -561,7 +561,7 @@ def _on_tormenta_veneno(state) -> None:
     """Apply POISON 5 to ALL enemies."""
     for e in state.enemies:
         if e.is_alive:
-            add_status(e.status_effects, POISON, 5, is_buff=False)
+            state.poison_enemy(e, 5)
 
 
 # ROGUE effects
@@ -695,9 +695,25 @@ def _target(state):
 
 
 def _on_dagger(state) -> None:
-    """Daga Oculta: 4 damage at random (+ Vaina Afilada); Maestra de Dagas hides more."""
+    """Daga Oculta: 4 damage at random (+ Vaina Afilada); Maestra de Dagas hides more.
+
+    Afiladora de Bolsillo: the first dagger of the combat +4. Cola de Zorro: +1 per 3 Veneno
+    of the target. Dagas Gemelas: another enemy takes half.
+    """
     from src.domain.relic import RelicTag, relic_total
-    state.hit_random_enemy(DAGGER_DAMAGE + relic_total(state.relics, RelicTag.SHARP_SHEATH, SHEATH_BONUS))
+    enemy = state.pick_random_enemy()
+    if enemy is not None:
+        dmg = DAGGER_DAMAGE + relic_total(state.relics, RelicTag.SHARP_SHEATH, SHEATH_BONUS)
+        if getattr(state, "daggers_drawn", 1) == 0:
+            dmg += relic_total(state.relics, RelicTag.POCKET_SHARPENER, 4)
+        dmg += (status_stacks(enemy.status_effects, POISON) // 3) * relic_total(state.relics, RelicTag.FOX_TAIL)
+        deal_damage(enemy, dmg)
+        twins = relic_total(state.relics, RelicTag.TWIN_DAGGERS)
+        others = [e for e in state.enemies if e.is_alive and e is not enemy]
+        if twins and others:
+            deal_damage(random.choice(others), (dmg // 2) * twins)
+    if hasattr(state, "daggers_drawn"):
+        state.daggers_drawn += 1
     if state.daggers_on_draw:
         _hide_daggers(state, state.daggers_on_draw)
 
@@ -713,9 +729,16 @@ def _on_flurry(state) -> None:
         deal_damage(enemy, FLURRY_PER_CARD * (state.cards_played_this_turn + 1))
 
 
+def _luck_rolls(state) -> int:
+    """Dado de Hueso: every luck roll of your cards is made once more (keep the best)."""
+    from src.domain.relic import RelicTag, relic_total
+    return 1 + relic_total(getattr(state, "relics", []), RelicTag.BONE_DIE)
+
+
 def _on_lucky_cut(state) -> None:
     enemy = _target(state)
-    if enemy is not None and random.random() < lucky_crit_chance(state.player.luck):
+    chance = lucky_crit_chance(state.player.luck)
+    if enemy is not None and any(random.random() < chance for _ in range(_luck_rolls(state))):
         deal_damage(enemy, LUCKY_CUT_BONUS)
 
 
@@ -770,7 +793,8 @@ def _on_poison_blade(state) -> None:
 
 def _on_roll_dice(state) -> None:
     """0–3 mana; luck gives extra rolls and the best one is kept."""
-    best = max(random.randint(0, 3) for _ in range(lucky_roll_count(state.player.luck)))
+    rolls = lucky_roll_count(state.player.luck) + _luck_rolls(state) - 1
+    best = max(random.randint(0, 3) for _ in range(rolls))
     state.mana.gain(best)
 
 
@@ -916,9 +940,12 @@ def _on_fire_heart(state) -> None:
 
 
 def _on_all_hit(amount: int):
+    """``amount`` to every living enemy. Capa del Archimago: + the hero's Daño."""
     def hit(state) -> None:
+        from src.domain.relic import RelicTag, relic_total
+        bonus = state.player.attack_bonus * relic_total(getattr(state, "relics", []), RelicTag.ARCHMAGE_CLOAK)
         for enemy in [e for e in state.enemies if e.is_alive]:
-            deal_damage(enemy, amount)
+            deal_damage(enemy, amount + bonus)
     return hit
 
 

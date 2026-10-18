@@ -20,6 +20,28 @@ altos y las versiones doradas (ver `src/domain/rarity.py`).
 
 ---
 
+## Equilibrio: efectos muy fuertes
+
+Robar cartas, ganar maná, abaratar cartas y eliminar cartas del mazo son de los efectos más
+poderosos de un juego de cartas: más cartas jugadas por turno, más opciones y un mazo más
+pequeño que llega antes a sus combos y condiciones de victoria. Regla para diseñar cartas y
+reliquias nuevas:
+
+| Efecto | Cartas | Reliquias |
+|---|---|---|
+| **Robar** | Roba 1, como mucho 2. | 1 carta, una vez por turno o por combate, o detrás de una condición difícil. |
+| **Ganar maná** | +1 como mucho. | +1 con condición difícil, una vez por turno/combate, o con una contrapartida clara. |
+| **Abaratar** | 1 menos, como ganar maná. | Igual que el maná. |
+| **Eliminar cartas** | — | Normalmente 1; eliminar más (p. ej. 3) solo en Legendaria. |
+
+Excepción: cuanto más difícil o arriesgada sea la condición, más puede dar el efecto.
+Es una guía para lo nuevo; las cartas y reliquias actuales no se han cambiado por ella. Las que
+ya existen y la superan quedan anotadas para revisarlas más adelante: Fuente Eterna (+1 de maná
+máximo cada turno), Tótem Roto y Piedra de Energía (+1 carta cada turno, sin condición).
+Propuestas de reliquias con esta regla aplicada: `docs/reliquias.xlsx` (2026-10-17).
+
+---
+
 ## Tipos de carta
 
 | Tipo | Qué pasa al jugarla | Cartas en el pool | Estado |
@@ -560,6 +582,151 @@ lo demás es neutral.
 | Piedra de Energía | +1 carta robada cada turno. | Rara |
 | Amuleto de Combate | +1 de maná máximo al inicio del combate. | Épica |
 | Escudo Espectral | Sobrevives una vez con 1 HP a un golpe fatal. | Legendaria |
+
+---
+
+## Reliquias nuevas (2026-10-17) ✅
+
+Las 114 aprobadas en `docs/reliquias.xlsx` (5 son ideas del usuario: Cartas de Diamante, Sello del
+Coleccionista, Escalera, Pieza Única, Tijeras del Sastre; Sello del Anticuario es la versión para
+reliquias que pidió). Cambios de la revisión: Antídoto da inmunidad al Veneno, Vale de Descuento regala
+una reliquia, Ampolla de Maná funciona una vez por turno y Cadena Rota vuelve Etéreas las cartas de
+estado (Etérea se explica como palabra clave en los tooltips). Cartas Marcadas se elige al obtenerla.
+Todas las doradas duplican sus números.
+
+### Neutrales
+
+| Reliquia | Efecto | Rareza |
+|---|---|---|
+| Cartas de Diamante | Tus cartas doradas pasan a ser de Diamante: se lanzan 3 veces en lugar de 2. | Legendaria |
+| Sello del Coleccionista | Ya no te salen cartas Comunes ni Poco comunes en sobres ni recompensas. | Legendaria |
+| Sello del Anticuario | Ya no te salen reliquias Comunes ni Poco comunes. | Legendaria |
+| Escalera | Si este turno juegas 3 cartas seguidas que cuesten 1 de maná más que la anterior (p. ej. 0-1-2), ganas +1 de Daño y +1 de Destreza para el resto del combate. | Épica |
+| Pieza Única | Si tu mazo no tiene cartas repetidas, la primera carta que juegas cada turno cuesta 1 menos. | Legendaria |
+| Tijeras del Sastre | Al obtenerla, elimina 3 cartas de tu mazo a tu elección. | Legendaria |
+| Piedra de Afilar | Tu primer ataque de cada combate hace +6 de daño. | Común |
+| Capa Raída | Al final de tu turno, si no tienes escudo, ganas 3. | Común |
+| Vela Votiva | Al empezar cada combate, el enemigo con más vida recibe 1 de Débil. | Común |
+| Bandera Blanca | El primer golpe que recibes en cada combate hace 4 menos de daño. | Común |
+| Diente de León | Cada vez que derrotas a un enemigo, te curas 3. | Común |
+| Lámpara de Aceite | En tu primer turno de cada combate, tus cartas de escudo dan +3. | Común |
+| Fruta Silvestre | Al obtenerla, +7 de vida máxima. | Común |
+| Antídoto | Eres inmune al Veneno. | Común |
+| Cuerno de Guerra | En el turno 3 de cada combate, tus ataques hacen +4 de daño. | Poco común |
+| Saco de Arena | Si terminas el turno habiendo jugado 3 cartas o más, ganas 4 de escudo. | Poco común |
+| Ficha de Ajedrez | Si en un turno juegas exactamente 2 cartas, ganas 5 de escudo. | Poco común |
+| Pergamino Viejo | La primera Habilidad de cada combate cuesta 0. | Poco común |
+| Pila Ordenada | Cada vez que barajas tu descarte en la pila de robo, ganas 4 de escudo. | Poco común |
+| Vendas del Monje | El primer debuff que recibes en cada combate no te afecta. | Poco común |
+| Catalejo | Puedes ver las 3 primeras cartas de tu pila de robo. | Poco común |
+| Pata de Conejo | +15 de suerte. | Poco común |
+| Corona de Espinas | Cada vez que un enemigo te golpea, recibe 2 de daño. | Rara |
+| Amuleto de Escarcha | Al empezar cada combate, un enemigo normal al azar queda Congelado (pierde su primera acción). No afecta a jefes ni élites. | Rara |
+| Lanza de Ruptura | Tus ataques contra enemigos con escudo hacen +3 de daño. | Rara |
+| Péndulo | En turnos pares tus ataques hacen +2 de daño; en turnos impares tus cartas de escudo dan +2. | Rara |
+| Brazalete del Equilibrio | Si en un turno juegas tantos Ataques como Habilidades (al menos 1 de cada), ganas 5 de escudo. | Rara |
+| Cuenco Vacío | Al final de tu turno, ganas 3 de escudo por cada maná que no gastaste. | Rara |
+| Reloj de Arena | Cada 4 turnos de combate, robas 1 carta extra. | Rara |
+| Ancla | Tu escudo del primer turno de cada combate no se pierde al empezar el segundo. | Rara |
+| Cartas Marcadas | Al obtenerla, eliges 1 carta de tu mazo: empezarás cada combate con ella en la mano. | Rara |
+| Medalla del Veterano | Cada vez que vences a una élite, +3 de vida máxima. | Rara |
+| Hoja de Laurel | Al vencer a un jefe, te curas toda la vida. | Rara |
+| Pluma de Fénix | Si empiezas un combate con menos de la mitad de vida, te curas 8. | Épica |
+| Talismán del Último Aliento | La primera vez en cada combate que bajas del 25 % de vida, ganas 15 de escudo. | Épica |
+| Grillete | Todos los enemigos empiezan el combate con 1 de Vulnerable. | Épica |
+| Baraja Mágica | La primera vez en cada combate que tu pila de robo se queda vacía, robas 1 carta. | Épica |
+| Batería Arcana | Si terminas el turno con maná sin gastar, guardas 1 para el siguiente turno. | Épica |
+| Corazón de Piedra | +30 de vida máxima, pero no puedes curarte durante los combates. | Épica |
+| Prisma | Tus cartas doradas cuestan 1 menos (mínimo 1). | Épica |
+| Piedra de Toque | Tus cartas mejoradas hacen +2 de daño y dan +2 de escudo. | Épica |
+| Bolsa sin Fondo | Los sobres dorados te dejan quedarte con 3 cartas en lugar de 2. | Épica |
+| Contrato Maldito | +1 de maná por turno, pero cada combate empieza con una carta Herida (Injugable) en tu pila de robo. | Legendaria |
+| Dado de Veinte Caras | Al empezar cada combate, una carta al azar de tu mano inicial se vuelve dorada durante ese combate. | Legendaria |
+| Ampolla de Maná | Una vez por turno, si juegas 4 cartas y te quedas sin maná, recuperas 1. | Legendaria |
+| Bolsa Agujereada | Ganas 5 de oro al terminar cada sala. | Común |
+| Cantimplora | Si ganas un combate sin perder vida, +15 de oro. | Común |
+| Vale de Descuento | En la próxima tienda que visites, una reliquia es gratis (se gasta al usarlo). | Común |
+| Pico de Minero | Las salas del tesoro dan además 25 de oro. | Poco común |
+| Hucha | Al entrar en una tienda, ganas 1 de oro por cada 10 que tengas (máx. 15). | Poco común |
+| Calavera Sonriente | Las élites dan +30 de oro. | Poco común |
+| Yunque Portátil | Al obtenerla, mejora 1 carta al azar de tu mazo. | Poco común |
+| Dado Cargado | Una vez por sobre, puedes volver a tirar las cartas que ofrece. | Poco común |
+| Tarjeta de Socio | La primera compra en cada tienda cuesta la mitad. | Rara |
+| Trofeo de Caza | Si ganas un combate en 3 turnos o menos, +20 de oro. | Rara |
+| Martillo del Herrero | El Brujo te cobra la mitad por mejorar cartas. | Rara |
+| Lima de Hierro | Al obtenerla, elimina 1 carta básica de tu mazo inicial. | Rara |
+| Lupa del Tasador | Las recompensas de combate ofrecen 1 carta más para elegir. | Rara |
+| Moneda de Dos Caras | Una tirada gratis de gachapón por piso. | Rara |
+| Cadena Rota | Las cartas de estado que te meten los enemigos se vuelven Etéreas. | Rara |
+
+### Guerrera
+
+| Reliquia | Efecto | Rareza |
+|---|---|---|
+| Guantelete de Púas | Cada vez que pierdes vida por tus cartas, inflige 2 de daño a un enemigo al azar. | Común |
+| Muñequera | Tus cartas con Aguante dan +2 de escudo. | Común |
+| Venda de Campaña | Al final de tu turno, si perdiste vida este turno, te curas 2. | Común |
+| Peto Abollado | Tus cartas de escudo dan +1 por cada 10 de vida que te faltan. | Poco común |
+| Collar de Colmillos | Cada vez que matas a un enemigo, +1 de Fuerza para ese combate. | Poco común |
+| Hacha Mellada | Tu primer ataque con Furia de cada turno hace +4 de daño. | Poco común |
+| Odre de Sangre | Si empiezas un combate con la vida llena, pierdes 5 y ganas 2 de Fuerza. | Poco común |
+| Gema de Sangre | La primera vez que te curas 10 o más en un turno, robas 1 carta. | Poco común |
+| Escudo del Mártir | Cada vez que pierdes vida por tus cartas, ganas el doble de esa cantidad en escudo. | Rara |
+| Cáliz Carmesí | Tu curación sobrante también hace ese daño a un enemigo al azar. | Rara |
+| Tambor de Guerra | Cada 3 veces que activas Aguante, +1 de Fuerza. | Rara |
+| Brasero | Si empiezas tu turno sin escudo, tus ataques hacen +3 de daño ese turno. | Rara |
+| Rodela Gastada | Al empezar tu turno, en lugar de perder todo tu escudo, conservas la mitad. | Épica |
+| Yelmo del Berserker | Mientras estés por debajo de la mitad de vida, tus ataques hacen +3 de daño. | Épica |
+| Runa de Sangre | Furia también se activa si un enemigo te hizo daño en su último turno. | Épica |
+| Estandarte de la Legión | Si empiezas tu turno con más escudo que todo el daño que anuncian los enemigos, +1 de Fuerza. | Épica |
+| Corazón Desbocado | Tu Fuerza se duplica al empezar un combate contra un jefe. | Legendaria |
+| Hierro Fundido | Tu primer ataque de cada turno suma tu escudo a su daño (máx. +15). | Legendaria |
+
+### Mago
+
+| Reliquia | Efecto | Rareza |
+|---|---|---|
+| Yesca | Tus cartas que aplican Fuego aplican +1. | Común |
+| Concha Marina | Tus cartas que aplican Agua aplican +1. | Común |
+| Piedra Pómez | Tus cartas que aplican Tierra aplican +1. | Común |
+| Pluma de Grifo | Tus cartas que aplican Aire aplican +1. | Común |
+| Varita de Sauce | Al empezar cada combate, un enemigo al azar recibe 2 de Agua. | Común |
+| Reloj de Agua | La primera vez que activas Vacío cada turno, ganas 4 de escudo. | Poco común |
+| Sombrero Puntiagudo | Tus cartas de 0 de maná aplican +1 del elemento que tengan. | Poco común |
+| Piedra de Lava | Incendio extiende 1 de Fuego más a cada enemigo. | Poco común |
+| Escoba de Brujo | Tormenta de Arena aplica Débil 2 en lugar de 1. | Poco común |
+| Caldero | Vapor también aplica 1 de Débil. | Rara |
+| Ascua de Volcán | Magma hace además 5 de daño. | Rara |
+| Orbe de Tormenta | Cada reacción que provocas hace 3 de daño a un enemigo al azar. | Rara |
+| Grimorio en Blanco | Cada 3 veces que activas Vacío, robas 1 carta. | Rara |
+| Fuente Menor | Cuando activas Vacío con una carta de 3 de maná o más, recuperas 1 de maná. | Rara |
+| Cristal de Escarcha | Congelar dura 1 turno más en enemigos normales. | Épica |
+| Lente Prismática | La primera reacción de cada combate ocurre 2 veces. | Épica |
+| Capa del Archimago | El Daño del héroe también se suma al daño en área de tus cartas. | Épica |
+| Anillo de los Cuatro | Si en un mismo turno aplicas los 4 elementos, +1 de maná máximo para el resto del combate. | Legendaria |
+
+### Pícara
+
+| Reliquia | Efecto | Rareza |
+|---|---|---|
+| Afiladora de Bolsillo | La primera Daga Oculta de cada combate hace +4 de daño. | Común |
+| Navaja Plegable | Al empezar cada combate, el enemigo con menos vida queda con 2 de Marcado. | Común |
+| Bolsa de Canicas | Al empezar cada combate, descarta 1 carta al azar de tu mano y ganas 3 de escudo (activa Despojo). | Común |
+| Botas de Ratero | Si ganas un combate sin perder vida, +2 de suerte permanente. | Común |
+| Guante de Ladrón | Cada vez que descartas por un efecto, ganas 1 de oro (máx. 10 por combate). | Poco común |
+| Veneno de Escorpión | El Veneno que aplicas a un enemigo Marcado se duplica. | Poco común |
+| Hilo de Seda Negra | El Marcado de los enemigos dura hasta el final de tu siguiente turno. | Poco común |
+| Dado de Hueso | Tus cartas de suerte tiran una vez más y se quedan con el mejor resultado. | Poco común |
+| Frasco de Neblina | La primera vez que activas Despojo cada turno, el enemigo con más vida recibe 1 de Débil. | Poco común |
+| Ganzúa | Las salas del tesoro dan además 20 de oro. | Poco común |
+| Máscara de Arlequín | Tu tercer Combo de cada turno hace +5 de daño. | Rara |
+| Capucha de Sombras | En el primer turno de cada combate, el primer ataque enemigo hace la mitad de daño. | Rara |
+| Pañuelo Envenenado | Tu primer Combo de cada turno aplica 2 de Veneno al objetivo. | Rara |
+| Dagas Gemelas | Tus Dagas Ocultas golpean también a otro enemigo por la mitad de daño. | Rara |
+| Cola de Zorro | Tus Dagas Ocultas hacen +1 de daño por cada 3 de Veneno del objetivo. | Rara |
+| Reloj de Bolsillo Robado | Si juegas 6 cartas en un turno, la siguiente cuesta 0. | Épica |
+| Medallón Singular | Si tu mazo no tiene cartas repetidas, empiezas cada combate con 1 Daga Oculta en la mano. | Épica |
+| Corona del Rey Ladrón | Cuando un enemigo muere envenenado, tu siguiente carta cuesta 1 menos. | Legendaria |
 
 ---
 

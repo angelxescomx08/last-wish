@@ -68,8 +68,8 @@ class _UpgradeGrid(CollectionViewer):
         if not can_upgrade(item):
             text, color = 'Ya mejorada', colors.TEXT_SECONDARY
         else:
-            affordable = self._run.gold >= upgrade_price(item)
-            text = f'{upgrade_price(item)} de oro'
+            affordable = self._run.gold >= upgrade_price(item, self._run.relics)
+            text = f'{upgrade_price(item, self._run.relics)} de oro'
             color = _GOLD if affordable else _TOO_EXPENSIVE
         label = self._fonts.get(15).render(text, True, color)
         surface.blit(label, label.get_rect(centerx=rect.centerx, centery=rect.y + 24))
@@ -97,7 +97,7 @@ class _UpgradeGrid(CollectionViewer):
         tip = card_tooltip(shown, bonus_damage=dmg, bonus_block=blk)
         if can_upgrade(item):
             extra = [f"Al mejorarla: {describe_upgrade(item)}",
-                     f"Precio: {upgrade_price(item)} de oro"]
+                     f"Precio: {upgrade_price(item, self._run.relics)} de oro"]
         else:
             extra = ["Ya está mejorada al máximo."]
         return TooltipContent(title=tip.title, lines=[*extra, "", *tip.lines], icon=tip.icon,
@@ -230,7 +230,7 @@ class WarlockScene:
         y = top + CARD_H + 22
         desc = self._fonts.get(16).render(f'Mejora: {describe_upgrade(card)}', True, colors.TEXT_PRIMARY)
         surface.blit(desc, desc.get_rect(centerx=cx, top=y))
-        price = upgrade_price(card)
+        price = upgrade_price(card, self._run.relics)
         affordable = self._run.gold >= price
         cost = self._fonts.get(15).render(f'Precio: {price} de oro  ·  Tienes: {self._run.gold}', True,
                                           _GOLD if affordable else _TOO_EXPENSIVE)

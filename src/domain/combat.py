@@ -4,8 +4,8 @@ import random
 from dataclasses import dataclass, field
 
 from src.domain.card import Card
-from src.domain.entities import (STRENGTH, Enemy, Player, add_status, deal_damage, frail,
-                                 status_stacks, vulnerable, weakened)
+from src.domain.entities import (MARKED, POISON, STRENGTH, Enemy, Player, add_status, deal_damage,
+                                 frail, status_stacks, vulnerable, weakened)
 from src.domain.mana import Mana
 from src.domain.pile import DiscardPile, DrawPile, Hand
 from src.domain.relic import Relic, RelicTag, relic_total
@@ -94,6 +94,38 @@ class CombatState:
     furies: int = 0                   # Furia layers resolved this combat (Estandarte Desgarrado)
     last_hit: int = 0                 # HP the target lost to the last card hit (lifesteal reads it)
     last_area_hits: int = 0           # enemies hit by the last area hit of a card
+    # --- relics of 2026-10-17 (see ``application/relic_triggers.py``) -----------------
+    hp_lost_combat: int = 0           # HP the hero lost in this combat (any source)
+    hit_last_enemy_turn: bool = False # an enemy hurt the hero in its last turn (Runa de Sangre)
+    attack_played_combat: bool = False   # Piedra de Afilar: first attack of the combat
+    skill_played_combat: bool = False    # Pergamino Viejo: first Habilidad of the combat
+    skills_this_turn: int = 0         # Habilidades played this turn (Brazalete del Equilibrio)
+    combos_this_turn: int = 0         # Combo layers resolved this turn (Arlequín, Pañuelo Envenenado)
+    voids_this_turn: int = 0          # Vacío layers resolved this turn (Reloj de Agua)
+    voids_combat: int = 0             # Vacío layers resolved this combat (Grimorio en Blanco)
+    endures: int = 0                  # Aguante layers resolved this combat (Tambor de Guerra)
+    fury_attack_done: bool = False    # Hacha Mellada: first Furia attack of the turn
+    turn_attack_bonus: int = 0        # damage every attack gets this turn (Brasero)
+    stair_last_cost: int = -1         # Escalera: cost of the last card played this turn
+    stair_len: int = 0                # ...and how long the rising chain is
+    stair_done: bool = False          # Escalera already paid this turn
+    mana_vial_used: bool = False      # Ampolla de Maná: once per turn
+    watch_used: bool = False          # Reloj de Bolsillo Robado: once per turn
+    heal_draw_used: bool = False      # Gema de Sangre: once per turn
+    elements_this_turn: set = field(default_factory=set)   # Anillo de los Cuatro
+    ring_used: bool = False           # Anillo de los Cuatro paid this turn
+    stored_mana: int = 0              # Batería Arcana: mana carried to the next turn
+    first_hit_taken: bool = False     # Bandera Blanca: the first hit of the combat was softened
+    hidden_first_attack: bool = False # Capucha de Sombras: the first enemy attack was halved
+    last_breath_used: bool = False    # Talismán del Último Aliento
+    debuff_ignored: bool = False      # Vendas del Monje
+    reshuffled: bool = False          # Baraja Mágica: the draw pile already ran out once
+    lens_used: bool = False           # Lente Prismática
+    daggers_drawn: int = 0            # Afiladora de Bolsillo: first dagger of the combat
+    thief_gold: int = 0               # Guante de Ladrón: gold paid this combat (max 10)
+    dead_ids: set = field(default_factory=set)        # enemies whose death relics already ran
+    marked_seen: set = field(default_factory=set)     # Hilo de Seda Negra
+    spoil_mist_used: bool = False     # Frasco de Neblina: once per turn
 
     @property
     def combo_active(self) -> bool:
@@ -119,10 +151,19 @@ class CombatState:
         """
         if self.cards_played_this_turn == 2 and self.has_relic(RelicTag.SILK_GLOVE):
             return 0
+        from src.domain.card import CardType      # local: card is imported lazily here
+        if (card.card_type is CardType.SKILL and not self.skill_played_combat
+                and self.has_relic(RelicTag.OLD_SCROLL)):            # Pergamino Viejo
+            return 0
         discount = self.next_card_discount
         if self.cards_played_this_turn == 0:
             discount += self.first_card_discount
-        return max(0, card.cost - discount)
+            if self.singular_deck:                                    # Pieza Única
+                discount += relic_total(self.relics, RelicTag.UNIQUE_PIECE)
+        cost = max(0, card.cost - discount)
+        if card.chroma is not None and cost > 1:                      # Prisma
+            cost = max(1, cost - relic_total(self.relics, RelicTag.PRISM))
+        return cost
 
     def void_ready(self, card) -> bool:
         """Keyword VOID would resolve if ``card`` were played now (it spends the last mana)."""
@@ -138,8 +179,13 @@ class CombatState:
         return self.spoil_active and bool(card.spoil_effects())
 
     def fury_ready(self, card) -> bool:
-        """Keyword FURY ("Furia") would resolve: the hero already lost HP this turn."""
-        return self.hp_lost_this_turn > 0 and bool(card.fury_effects())
+        """Keyword FURY ("Furia") would resolve: the hero already lost HP this turn.
+
+        Runa de Sangre: also when an enemy hurt the hero in its last turn.
+        """
+        hurt = self.hp_lost_this_turn > 0 or (self.hit_last_enemy_turn
+                                              and self.has_relic(RelicTag.BLOOD_RUNE))
+        return hurt and bool(card.fury_effects())
 
     def endure_ready(self, card) -> bool:
         """Keyword ENDURE ("Aguante") would resolve: the hero has block right now."""
@@ -198,6 +244,9 @@ class CombatState:
         lost = max(0, min(amount, self.player.current_hp - 1))
         self.player.current_hp -= lost
         self.on_hp_lost(lost, own_turn=True)
+        if lost > 0:
+            self.hit_random_enemy(relic_total(self.relics, RelicTag.SPIKED_GAUNTLET, 2))
+            self.player.block += 2 * lost * relic_total(self.relics, RelicTag.MARTYR_SHIELD)
         return lost
 
     def on_hp_lost(self, lost: int, *, own_turn: bool) -> None:
@@ -208,6 +257,11 @@ class CombatState:
         """
         if lost <= 0:
             return
+        self.hp_lost_combat += lost
+        if (not self.last_breath_used and self.player.current_hp * 4 < self.player.max_hp
+                and self.has_relic(RelicTag.LAST_BREATH)):            # Talismán del Último Aliento
+            self.last_breath_used = True
+            self.player.block += relic_total(self.relics, RelicTag.LAST_BREATH, 15)
         if own_turn:
             self.hp_lost_this_turn += lost
             bandage = relic_total(self.relics, RelicTag.SOAKED_BANDAGE)
@@ -222,7 +276,7 @@ class CombatState:
         """Heal the hero. Copa de Sangre: +2 per heal. Healing over max HP becomes block
         (Corazón de Titán: double, golden: triple). Fortaleza Interior: block per heal.
         Returns the HP recovered."""
-        if amount <= 0:
+        if amount <= 0 or self.has_relic(RelicTag.STONE_HEART):      # Corazón de Piedra
             return 0
         amount += relic_total(self.relics, RelicTag.BLOOD_CUP, 2)
         healed = max(0, min(amount, self.player.max_hp - self.player.current_hp))
@@ -230,9 +284,30 @@ class CombatState:
         overflow = amount - healed
         if overflow > 0:
             self.player.block += overflow * (1 + relic_total(self.relics, RelicTag.TITAN_HEART))
+            self.hit_random_enemy(overflow * relic_total(self.relics, RelicTag.CRIMSON_CHALICE))
         if self.block_on_heal:
             self.player.block += self.block_on_heal
+        if amount >= 10 and not self.heal_draw_used and self.has_relic(RelicTag.BLOOD_GEM):
+            self.heal_draw_used = True                                 # Gema de Sangre
+            self.pending_draws += relic_total(self.relics, RelicTag.BLOOD_GEM)
         return healed
+
+    def poison_enemy(self, enemy: Enemy | None, stacks: int) -> int:
+        """Veneno from the hero's cards and relics. Veneno de Escorpión: x2 on a Marcado enemy.
+        Returns the stacks applied."""
+        if enemy is None or stacks <= 0 or not enemy.is_alive:
+            return 0
+        if status_stacks(enemy.status_effects, MARKED) > 0:
+            stacks *= 1 + relic_total(self.relics, RelicTag.SCORPION_VENOM)
+        add_status(enemy.status_effects, POISON, stacks, is_buff=False)
+        return stacks
+
+    def poison_hero(self, stacks: int) -> int:
+        """Veneno on the hero (status cards, enemy moves). Antídoto: immune. Returns stacks."""
+        if stacks <= 0 or self.has_relic(RelicTag.ANTIDOTE):
+            return 0
+        add_status(self.player.status_effects, POISON, stacks, is_buff=False)
+        return stacks
 
     # ------------------------------------------------------------------
     # Shared effect helpers (used by card effects, relics and the turn pipeline)
@@ -275,6 +350,10 @@ class CombatState:
         self.discards_this_turn += 1
         if self.discard_damage:
             self.hit_random_enemy(self.discard_damage)
+        glove = relic_total(self.relics, RelicTag.THIEF_GLOVE)            # Guante de Ladrón
+        if glove and self.thief_gold < 10 * glove:
+            self.thief_gold += glove
+            self.gold_earned += glove
         return card
 
     def discard_random(self, rng: random.Random | None = None) -> Card | None:
@@ -299,6 +378,8 @@ class CombatState:
             card = make_status_card(card_id)
             if card is None:
                 break
+            if card_id != "status_herida" and self.has_relic(RelicTag.BROKEN_CHAIN):
+                card.ethereal = True                     # Cadena Rota: enemy junk fades
             if pile == "draw":
                 self.draw_pile.cards.insert(rng.randint(0, self.draw_pile.count), card)
             elif pile == "hand" and not self.hand.is_full:

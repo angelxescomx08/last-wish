@@ -1,7 +1,7 @@
 """Pruebas screen: rows, adjusting values, toggles, reset and leaving."""
 import pygame
 
-from src.domain.chroma import Chroma
+from src.domain.chroma import CHROMA_DEFS, Chroma
 from src.domain.tuning import TUNING, chroma_chance
 from src.infrastructure.fonts import FontRegistry
 from src.presentation.scenes.dev_settings_scene import DevSettingsScene, _Kind
@@ -29,7 +29,8 @@ def _key(scene, key):
 def test_has_a_row_per_chroma_and_kind_and_fits_the_screen():
     scene = _scene()
     percent = [r for r in scene._rows if r.kind is _Kind.PERCENT]
-    assert len(percent) == 3 * len(Chroma)
+    droppable = [c for c in Chroma if CHROMA_DEFS[c].droppable]     # Diamante is never rolled
+    assert len(percent) == 3 * len(droppable)
     assert scene._row_rects[-1].bottom <= 680
 
 
