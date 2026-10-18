@@ -74,18 +74,33 @@ class TestIdle:
         from src.infrastructure.sprite_loader import HERO_SHEETS
         assert set(HERO_SHEETS) == {96, 192}
 
-    def test_idle_boots_are_identical_throughout_cycle(self):
-        frames = SpriteLoader().get_player_idle_frames(192)
-        assert len({_bytes(f.subsurface((0, 168, 192, 24))) for f in frames}) == 1
+    @pytest.mark.parametrize("size", [96, 192])
+    def test_idle_soles_are_identical_throughout_cycle(self, size):
+        # The v3 cape and shins move above the planted soles.
+        frames = SpriteLoader().get_player_idle_frames(size)
+        bottom = frames[0].get_bounding_rect(min_alpha=32).bottom
+        sole_height = 4 * (size // 96)
+        soles = (f.subsurface((0, bottom - sole_height, size, sole_height)) for f in frames)
+        assert len({_bytes(sole) for sole in soles}) == 1
 
     def test_idle_has_motion(self):
         frames = SpriteLoader().get_player_idle_frames(96)
         assert len({_bytes(f) for f in frames}) >= len(frames) // 2
 
-    def test_idle_has_no_long_frozen_segment(self):
-        pixels = [_bytes(f) for f in SpriteLoader().get_player_idle_frames(96)]
-        doubled = pixels + pixels
-        assert all(len(set(doubled[i:i + 3])) > 1 for i in range(len(pixels)))
+    @pytest.mark.parametrize("size", [96, 192])
+    def test_idle_has_no_long_frozen_segment(self, size):
+        # Native pixel quantization can hold a pose across the loop seam.
+        # Check elapsed time (including that seam), rather than three frames.
+        pixels = [_bytes(f) for f in SpriteLoader().get_player_idle_frames(size)]
+        durations = HERO_ANIMATIONS["idle"].durations
+        for start in range(len(pixels)):
+            held = 0.0
+            for step in range(len(pixels)):
+                index = (start + step) % len(pixels)
+                if pixels[index] != pixels[start]:
+                    break
+                held += durations[index]
+            assert held <= 0.2, (size, start, held)
 
     def test_idle_cycle_is_a_calm_breath(self):
         assert 1.0 <= IDLE_CYCLE_SECONDS <= 2.0

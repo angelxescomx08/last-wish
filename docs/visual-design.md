@@ -566,3 +566,16 @@ rogue backups remain intact. The same bake/export commands above reproduce this
 revision. Automated tests cover the full dagger arc, front step, continuous
 transforms, IK attachment/length, retained palette, margins and combat timing.
 Perceived acting and fluidity remain subject to visual review.
+
+
+## Startup loading screen
+
+`src/presentation/ui/loading_screen.py` draws a dark blue stone-brick background,
+an iron panel with gold pixel corners, the gilded "ÚLTIMO DESEO" title and a
+progress bar. All status messages are Spanish. It depends only on the existing
+pixel fonts and primitive UI drawing, so it can be presented before PNG decoding.
+The bar counts completed startup stages; no artificial delay is added. The menu
+appears directly after loading, without its normal fade from black. Other menu
+openings retain that fade. Hero artwork and sprite animation assets are untouched.
+Review renders: `output/loading-first-frame.png`, `output/loading-preview.png`
+and `output/loading-preview-small.png` (480x270).

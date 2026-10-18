@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 import pygame
@@ -30,6 +31,7 @@ from src.domain.map_node import RoomType
 from src.infrastructure.colors import TEXT_ACCENT, TEXT_PRIMARY
 from src.infrastructure.audio import SoundPlayer
 from src.infrastructure.fonts import FontRegistry
+from src.presentation.ui.loading_screen import LoadingScreen
 from src.infrastructure.viewport import Viewport
 from src.infrastructure.preferences import UserPreferences, load_preferences, save_preferences
 from src.infrastructure.dev_settings import load_dev_settings, save_dev_settings
@@ -579,12 +581,50 @@ def _transform_mouse(event: pygame.event.Event, viewport: Viewport) -> pygame.ev
 # Bootstrap
 # ---------------------------------------------------------------------------
 
-def _prewarm_assets() -> None:
-    """Decode the card frames once at startup (and scale them to the common card sizes), so
-    the first reward screen or a card shrinking into the discard pile never stalls a frame."""
+class _StartupCancelled(Exception):
+    """The window was closed between startup tasks."""
+
+
+def _prewarm_assets(progress: Callable[[str, float], None] | None = None) -> None:
+    """Prepare cards and hero idles, reporting task progress when requested."""
     from src.infrastructure import card_assets
+    from src.infrastructure.sprite_loader import prewarm_hero_assets
     from src.presentation.ui.card_widget import card_size
+    notify = progress if progress is not None else lambda label, fraction: None
+    notify("Preparando las cartas...", .05)
     card_assets.prewarm(tuple(card_size(k) for k in (1.0, 1.1, 1.3)))
+    prewarm_hero_assets(lambda done, total: notify(
+        "Despertando a los héroes...", .25 + .5 * done / max(1, total)))
+
+
+def _load_game(screen: pygame.Surface, viewport: Viewport,
+               fonts: FontRegistry) -> tuple[SceneManager, UserPreferences, SoundPlayer] | None:
+    """Present feedback before blocking work and allow closing between tasks."""
+    loading = LoadingScreen(fonts)
+    sound: SoundPlayer | None = None
+
+    def report(label: str, progress: float) -> None:
+        if not loading.present(screen, viewport, label, progress):
+            raise _StartupCancelled()
+
+    try:
+        report("Abriendo las puertas...", 0)
+        prefs = load_preferences()
+        load_dev_settings()
+        _prewarm_assets(report)
+        report("Afinando los sonidos...", .80)
+        sound = SoundPlayer(sfx_volume=prefs.sfx_volume, music_volume=prefs.music_volume)
+        report("Preparando la mazmorra...", .90)
+        manager = SceneManager(MainMenuScene(fonts, sound=sound, fade_in=False), fonts, prefs, sound=sound)
+        manager.draw(viewport.surface)
+        report("Encendiendo las antorchas...", .97)
+        sound.start_music()
+        report("Todo listo", 1)
+        return manager, prefs, sound
+    except _StartupCancelled:
+        if sound is not None:
+            sound.stop_music()
+        return None
 
 
 def run(settings: GameSettings) -> None:
@@ -599,12 +639,11 @@ def run(settings: GameSettings) -> None:
 
     viewport      = Viewport(settings.width, settings.height)
     fonts         = FontRegistry()
-    prefs         = load_preferences()
-    load_dev_settings()
-    _prewarm_assets()
-    sound = SoundPlayer(sfx_volume=prefs.sfx_volume, music_volume=prefs.music_volume)
-    sound.start_music()
-    scene_manager = SceneManager(MainMenuScene(fonts, sound=sound), fonts, prefs, sound=sound)
+    startup = _load_game(screen, viewport, fonts)
+    if startup is None:
+        pygame.quit()
+        return
+    scene_manager, prefs, sound = startup
     clock         = pygame.time.Clock()
 
     running = True

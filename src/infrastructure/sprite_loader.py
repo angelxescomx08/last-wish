@@ -8,7 +8,9 @@ Returns None gracefully when a sprite file is missing or pygame fails.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import pygame
@@ -412,6 +414,42 @@ def own_relic_sprites() -> dict[str, str]:
 # Loader
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=6)
+def _shared_hero_sheet(path: Path) -> pygame.Surface | None:
+    """Keep the three heroes at both native resolutions across scene changes."""
+    try:
+        return pygame.image.load(str(path))
+    except (pygame.error, OSError):
+        return None
+
+
+@lru_cache(maxsize=64)
+def _shared_hero_frames(path: Path, cell: int, row: int, count: int,
+                        size: int) -> tuple[pygame.Surface, ...]:
+    sheet = _shared_hero_sheet(path)
+    if sheet is None or sheet.get_width() < count * cell or sheet.get_height() < (row + 1) * cell:
+        return ()
+    cells = [sheet.subsurface((i * cell, row * cell, cell, cell)).copy() for i in range(count)]
+    if size != cell:
+        cells = [pygame.transform.scale(frame, (size, size)) for frame in cells]
+    return tuple(cells)
+
+
+def prewarm_hero_assets(on_progress: Callable[[int, int], None] | None = None) -> None:
+    """Prepare idles; report completed clips between synchronous decode steps."""
+    loader = SpriteLoader()
+    total = len(HEROES) * 2
+    completed = 0
+    for hero in HEROES:
+        for size in (96, 192):
+            if on_progress is not None:
+                on_progress(completed, total)
+            loader.get_player_animation_frames("idle", size, hero)
+            completed += 1
+    if on_progress is not None:
+        on_progress(completed, total)
+
+
 class SpriteLoader:
     """Lazy, size-keyed cache for scaled sprite surfaces.
 
@@ -423,7 +461,6 @@ class SpriteLoader:
     def __init__(self) -> None:
         self._cache: dict[tuple[str, int], pygame.Surface | None] = {}
         self._hero_frames: dict[tuple[str, str, int], tuple[pygame.Surface, ...]] = {}
-        self._hero_sheets: dict[tuple[str, int], pygame.Surface | None] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -442,21 +479,16 @@ class SpriteLoader:
             return self._hero_frames[key]
         sheets = HEROES.get(hero)
         anim = sheets.animations.get(animation) if sheets else None
-        frames: tuple[pygame.Surface, ...] = ()
         if sheets is not None and anim is not None:
             cells_fit = [c for c in sheets.sheets if size % c == 0]
             cell = max(cells_fit) if cells_fit else sheets.cell
-            sheet = self._hero_sheet(hero, cell)
-            count = len(anim.durations)
-            if sheet is not None and sheet.get_width() >= count * cell \
-                    and sheet.get_height() >= (anim.row + 1) * cell:
-                cells = [sheet.subsurface((i * cell, anim.row * cell, cell, cell)).copy()
-                         for i in range(count)]
-                if size != cell:
-                    cells = [pygame.transform.scale(c, (size, size)) for c in cells]
-                frames = tuple(cells)
-        self._hero_frames[key] = frames
-        return frames
+            name = sheets.sheets.get(cell)
+            if name:
+                frames = _shared_hero_frames(_HERO_DIR / name, cell, anim.row, len(anim.durations), size)
+                self._hero_frames[key] = frames
+                return frames
+        self._hero_frames[key] = ()
+        return ()
 
     def get_player_idle_frames(self, size: int = 192, hero: str = "warrior") -> tuple[pygame.Surface, ...]:
         """Idle loop frames (kept for callers of the previous API)."""
@@ -550,16 +582,9 @@ class SpriteLoader:
     # ------------------------------------------------------------------
 
     def _hero_sheet(self, hero: str, cell: int) -> pygame.Surface | None:
-        key = (hero, cell)
-        if key not in self._hero_sheets:
-            sheets = HEROES.get(hero)
-            name = sheets.sheets.get(cell) if sheets else None
-            path = _HERO_DIR / (name or "")
-            try:
-                self._hero_sheets[key] = pygame.image.load(str(path)) if name else None
-            except (pygame.error, OSError, FileNotFoundError):
-                self._hero_sheets[key] = None
-        return self._hero_sheets[key]
+        sheets = HEROES.get(hero)
+        name = sheets.sheets.get(cell) if sheets else None
+        return _shared_hero_sheet(_HERO_DIR / name) if name else None
 
     def _load_card(self, rel_path: str, size: int) -> pygame.Surface | None:
         """Load from _CARD_ASSETS (Card Sprites folder)."""

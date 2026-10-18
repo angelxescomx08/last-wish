@@ -1,0 +1,91 @@
+{
+  "driver": "dummy",
+  "first_loading_frame_ms": 11.793,
+  "startup_ready_ms": 958.215,
+  "largest_stage_gap_ms": 250.685,
+  "stages": [
+    {
+      "label": "Abriendo las puertas...",
+      "progress": 0,
+      "elapsed_ms": 12.755
+    },
+    {
+      "label": "Preparando las cartas...",
+      "progress": 0.05,
+      "elapsed_ms": 14.656
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.25,
+      "elapsed_ms": 265.34
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.3333333333333333,
+      "elapsed_ms": 299.344
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.41666666666666663,
+      "elapsed_ms": 474.987
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.5,
+      "elapsed_ms": 507.692
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.5833333333333333,
+      "elapsed_ms": 694.284
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.6666666666666667,
+      "elapsed_ms": 730.432
+    },
+    {
+      "label": "Despertando a los h\u00e9roes...",
+      "progress": 0.75,
+      "elapsed_ms": 906.775
+    },
+    {
+      "label": "Afinando los sonidos...",
+      "progress": 0.8,
+      "elapsed_ms": 907.841
+    },
+    {
+      "label": "Preparando la mazmorra...",
+      "progress": 0.9,
+      "elapsed_ms": 922.871
+    },
+    {
+      "label": "Encendiendo las antorchas...",
+      "progress": 0.97,
+      "elapsed_ms": 956.859
+    },
+    {
+      "label": "Todo listo",
+      "progress": 1,
+      "elapsed_ms": 958.217
+    }
+  ],
+  "validation": {
+    "full_suite_passed": 4152,
+    "failed": 0,
+    "duration_seconds": 159.7,
+    "warnings": 1,
+    "warning": "Windows permissions prevented optional pytest cache writes",
+    "preview_sizes": [
+      [
+        1280,
+        720
+      ],
+      [
+        480,
+        270
+      ]
+    ],
+    "log": "tmp/pytest-full.log"
+  }
+}

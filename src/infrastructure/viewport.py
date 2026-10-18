@@ -18,6 +18,7 @@ class Viewport:
 
     def __init__(self, actual_w: int, actual_h: int) -> None:
         self.surface: pygame.Surface = pygame.Surface((VIRTUAL_W, VIRTUAL_H))
+        self._scaled: pygame.Surface | None = None
         self._update(actual_w, actual_h)
 
     # ------------------------------------------------------------------
@@ -49,10 +50,14 @@ class Viewport:
 
     def present(self, screen: pygame.Surface) -> None:
         """Scale the virtual surface and blit it onto the real display."""
-        screen.fill((0, 0, 0))
-        scaled = pygame.transform.smoothscale(
-            self.surface, (self._dest_w, self._dest_h)
-        )
+        size = (self._dest_w, self._dest_h)
+        if screen.get_size() != size:
+            screen.fill((0, 0, 0))
+        scaled = self.surface
+        if size != self.surface.get_size():
+            if self._scaled is None or self._scaled.get_size() != size:
+                self._scaled = pygame.Surface(size, depth=self.surface)
+            scaled = pygame.transform.smoothscale(self.surface, size, self._scaled)
         screen.blit(scaled, (self._off_x, self._off_y))
 
     # ------------------------------------------------------------------

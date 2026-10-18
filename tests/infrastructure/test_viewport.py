@@ -6,6 +6,7 @@ The pygame session fixture in conftest.py initialises pygame so Viewport
 from __future__ import annotations
 
 import pytest
+import pygame
 
 from src.infrastructure.viewport import VIRTUAL_H, VIRTUAL_W, Viewport
 
@@ -121,3 +122,43 @@ class TestToVirtual:
         result = vp.to_virtual((100, 200))
         assert isinstance(result[0], int)
         assert isinstance(result[1], int)
+
+
+class TestPresentation:
+    @pytest.mark.parametrize("size", [(1280, 720), (640, 360), (1920, 1080),
+                                      (2560, 1440), (1920, 720), (1280, 901), (1279, 719)])
+    def test_pixels_match_original_smoothscale_after_resize(self, size):
+        viewport = Viewport(1920, 1080)
+        viewport.surface.fill((43, 79, 121))
+        pygame.draw.circle(viewport.surface, (245, 91, 33), (631, 359), 157)
+        pygame.draw.line(viewport.surface, (17, 241, 67), (0, 0), (1279, 719), 3)
+        viewport.present(pygame.Surface((1920, 1080)))
+        viewport.resize(*size)
+        actual = pygame.Surface(size)
+        actual.fill((255, 0, 255))
+        expected = pygame.Surface(size)
+        expected.fill((0, 0, 0))
+        scaled = pygame.transform.smoothscale(viewport.surface, (viewport._dest_w, viewport._dest_h))
+        expected.blit(scaled, (viewport._off_x, viewport._off_y))
+        viewport.present(actual)
+        assert pygame.image.tobytes(actual, "RGB") == pygame.image.tobytes(expected, "RGB")
+
+    def test_native_resolution_does_not_scale(self, monkeypatch):
+        def unexpected_scale(*args, **kwargs):
+            pytest.fail("Native-sized presentation must not scale")
+        monkeypatch.setattr(pygame.transform, "smoothscale", unexpected_scale)
+        Viewport(1280, 720).present(pygame.Surface((1280, 720)))
+
+    def test_scaled_frames_reuse_destination(self, monkeypatch):
+        original = pygame.transform.smoothscale
+        destinations = []
+        def record(source, size, dest_surface=None):
+            destinations.append(dest_surface)
+            return original(source, size, dest_surface) if dest_surface is not None else original(source, size)
+        monkeypatch.setattr(pygame.transform, "smoothscale", record)
+        viewport = Viewport(1920, 1080)
+        screen = pygame.Surface((1920, 1080))
+        viewport.present(screen)
+        viewport.present(screen)
+        assert destinations[0] is not None
+        assert destinations[0] is destinations[1]

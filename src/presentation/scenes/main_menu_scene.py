@@ -72,14 +72,15 @@ class MainMenuScene:
     _SUBTITLE = "Un juego de cartas"
     _NAV_HINT = "↑ ↓ para navegar  |  ENTER para confirmar"
 
-    def __init__(self, fonts: FontRegistry, *, has_active_game: bool = False, sound: SoundPlayer | None = None) -> None:
+    def __init__(self, fonts: FontRegistry, *, has_active_game: bool = False,
+                 sound: SoundPlayer | None = None, fade_in: bool = True) -> None:
         self._sound = sound if sound is not None else SoundPlayer()
         self._fonts          = fonts
         self._options        = self._build_options(has_active_game)
         self._selected_index = 0
         self._option_rects:  list[pygame.Rect] = []
         self.requested_action: MenuAction | None = None
-        self._t = 0.0
+        self._t = 0.0 if fade_in else _FADE_IN
         self._backdrop: DungeonBackdrop | None = None
         self._sprites: SpriteLoader | None = None
         self._mouse: tuple[int, int] = (-1, -1)

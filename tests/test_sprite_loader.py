@@ -244,6 +244,15 @@ class TestHeroCastEvent:
 
 
 class TestVersionedHeroSheets:
+    @pytest.fixture(autouse=True)
+    def clear_shared_sheets(self):
+        from src.infrastructure.sprite_loader import _shared_hero_sheet, _shared_hero_frames
+        _shared_hero_frames.cache_clear()
+        _shared_hero_sheet.cache_clear()
+        yield
+        _shared_hero_frames.cache_clear()
+        _shared_hero_sheet.cache_clear()
+
     @pytest.mark.parametrize("cell", [96, 192])
     def test_warrior_loads_the_file_selected_by_active_metadata(self, monkeypatch, cell):
         from dataclasses import replace

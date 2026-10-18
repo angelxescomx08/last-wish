@@ -151,7 +151,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 |---|---|
 | `colors.py` | Named `pygame.Color` constants for the entire project |
 | `fonts.py` | `FontRegistry` — pixel font cache: `get(size)` snaps every requested size to a whole multiple of the pixel grid (`pixel_size`: ≤11 → `LastWish8` 8 px, ≤17 → `LastWish` 16 px, ≤23 → `LastWish8` 16, ≤30 → `LastWish` 32, ≤38 → `LastWish8` 24, then `LastWish8` 8 × round(size/10)) and returns a `PixelFont` (always hard-edged, rendered on a 32-bit alpha surface); `bold(size)` = the Bold face at the same snapped size (card text and names); `tiny(size)` = Tiny5 for long card names; `pixel`; system font fallback when the TTFs are missing |
-| `viewport.py` | Screen scaling for the virtual 1280×720 canvas |
+| `viewport.py` | Screen scaling for the virtual 1280×720 canvas; native-size blit bypasses scaling and resized frames reuse a smoothscale destination. Filtering and letterbox pixels are unchanged. |
 | `preferences.py` | `UserPreferences` dataclass (`show_fps: bool`); `load_preferences()` / `save_preferences()` — JSON persistence in `preferences.json` at project root |
 | `dungeon_assets.py` | `load_dungeon_assets()` → `DungeonAssets` (cached once): pre-lit room pre-scaled to 1280×720, flame frames, 3 additive glow frames, `meta` from `assets/dungeon/dungeon.json`; `None` if files are missing |
 | `card_assets.py` | Source PNGs decoded once (`_load` → `_load_cached`, also remembers missing files); `prewarm(sizes)` (called by `main._prewarm_assets` at startup) decodes every frame/back/placeholder and scales the frames to the common card sizes. `card_layout()` (zones from `assets/cards-v2/layout.json`), `card_frame(rarity, w, h)`, `pack_art(theme, height)`, `card_back(w, h)` (crystal back from `assets/Card Sprites/Card Back`), `card_illustration(card_id, card_type, w, h)` (`assets/cards-v2/art/<id>.png` or a provisional icon by type) — all cached; frames scaled with smoothscale |
@@ -159,7 +159,7 @@ Every file in this layer is pygame-free and has a corresponding test file.
 | `ui_icons.py` | `ui_icon(name, scale=2)` (cached, nearest) / `has_ui_icon(name)` from `assets/ui/icons.png` + `icons.json` (written by `scripts/generate_ui_icons.py`): intent icons 18 px (`attack_1`…`attack_4`, `defend`, `buff`, `debuff`, `cards`, `unknown`, `lethal`), status/keyword icons 14 px (one per status, `status_buff`/`status_debuff` fallbacks, `block`, `junk_card`, `combo`, `singular`, `void`, `spoil`, `exhaust`, `ethereal`, `unplayable`, `damage`, `draw`, `mana`, `heal`); `None` when missing |
 | `ui_kit.py` | HUD kit from `assets/ui/kit.png` + `kit.json` (written by `scripts/generate_ui_kit.py`): `kit_piece(name, scale=2)`, `kit_slice(name, w, h, scale=2)` (9-slice / 3-slice with **tiled** edges and centre, exact size, cached), `has_kit`, `kit_names`. Pieces: `panel`, `btn_{bronze,gold}_{idle,hover,press,off}`, `orb_back/frame/glass`, `orb_liquid_0..7`, `pile_draw/discard/empty`, `topbar`, `trim`, `ribbon` |
 | `gacha_assets.py` | `load_gacha_assets()` → `GachaAssets` (cached, ×2 nearest): machine, glass overlay, crank frames, pile capsules, prize capsules per tier (drop size; stage size closed/top/bottom), coin, chute flap, `meta`; `point(name)` / `rect(name)` anchors; `None` when missing |
-| `sprite_loader.py` | `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `hero_strike_seconds(hero)` (attack release/contact time from `events.attack.strike_frame`; 0 when absent), `hero_strike_point(hero)`, `hero_cast_point(hero)` (optional 192 px offsets from sprite centre), `hero_cast_seconds(hero)` (optional cast release time from `events.cast.cast_frame`), `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
+| `sprite_loader.py` | Hero sheets and animation frames use bounded process-wide LRU caches (6 sheets / 64 clips), keyed by asset path and clip geometry; scenes retain local references to shared read-only frames so LRU eviction never reloads an active clip. `prewarm_hero_assets()` prepares 96/192 px idles before the game loop. `SpriteLoader` — lazy nearest-neighbour cache for 32×32 PNG sprites from `assets/dungeon-crawl-stone-soup-full/`. `get_player_sprite(name, size=128, *, elapsed, animation="idle")` and `get_enemy_sprite(name, size=96)` look up by Spanish display name and return `pygame.Surface \| None`. Hero sheets (192 px + 96 px cells, picked by display size) per hero id: `HERO_IDS` (name → `warrior`/`mage`/`rogue`), `HEROES`, `hero_id_for(name)`, `has_hero_sprites(name)`, `get_player_animation_frames(anim, size, hero)`, `hero_animation_seconds(anim, hero)`, `hero_strike_seconds(hero)` (attack release/contact time from `events.attack.strike_frame`; 0 when absent), `hero_strike_point(hero)`, `hero_cast_point(hero)` (optional 192 px offsets from sprite centre), `hero_cast_seconds(hero)` (optional cast release time from `events.cast.cast_frame`), `IDLE_CYCLE_SECONDS` (shared 1.6 s); warrior aliases `HERO_CELL`, `HERO_SHEETS`, `HERO_ANIMATIONS` |
 
 ### Presentation layer — `src/presentation/`
 
@@ -1528,3 +1528,42 @@ version of Sello del Coleccionista). Names, rarities and texts: `docs/game_desig
   "¡Gratis!" and half prices; tooltip "Marcada: …" for innate cards.
 - Tests: `tests/application/test_relics_2026_10_17.py`,
   `tests/presentation/scenes/test_relic_scenes_2026_10_17.py`.
+
+
+## Performance regression measurements
+
+`uv run python scripts/benchmark_performance.py --output tmp/performance-after.json`
+measures startup, first draw, cross-scene hero reuse, warm menu/combat/hover and
+720p/1080p/1440p presentation (300 samples, median/p95/p99/max, frames >16.67 ms).
+Use `--baseline-ref <commit>` in a separate process to compare the same benchmark
+against the original infrastructure and startup function without changing files.
+Run serially on an idle machine; compare several runs. SDL dummy isolates CPU work
+and excludes the real window/compositor/vsync, so these results do not guarantee FPS.
+Shared hero surfaces must not be mutated by callers. Asset path or clip geometry
+changes select a new cache entry; overwriting the same asset during development
+requires restarting the game. Tests compare viewport pixels against the original
+smoothscale path, including resizing, odd dimensions and letterboxing.
+
+See `docs/performance.md` for the measured before/after results and tradeoffs.
+`uv run python scripts/benchmark_paired_render.py --baseline-ref <commit>`
+alternates 600 warm frames per variant/scenario in one process to reduce noise.
+
+
+## Startup loading feedback
+
+`main._load_game` presents `LoadingScreen` immediately after the window, viewport
+and fonts exist, before preference reads or asset prewarming. The asset-independent
+pixel panel uses font rendering and primitive shapes only. Progress advances by
+completed startup tasks (cards, six hero idle clips, sound and the menu), never by
+a simulated timer. `prewarm_hero_assets(on_progress=None)` optionally reports
+completed/total clips before each synchronous decode and once at completion.
+The callback runs on the main thread; no pygame work runs in worker threads.
+`LoadingScreen.present` processes window events, adapts to the actual window size
+and flips the display between tasks. Closing aborts remaining work, releases music
+and exits pygame. Individual PNG decoding operations remain synchronous.
+The initial menu is warmed behind the loading panel and constructed with
+`fade_in=False`, so the handoff does not return to black. Other menu openings keep
+the existing fade. See `output/performance/loading-startup.json` for a cold-start
+CPU measurement and `output/loading-preview.png` for the rendered panel.
+Tests: `tests/test_startup_loading.py` and
+`tests/presentation/ui/test_loading_screen.py`.
